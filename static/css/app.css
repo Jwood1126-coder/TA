@@ -575,10 +575,31 @@ body {
 
 /* Map page */
 #trip-map {
-    height: calc(100vh - 180px);
+    height: calc(100vh - 200px);
     min-height: 400px;
     border-radius: 12px;
     z-index: 0;
+}
+
+.map-controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.map-ctrl-btn {
+    font-size: 0.75rem;
+    padding: 4px 12px;
+    border: 1px solid var(--pico-muted-border-color, #ccc);
+    border-radius: 16px;
+    background: transparent;
+    color: var(--pico-color);
+    cursor: pointer;
+}
+.map-ctrl-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
 }
 
 .map-pin {
@@ -590,14 +611,37 @@ body {
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
 
-.leaflet-popup-content {
-    font-size: 0.85rem;
-    line-height: 1.5;
+.airport-pin {
+    font-size: 18px;
+    text-align: center;
+    line-height: 28px;
+    color: #2196F3;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
-.leaflet-popup-content strong {
-    color: var(--accent);
+.map-popup { font-size: 0.85rem; line-height: 1.5; }
+.map-popup strong { color: var(--accent); }
+.popup-vibe { font-style: italic; color: var(--pico-muted-color); font-size: 0.8rem; }
+.popup-dates { font-size: 0.8rem; margin: 2px 0; }
+.popup-accom { font-size: 0.8rem; }
+.popup-link { display: inline-block; font-size: 0.8rem; margin-top: 4px; }
+
+.jr-badge {
+    display: inline-block;
+    background: var(--jr-green);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-top: 2px;
 }
+
+.leaflet-control-layers-toggle { width: 30px !important; height: 30px !important; }
+.leaflet-control-layers label { font-size: 0.8rem; }
+
+[data-theme="dark"] .map-ctrl-btn { border-color: #555; }
+[data-theme="dark"] .airport-pin { color: #64b5f6; }
 
 /* Dark mode for itinerary summary */
 [data-theme="dark"] .loc-group { border-color: #333; }
@@ -1637,6 +1681,15 @@ body {
     max-width: 100%;
 }
 .maps-link:hover { text-decoration: underline; }
+
+.activity-url-link {
+    display: inline-block;
+    font-size: 0.8rem;
+    color: var(--accent);
+    text-decoration: none;
+    margin-top: 2px;
+}
+.activity-url-link:hover { text-decoration: underline; }
 
 /* Minor/Compact Activities */
 .activity-card.compact {

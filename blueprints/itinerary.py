@@ -242,15 +242,22 @@ def get_budget():
     } for i in items])
 
 
-CITY_COORDS = {
-    'Minneapolis': (44.9778, -93.2650),
-    'Tokyo': (35.6762, 139.6503),
-    'Hakone': (35.2326, 139.1070),
-    'Takayama': (36.1461, 137.2522),
-    'Shirakawa-go': (36.2578, 136.9060),
-    'Kanazawa': (36.5613, 136.6562),
-    'Kyoto': (35.0116, 135.7681),
-    'Osaka': (34.6937, 135.5023),
+AIRPORT_COORDS = {
+    'CLE': (41.4058, -81.8539, 'Cleveland'),
+    'MSP': (44.8848, -93.2223, 'Minneapolis'),
+    'HND': (35.5494, 139.7798, 'Tokyo Haneda'),
+    'NRT': (35.7647, 140.3864, 'Tokyo Narita'),
+    'LAX': (33.9416, -118.4085, 'Los Angeles'),
+}
+
+SUPPLEMENTAL_COORDS = {
+    'Odawara': (35.2564, 139.1550),
+    'Nagoya': (35.1815, 136.9066),
+    'Tsuruga': (35.6452, 136.0555),
+    'Shinagawa': (35.6284, 139.7388),
+    'Narita Airport': (35.7647, 140.3864),
+    'Hiroshima': (34.3853, 132.4553),
+    'Miyajima': (34.2960, 132.3198),
 }
 
 
@@ -258,11 +265,13 @@ CITY_COORDS = {
 def map_view():
     locations = Location.query.order_by(Location.sort_order).all()
 
-    markers = []
+    # City markers from DB coordinates
+    city_markers = []
+    loc_coords = {}
     for loc in locations:
-        coords = CITY_COORDS.get(loc.name)
-        if not coords:
+        if loc.latitude is None:
             continue
+        loc_coords[loc.name] = (loc.latitude, loc.longitude)
 
         accom_loc = AccommodationLocation.query.filter(
             AccommodationLocation.location_name.contains(loc.name)
@@ -274,10 +283,10 @@ def map_view():
             if selected:
                 accom_name = selected.name
 
-        markers.append({
+        city_markers.append({
             'name': loc.name,
-            'lat': coords[0],
-            'lng': coords[1],
+            'lat': loc.latitude,
+            'lng': loc.longitude,
             'vibe': loc.vibe,
             'arrival': loc.arrival_date.strftime('%b %d') if loc.arrival_date else None,
             'departure': loc.departure_date.strftime('%b %d') if loc.departure_date else None,
@@ -285,4 +294,46 @@ def map_view():
             'guide_url': loc.guide_url,
         })
 
-    return render_template('map.html', markers=markers)
+    # Flight legs
+    flights = Flight.query.order_by(Flight.direction, Flight.leg_number).all()
+    flight_legs = []
+    for f in flights:
+        fc = AIRPORT_COORDS.get(f.route_from)
+        tc = AIRPORT_COORDS.get(f.route_to)
+        if fc and tc:
+            flight_legs.append({
+                'from_code': f.route_from,
+                'to_code': f.route_to,
+                'from_name': fc[2],
+                'to_name': tc[2],
+                'from_lat': fc[0], 'from_lng': fc[1],
+                'to_lat': tc[0], 'to_lng': tc[1],
+                'airline': f.airline,
+                'flight_number': f.flight_number,
+                'direction': f.direction,
+            })
+
+    # Ground transport routes
+    loc_coords.update(SUPPLEMENTAL_COORDS)
+    transport_routes = TransportRoute.query.order_by(
+        TransportRoute.sort_order).all()
+    ground_routes = []
+    for tr in transport_routes:
+        fc = loc_coords.get(tr.route_from)
+        tc = loc_coords.get(tr.route_to)
+        if fc and tc:
+            ground_routes.append({
+                'from_name': tr.route_from,
+                'to_name': tr.route_to,
+                'from_lat': fc[0], 'from_lng': fc[1],
+                'to_lat': tc[0], 'to_lng': tc[1],
+                'type': tr.transport_type,
+                'train_name': tr.train_name or '',
+                'jr_pass': tr.jr_pass_covered,
+                'duration': tr.duration or '',
+            })
+
+    return render_template('map.html',
+                           city_markers=city_markers,
+                           flight_legs=flight_legs,
+                           ground_routes=ground_routes)

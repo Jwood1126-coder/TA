@@ -23,6 +23,8 @@ class Location(db.Model):
     why = db.Column(db.Text)
     address = db.Column(db.String(500))
     guide_url = db.Column(db.String(500))
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
     arrival_date = db.Column(db.Date)
     departure_date = db.Column(db.Date)
     sort_order = db.Column(db.Integer, nullable=False)
@@ -69,6 +71,7 @@ class Activity(db.Model):
     address = db.Column(db.String(500))
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     notes = db.Column(db.Text)
+    url = db.Column(db.String(500))
 
     def to_dict(self):
         return {
@@ -82,6 +85,7 @@ class Activity(db.Model):
             'is_substitute': self.is_substitute,
             'is_completed': self.is_completed,
             'jr_pass_covered': self.jr_pass_covered,
+            'url': self.url,
             'notes': self.notes,
         }
 

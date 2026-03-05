@@ -3,7 +3,11 @@
 
 {% block content %}
 <header>
-    <h1>Trip Map</h1>
+    <h1>&#x1f5fa; Trip Map</h1>
+    <div class="map-controls">
+        <button id="fullRouteBtn" class="map-ctrl-btn">Show Full Route</button>
+        <button id="japanBtn" class="map-ctrl-btn active">Japan View</button>
+    </div>
 </header>
 <div id="trip-map"></div>
 {% endblock %}
@@ -12,50 +16,157 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    const markers = {{ markers | tojson }};
+const cityMarkers = {{ city_markers | tojson }};
+const flightLegs = {{ flight_legs | tojson }};
+const groundRoutes = {{ ground_routes | tojson }};
 
-    // Filter to Japan markers for initial view
-    const japanMarkers = markers.filter(m => m.lat > 30 && m.lat < 45);
+// Japan-only cities for default view
+const japanCities = cityMarkers.filter(m => m.lat > 30 && m.lat < 45 && m.lng > 125);
+const japanBounds = japanCities.map(m => [m.lat, m.lng]);
 
-    const map = L.map('trip-map').fitBounds(
-        japanMarkers.map(m => [m.lat, m.lng]),
-        { padding: [30, 30] }
-    );
+const map = L.map('trip-map', { zoomControl: true }).fitBounds(
+    japanBounds, { padding: [30, 30] }
+);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 18,
-    }).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 18,
+}).addTo(map);
 
-    // Custom sakura marker icon
-    const sakuraIcon = L.divIcon({
-        className: 'map-marker-icon',
-        html: '<div class="map-pin"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
-        popupAnchor: [0, -12],
+// ---- Layer groups ----
+const cityLayer = L.layerGroup().addTo(map);
+const transportLayer = L.layerGroup().addTo(map);
+const flightLayer = L.layerGroup();
+
+// ---- City markers ----
+const sakuraIcon = L.divIcon({
+    className: 'map-marker-icon',
+    html: '<div class="map-pin"></div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -14],
+});
+
+japanCities.forEach(m => {
+    let html = '<div class="map-popup"><strong>' + m.name + '</strong>';
+    if (m.vibe) html += '<div class="popup-vibe">' + m.vibe + '</div>';
+    if (m.arrival && m.departure) html += '<div class="popup-dates">' + m.arrival + ' &ndash; ' + m.departure + '</div>';
+    if (m.accom) html += '<div class="popup-accom">&#x1f3e8; ' + m.accom + '</div>';
+    if (m.guide_url) html += '<a href="' + m.guide_url + '" target="_blank" rel="noopener" class="popup-link">&#x1f4d6; Travel Guide</a>';
+    html += '</div>';
+
+    L.marker([m.lat, m.lng], { icon: sakuraIcon })
+        .bindPopup(html, { maxWidth: 220 })
+        .addTo(cityLayer);
+});
+
+// ---- Ground transport lines ----
+groundRoutes.forEach(r => {
+    let style;
+    if (r.type.indexOf('Shinkansen') >= 0) {
+        style = { color: '#E91E7A', weight: 3, dashArray: '10, 6', opacity: 0.75 };
+    } else if (r.type.indexOf('Bus') >= 0) {
+        style = { color: '#FF9800', weight: 2.5, dashArray: '4, 8', opacity: 0.75 };
+    } else if (r.type.indexOf('Ferry') >= 0) {
+        style = { color: '#2196F3', weight: 2, dashArray: '6, 4', opacity: 0.7 };
+    } else {
+        style = { color: '#E91E7A', weight: 2, dashArray: '6, 4', opacity: 0.65 };
+    }
+
+    let popup = '<div class="map-popup"><strong>' + r.from_name + ' &rarr; ' + r.to_name + '</strong>';
+    popup += '<div>' + r.type + (r.train_name ? ' (' + r.train_name + ')' : '') + '</div>';
+    if (r.duration) popup += '<div>' + r.duration + '</div>';
+    if (r.jr_pass) popup += '<span class="jr-badge">JR Pass</span>';
+    popup += '</div>';
+
+    L.polyline([[r.from_lat, r.from_lng], [r.to_lat, r.to_lng]], style)
+        .bindPopup(popup)
+        .addTo(transportLayer);
+});
+
+// ---- Flight arcs ----
+const airportIcon = L.divIcon({
+    className: 'airport-marker-icon',
+    html: '<div class="airport-pin">&#9992;</div>',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+});
+
+const airportsSeen = new Set();
+flightLegs.forEach(leg => {
+    // Airport markers
+    [{code: leg.from_code, name: leg.from_name, lat: leg.from_lat, lng: leg.from_lng},
+     {code: leg.to_code, name: leg.to_name, lat: leg.to_lat, lng: leg.to_lng}]
+    .forEach(ap => {
+        if (!airportsSeen.has(ap.code)) {
+            airportsSeen.add(ap.code);
+            L.marker([ap.lat, ap.lng], { icon: airportIcon })
+                .bindPopup('<div class="map-popup"><strong>' + ap.code + '</strong><div>' + ap.name + '</div></div>')
+                .addTo(flightLayer);
+        }
     });
 
-    // Plot markers with popups
-    japanMarkers.forEach((m, i) => {
-        let popup = '<strong>' + m.name + '</strong>';
-        if (m.vibe) popup += '<br><em>' + m.vibe + '</em>';
-        if (m.arrival && m.departure) popup += '<br>' + m.arrival + ' &ndash; ' + m.departure;
-        if (m.accom) popup += '<br>&#x1f3e8; ' + m.accom;
-        if (m.guide_url) popup += '<br><a href="' + m.guide_url + '" target="_blank" rel="noopener">&#x1f4d6; Travel Guide</a>';
-
-        L.marker([m.lat, m.lng], { icon: sakuraIcon })
-            .addTo(map)
-            .bindPopup(popup);
-    });
-
-    // Route line connecting cities in order
-    const routeCoords = japanMarkers.map(m => [m.lat, m.lng]);
-    L.polyline(routeCoords, {
-        color: '#E91E7A',
-        weight: 3,
+    // Great-circle arc
+    const arcPts = greatCircleArc(leg.from_lat, leg.from_lng, leg.to_lat, leg.to_lng, 60);
+    L.polyline(arcPts, {
+        color: '#2196F3',
+        weight: 2.5,
         opacity: 0.7,
-        dashArray: '10, 6',
-    }).addTo(map);
+        dashArray: '8, 5',
+    }).bindPopup('<div class="map-popup"><strong>' + leg.airline + ' ' + leg.flight_number + '</strong>' +
+                 '<div>' + leg.from_code + ' &rarr; ' + leg.to_code + '</div></div>')
+      .addTo(flightLayer);
+});
+
+// ---- Layer control ----
+L.control.layers(null, {
+    '&#x1f4cd; Cities': cityLayer,
+    '&#x1f686; Transport': transportLayer,
+    '&#9992; Flights': flightLayer,
+}, { collapsed: false, position: 'topright' }).addTo(map);
+
+// ---- View buttons ----
+const fullRouteBtn = document.getElementById('fullRouteBtn');
+const japanBtn = document.getElementById('japanBtn');
+
+fullRouteBtn.addEventListener('click', () => {
+    if (!map.hasLayer(flightLayer)) map.addLayer(flightLayer);
+    const allPts = [
+        ...japanBounds,
+        ...flightLegs.flatMap(l => [[l.from_lat, l.from_lng], [l.to_lat, l.to_lng]])
+    ];
+    map.fitBounds(allPts, { padding: [30, 30] });
+    fullRouteBtn.classList.add('active');
+    japanBtn.classList.remove('active');
+});
+
+japanBtn.addEventListener('click', () => {
+    map.fitBounds(japanBounds, { padding: [30, 30] });
+    japanBtn.classList.add('active');
+    fullRouteBtn.classList.remove('active');
+});
+
+// ---- Great-circle interpolation ----
+function greatCircleArc(lat1, lng1, lat2, lng2, n) {
+    const toR = d => d * Math.PI / 180;
+    const toD = r => r * 180 / Math.PI;
+    const p1 = toR(lat1), l1 = toR(lng1), p2 = toR(lat2), l2 = toR(lng2);
+    const d = 2 * Math.asin(Math.sqrt(
+        Math.sin((p1-p2)/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin((l1-l2)/2)**2
+    ));
+    if (d < 0.0001) return [[lat1, lng1], [lat2, lng2]];
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        const A = Math.sin((1-f)*d) / Math.sin(d);
+        const B = Math.sin(f*d) / Math.sin(d);
+        const x = A*Math.cos(p1)*Math.cos(l1) + B*Math.cos(p2)*Math.cos(l2);
+        const y = A*Math.cos(p1)*Math.sin(l1) + B*Math.cos(p2)*Math.sin(l2);
+        const z = A*Math.sin(p1) + B*Math.sin(p2);
+        pts.push([toD(Math.atan2(z, Math.sqrt(x*x+y*y))), toD(Math.atan2(y, x))]);
+    }
+    return pts;
+}
 </script>
 {% endblock %}

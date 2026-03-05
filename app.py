@@ -47,6 +47,9 @@ def _run_migrations(app):
         ('checklist_item', 'item_type', "TEXT DEFAULT 'task'"),
         ('checklist_item', 'status', "TEXT DEFAULT 'pending'"),
         ('checklist_item', 'accommodation_location_id', 'INTEGER'),
+        ('activity', 'url', 'TEXT'),
+        ('location', 'latitude', 'REAL'),
+        ('location', 'longitude', 'REAL'),
     ]
     for table, column, col_type in migrations:
         try:
@@ -299,6 +302,364 @@ def _seed_guide_urls(app):
         app.logger.info('Seeded travel guide URLs for locations.')
 
 
+def _seed_location_coords(app):
+    """Populate latitude/longitude on Location records (idempotent)."""
+    from models import Location
+    COORDS = {
+        'Minneapolis': (44.9778, -93.2650),
+        'Tokyo': (35.6762, 139.6503),
+        'Hakone': (35.2326, 139.1070),
+        'Takayama': (36.1461, 137.2522),
+        'Shirakawa-go': (36.2578, 136.9060),
+        'Kanazawa': (36.5613, 136.6562),
+        'Kyoto': (35.0116, 135.7681),
+        'Osaka': (34.6937, 135.5023),
+    }
+    changed = False
+    for name, (lat, lng) in COORDS.items():
+        loc = Location.query.filter_by(name=name).first()
+        if loc and loc.latitude is None:
+            loc.latitude = lat
+            loc.longitude = lng
+            changed = True
+    if changed:
+        db.session.commit()
+
+
+def _restructure_osaka(app):
+    """Give Osaka its own night: reassign Day 13, split Kyoto Machiya,
+    add Osaka accommodation + transport. Idempotent."""
+    from models import Location, Day, AccommodationLocation, AccommodationOption, \
+        TransportRoute, ChecklistItem
+    from datetime import date
+
+    # Guard: already done?
+    if AccommodationLocation.query.filter_by(location_name='Osaka').first():
+        return
+
+    osaka_loc = Location.query.filter_by(name='Osaka').first()
+    if not osaka_loc:
+        return
+
+    # Update Osaka location metadata
+    osaka_loc.arrival_date = date(2026, 4, 16)
+    osaka_loc.departure_date = date(2026, 4, 17)
+    if osaka_loc.latitude is None:
+        osaka_loc.latitude = 34.6937
+        osaka_loc.longitude = 135.5023
+
+    # 1. Reassign Day 13 to Osaka
+    day13 = Day.query.filter_by(day_number=13).first()
+    if day13:
+        day13.location_id = osaka_loc.id
+        day13.title = 'Osaka: Neon Chaos & Street Food'
+        day13.is_buffer_day = False
+        day13.theme = 'Full Day + Night'
+
+    # 2. Shorten Kyoto Machiya from 2 nights to 1
+    machiya = AccommodationLocation.query.filter_by(
+        location_name='Kyoto Machiya').first()
+    if machiya and machiya.num_nights == 2:
+        machiya.check_out_date = date(2026, 4, 16)
+        machiya.num_nights = 1
+        machiya.quick_notes = 'Traditional townhouse. One night stay before Osaka.'
+
+    # 3. Create Osaka AccommodationLocation
+    max_sort = db.session.query(
+        db.func.max(AccommodationLocation.sort_order)).scalar() or 7
+    osaka_accom = AccommodationLocation(
+        location_name='Osaka',
+        check_in_date=date(2026, 4, 16),
+        check_out_date=date(2026, 4, 17),
+        num_nights=1,
+        quick_notes='One wild night in Osaka. Book near Namba/Dotonbori for nightlife.',
+        sort_order=max_sort + 1,
+    )
+    db.session.add(osaka_accom)
+    db.session.flush()
+
+    # 4. Osaka accommodation options
+    options = [
+        AccommodationOption(
+            location_id=osaka_accom.id, rank=1,
+            name='Cross Hotel Osaka',
+            property_type='Boutique hotel',
+            price_low=80, price_high=120,
+            total_low=80, total_high=120,
+            standout='Stylish design hotel in Shinsaibashi. Walking distance to Dotonbori and Amerikamura.',
+            booking_url='https://www.crosshotel.com/osaka/en/',
+            alt_booking_url='https://www.agoda.com/cross-hotel-osaka/hotel/osaka-jp.html',
+            address='2-5-15 Shinsaibashisuji, Chuo-ku, Osaka',
+        ),
+        AccommodationOption(
+            location_id=osaka_accom.id, rank=2,
+            name='Dormy Inn Premium Namba',
+            property_type='Business hotel',
+            price_low=80, price_high=110,
+            total_low=80, total_high=110,
+            standout='Rooftop onsen + free late-night ramen. Same chain as Tokyo stay.',
+            booking_url='https://www.hotespa.net/hotels/namba/',
+            alt_booking_url='https://www.agoda.com/dormy-inn-premium-namba/hotel/osaka-jp.html',
+            has_onsen=True, breakfast_included=True,
+            address='2-1-7 Nipponbashi, Chuo-ku, Osaka',
+        ),
+        AccommodationOption(
+            location_id=osaka_accom.id, rank=3,
+            name='Hotel Monterey Grasmere Osaka',
+            property_type='Hotel',
+            price_low=70, price_high=100,
+            total_low=70, total_high=100,
+            standout='Connected to JR Namba station. European-inspired decor. Great location.',
+            booking_url='https://www.hotelmonterey.co.jp/en/grasmere_osaka/',
+            address='1-2-3 Minatomachi, Naniwa-ku, Osaka',
+        ),
+        AccommodationOption(
+            location_id=osaka_accom.id, rank=4,
+            name='First Cabin Namba',
+            property_type='Capsule hotel',
+            price_low=30, price_high=50,
+            total_low=60, total_high=100,
+            standout='Upscale capsule hotel — culture shock experience. Compact but clean private pods.',
+            booking_url='https://first-cabin.jp/en/',
+            address='Namba, Chuo-ku, Osaka',
+        ),
+    ]
+    for opt in options:
+        db.session.add(opt)
+
+    # 5. Transport routes: Kyoto → Osaka, Osaka → Tokyo
+    if not TransportRoute.query.filter_by(
+            route_from='Kyoto', route_to='Osaka').first():
+        db.session.add(TransportRoute(
+            route_from='Kyoto', route_to='Osaka',
+            transport_type='JR Special Rapid',
+            duration='~30 min', jr_pass_covered=True,
+            sort_order=100,
+        ))
+    if not TransportRoute.query.filter_by(
+            route_from='Osaka', route_to='Tokyo').first():
+        db.session.add(TransportRoute(
+            route_from='Osaka', route_to='Tokyo',
+            transport_type='Shinkansen', train_name='Hikari',
+            duration='~3h', jr_pass_covered=True,
+            cost_if_not_covered='¥13,870',
+            sort_order=101,
+        ))
+
+    # 6. Checklist item for Osaka booking
+    max_cl_sort = db.session.query(
+        db.func.max(ChecklistItem.sort_order)).scalar() or 99
+    cl_item = ChecklistItem(
+        category='pre_departure_today',
+        title='Book Osaka hotel (1 night, Apr 16)',
+        is_completed=False,
+        priority='high',
+        sort_order=max_cl_sort + 1,
+        item_type='decision',
+        status='pending',
+        accommodation_location_id=osaka_accom.id,
+    )
+    db.session.add(cl_item)
+    db.session.commit()
+    app.logger.info('Restructured itinerary: Osaka gets its own night.')
+
+
+def _seed_osaka_and_substitutes(app):
+    """Replace Day 13 activities with Osaka content, add substitutes
+    across trip, and populate URLs on ticketed activities. Idempotent."""
+    from models import Day, Activity
+
+    # Guard: already seeded?
+    day13 = Day.query.filter_by(day_number=13).first()
+    if not day13:
+        return
+    if Activity.query.filter_by(day_id=day13.id).filter(
+            Activity.title.contains('Dotonbori')).first():
+        return
+
+    # Delete old Day 13 activities
+    Activity.query.filter_by(day_id=day13.id).delete()
+
+    # New Osaka activities
+    osaka_activities = [
+        # Morning
+        Activity(day_id=day13.id, title='Check out of Kyoto machiya',
+                 time_slot='morning', sort_order=1,
+                 description='Send bags to Osaka hotel via takkyubin or carry daypacks.'),
+        Activity(day_id=day13.id, title='JR Special Rapid to Osaka',
+                 time_slot='morning', sort_order=2,
+                 description='Kyoto → Osaka in 30 min. JR Pass covered.',
+                 jr_pass_covered=True),
+        Activity(day_id=day13.id, title='Osaka Castle Park',
+                 time_slot='morning', sort_order=3,
+                 description='The exterior and park are stunning — skip the interior (modern concrete museum). Cherry blossoms around the moat.',
+                 address='1-1 Osakajo, Chuo-ku, Osaka',
+                 url='https://www.osakacastle.net/english/'),
+        Activity(day_id=day13.id, title='Kuromon Market street food crawl',
+                 time_slot='morning', sort_order=4,
+                 description="Osaka's Kitchen — fresh sashimi, grilled seafood, tamagoyaki, mochi. Eat your way through.",
+                 address='2-4-1 Nipponbashi, Chuo-ku, Osaka',
+                 url='https://kuromon.com/en/'),
+        # Afternoon
+        Activity(day_id=day13.id, title='Shinsekai district + Tsutenkaku Tower',
+                 time_slot='afternoon', sort_order=5,
+                 description='Retro neighborhood frozen in time. Eat kushikatsu (deep-fried skewers) at a standing counter. Tower has views.',
+                 cost_per_person=900, cost_note='¥900 tower entry',
+                 address='1-18-6 Ebisuhigashi, Naniwa-ku, Osaka',
+                 url='https://www.tsutenkaku.co.jp/en/'),
+        Activity(day_id=day13.id, title='Spa World',
+                 time_slot='afternoon', sort_order=6,
+                 description='Giant themed onsen with Egyptian, Roman, and Japanese baths across multiple floors. Total culture shock. Swimsuits NOT allowed — everyone is naked.',
+                 cost_per_person=1500, cost_note='¥1,500 entry',
+                 is_optional=True,
+                 address='3-4-24 Ebisuhigashi, Naniwa-ku, Osaka',
+                 url='https://www.spaworld.co.jp/english/'),
+        Activity(day_id=day13.id, title='Den Den Town',
+                 time_slot='afternoon', sort_order=7,
+                 description="Osaka's Akihabara — retro game arcades, anime shops, maid cafes, figure stores. More authentic than Tokyo's version.",
+                 is_optional=True,
+                 address='Nipponbashi, Naniwa-ku, Osaka'),
+        # Evening
+        Activity(day_id=day13.id, title='Dotonbori Night Walk',
+                 time_slot='evening', sort_order=8,
+                 description='The iconic neon-lit canal strip. Giant Glico Running Man sign, mechanical crab, overwhelming sensory overload. Peak energy after dark.',
+                 address='Dotonbori, Chuo-ku, Osaka'),
+        Activity(day_id=day13.id, title='Takoyaki crawl — Wanaka, Kukuru, Aizuya',
+                 time_slot='evening', sort_order=9,
+                 description='Try octopus balls from 3+ different vendors and compare. ¥500-800 per serving. Each shop has a different style.',
+                 cost_per_person=600, cost_note='~¥500-800 per serving'),
+        Activity(day_id=day13.id, title='Hozenji Yokocho',
+                 time_slot='evening', sort_order=10,
+                 description='Lantern-lit stone alley hidden behind Dotonbori. Splash water on the moss-covered Fudo Myo-o statue for good luck. 60+ tiny restaurants.',
+                 address='1-2 Nanba, Chuo-ku, Osaka'),
+        # Night
+        Activity(day_id=day13.id, title='Ura-Namba bar crawl',
+                 time_slot='night', sort_order=11,
+                 description='Tight alleyways packed with local izakayas east of Namba station. This is where locals drink — not tourists. Cheap drinks, warm atmosphere, elbow-to-elbow.',
+                 address='Sennichimae, Chuo-ku, Osaka'),
+        Activity(day_id=day13.id, title='Amerikamura (American Village)',
+                 time_slot='night', sort_order=12,
+                 description='Youth culture hub. Record bars, vintage shops, street art. Try Bar Nayuta for jazz/vinyl vibes or Club Joule for dancing.',
+                 is_optional=True,
+                 address='Amerikamura, Chuo-ku, Osaka'),
+        Activity(day_id=day13.id, title='Check into Osaka hotel',
+                 time_slot='night', sort_order=13,
+                 description='Late check-in — most hotels allow until midnight.'),
+    ]
+    for a in osaka_activities:
+        db.session.add(a)
+
+    # Day 13 substitutes: Nara & Relaxed Kyoto
+    subs_day13 = [
+        Activity(day_id=day13.id,
+                 title='Nara day trip — deer park, Todai-ji',
+                 is_substitute=True, substitute_for='Osaka day',
+                 sort_order=90,
+                 description='Friendly bowing deer in the park, massive Buddha statue in Todai-ji. More chill than Osaka. 45 min from Kyoto by JR.',
+                 url='https://www.japan-guide.com/e/e4100.html'),
+        Activity(day_id=day13.id,
+                 title='Relaxed Kyoto — Nijo Castle + tea ceremony',
+                 is_substitute=True, substitute_for='Osaka day',
+                 sort_order=91,
+                 description='If you need a low-energy day. Nijo Castle (¥800) has nightingale floors that squeak when you walk. Book a traditional tea ceremony.',
+                 cost_per_person=800,
+                 url='https://nijo-jocastle.city.kyoto.lg.jp/en/'),
+    ]
+    for a in subs_day13:
+        db.session.add(a)
+
+    # Substitutes across other days
+    _add_substitute_activities()
+
+    # URLs for existing ticketed activities
+    _seed_activity_urls()
+
+    db.session.commit()
+    app.logger.info('Seeded Osaka activities, substitutes, and activity URLs.')
+
+
+def _add_substitute_activities():
+    """Add substitute/alternative activities across the trip."""
+    from models import Day, Activity
+
+    subs = [
+        # Day 4 (Tokyo) — alt for Golden Gai
+        (4, 'Robot Restaurant (Shinjuku Kabukicho)',
+         'Golden Gai', 'night',
+         'Bikini-clad performers riding neon robots with lasers and taiko drums. Pure sensory overload. Book online — sells out.',
+         'https://www.shinjuku-robot.com/pc/en/', 8000),
+        # Day 4 (Tokyo) — alt for Harajuku
+        (4, 'Shimokitazawa — bohemian neighborhood',
+         'Harajuku', 'afternoon',
+         "Tokyo's Brooklyn. Vintage shops, live music venues, indie cafes, thrift stores. More authentic than tourist-heavy Harajuku.",
+         None, None),
+        # Day 4 (Tokyo) — Yozakura cherry blossoms
+        (4, 'Yozakura at Chidorigafuchi — night cherry blossoms by rowboat',
+         'Evening plans', 'evening',
+         'Rent a rowboat on the Imperial Palace moat under illuminated cherry blossoms. One of the most magical experiences in Tokyo during hanami season. Boats until 8:30 PM.',
+         'https://visit-chiyoda.tokyo/en/spots/detail/31', 800),
+        # Day 10 (Kyoto) — alt for Philosopher's Path
+        (10, 'Fushimi sake brewery district — tastings',
+         "Philosopher's Path", 'afternoon',
+         "Beyond the shrine — explore the sake breweries nearby. Gekkeikan Okura Sake Museum offers tastings. Buy sake directly from the source.",
+         'https://www.gekkeikan.co.jp/english/kyotofushimi/', 400),
+        # Day 11 (Kyoto) — alt for Arashiyama
+        (11, 'Kurama-Kibune mountain villages + onsen',
+         'Arashiyama', 'morning',
+         'Scenic mountain train to ancient villages north of Kyoto. Hike between Kurama Temple and Kibune Shrine. Natural hot spring at Kurama Onsen.',
+         'https://www.japan-guide.com/e/e3927.html', None),
+        # Day 14 (Tokyo) — alt for TeamLab
+        (14, 'Akihabara deep dive — maid cafes, arcades, themed bars',
+         'TeamLab', 'afternoon',
+         "Electric Town — multi-story arcades, maid cafes where costumed waitresses serve you, anime mega-stores. Total culture shock. Go to @home Cafe for the full maid cafe experience.",
+         None, None),
+    ]
+
+    for day_num, title, sub_for, slot, desc, url, cost in subs:
+        day = Day.query.filter_by(day_number=day_num).first()
+        if not day:
+            continue
+        # Skip if already exists
+        if Activity.query.filter_by(day_id=day.id, title=title).first():
+            continue
+        a = Activity(
+            day_id=day.id, title=title,
+            is_substitute=True, substitute_for=sub_for,
+            time_slot=slot, description=desc, url=url,
+            cost_per_person=cost,
+            sort_order=90,
+        )
+        db.session.add(a)
+
+
+def _seed_activity_urls():
+    """Add URLs to existing ticketed/notable activities (idempotent)."""
+    from models import Activity
+    URL_MAP = {
+        'TeamLab Planets': 'https://planets.teamlab.art/tokyo/en/',
+        'Hakone Loop': 'https://www.hakonenavi.jp/en/',
+        'Senso-ji Temple': 'https://www.senso-ji.jp/english/',
+        'Meiji Shrine': 'https://www.meijijingu.or.jp/en/',
+        'Fushimi Inari': 'https://inari.jp/en/',
+        'Kiyomizu-dera': 'https://www.kiyomizudera.or.jp/en/',
+        'Kinkaku-ji': 'https://www.shokoku-ji.jp/en/kinkakuji/',
+        'Hiroshima Peace Memorial': 'https://hpmmuseum.jp/?lang=eng',
+        'Tenzan Tohji-kyo': 'https://www.tenzan.jp/en/',
+        'Hida Folk Village': 'https://www.hidanosato-tpo.jp/english/',
+        'Monkey Park Iwatayama': 'https://www.monkeypark.jp/en/',
+        'Takayama Jinya': 'https://jinya.gifu.jp/en/',
+        'Bamboo Grove': 'https://www.japan-guide.com/e/e3912.html',
+        'Tenryu-ji': 'https://www.tenryuji.com/en/',
+    }
+    for title_substr, url in URL_MAP.items():
+        acts = Activity.query.filter(
+            Activity.title.contains(title_substr),
+            Activity.url.is_(None)
+        ).all()
+        for a in acts:
+            a.url = url
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -368,6 +729,9 @@ def create_app():
         _seed_checklist_decisions(app)
         _fix_booking_urls(app)
         _seed_guide_urls(app)
+        _seed_location_coords(app)
+        _restructure_osaka(app)
+        _seed_osaka_and_substitutes(app)
 
     return app
 

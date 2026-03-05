@@ -228,6 +228,11 @@
                     &#x1f4cd; {{ activity.address }}
                 </a>
                 {% endif %}
+                {% if activity.url %}
+                <a href="{{ activity.url }}" target="_blank" rel="noopener" class="activity-url-link">
+                    &#x1f3ab; Tickets / Info
+                </a>
+                {% endif %}
                 {% if activity.cost_note %}
                 <div class="activity-cost">{{ activity.cost_note }}</div>
                 {% endif %}
@@ -275,6 +280,11 @@
                     {% if activity.address %}
                     <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
                         &#x1f4cd; {{ activity.address }}
+                    </a>
+                    {% endif %}
+                    {% if activity.url %}
+                    <a href="{{ activity.url }}" target="_blank" rel="noopener" class="activity-url-link">
+                        &#x1f3ab; Tickets / Info
                     </a>
                     {% endif %}
                     {% if activity.description %}
@@ -348,6 +358,14 @@
             {% endif %}
             {% if activity.description %}
             <p class="activity-desc">{{ activity.description }}</p>
+            {% endif %}
+            {% if activity.url %}
+            <a href="{{ activity.url }}" target="_blank" rel="noopener" class="activity-url-link">
+                &#x1f3ab; Tickets / Info
+            </a>
+            {% endif %}
+            {% if activity.cost_per_person %}
+            <span class="cost-badge">&yen;{{ activity.cost_per_person | int }}</span>
             {% endif %}
         </div>
     </div>
