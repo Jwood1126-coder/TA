@@ -61,6 +61,55 @@ document.addEventListener('touchend', function(e) {
     }
 }, { passive: true });
 
+// Pull-to-refresh
+(function() {
+    let pullStartY = 0;
+    let pulling = false;
+    const THRESHOLD = 80;
+
+    // Create indicator element
+    const indicator = document.createElement('div');
+    indicator.className = 'pull-refresh-indicator';
+    indicator.innerHTML = '&#x21BB;';
+    document.body.prepend(indicator);
+
+    document.addEventListener('touchstart', function(e) {
+        if (window.scrollY === 0) {
+            pullStartY = e.touches[0].clientY;
+            pulling = true;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+        if (!pulling) return;
+        const pullDistance = e.touches[0].clientY - pullStartY;
+        if (pullDistance > 0 && window.scrollY === 0) {
+            const progress = Math.min(pullDistance / THRESHOLD, 1);
+            indicator.style.transform = `translateY(${Math.min(pullDistance * 0.4, 50)}px)`;
+            indicator.style.opacity = progress;
+            if (progress >= 1) {
+                indicator.classList.add('ready');
+            } else {
+                indicator.classList.remove('ready');
+            }
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', function() {
+        if (!pulling) return;
+        pulling = false;
+        if (indicator.classList.contains('ready')) {
+            indicator.textContent = 'Refreshing...';
+            indicator.style.transform = 'translateY(40px)';
+            setTimeout(() => location.reload(), 200);
+        } else {
+            indicator.style.transform = 'translateY(-40px)';
+            indicator.style.opacity = '0';
+        }
+        indicator.classList.remove('ready');
+    }, { passive: true });
+})();
+
 // Real-time sync handlers
 socket.on('activity_toggled', function(data) {
     const card = document.querySelector(`[data-id="${data.id}"]`);
@@ -80,15 +129,32 @@ socket.on('checklist_toggled', function(data) {
     }
 });
 
-socket.on('accommodation_updated', function(data) {
-    // Refresh the page to show updated state
-    if (window.location.pathname === '/accommodations') {
+socket.on('checklist_status_changed', function(data) {
+    const item = document.querySelector(`[data-id="${data.id}"]`);
+    if (item) {
+        const badge = item.querySelector('.decision-status-badge');
+        if (badge) {
+            badge.className = 'decision-status-badge ' + data.status;
+            const labels = {
+                pending: 'Pending', researching: 'Researching',
+                decided: 'Decided', booked: 'Booked', completed: 'Done'
+            };
+            badge.textContent = labels[data.status] || data.status;
+        }
+    }
+});
+
+socket.on('checklist_option_updated', function(data) {
+    // Reload checklists page to reflect changes from other device
+    if (window.location.pathname === '/checklists') {
         location.reload();
     }
 });
 
-socket.on('journal_updated', function(data) {
-    if (window.location.pathname === '/journal') {
+socket.on('accommodation_updated', function(data) {
+    // Refresh if on accommodations or checklists page
+    if (window.location.pathname === '/accommodations' ||
+        window.location.pathname === '/checklists') {
         location.reload();
     }
 });
