@@ -210,6 +210,51 @@ def _seed_checklist_decisions(app):
     app.logger.info('Checklist decisions seeded.')
 
 
+def _fix_booking_urls(app):
+    """Fix generic search URLs with property-specific pages (idempotent)."""
+    from models import AccommodationOption
+    URL_FIXES = {
+        'https://www.japanican.com/en/hotel/list/?ar=190402&dt=20260409&ad=2&rm=1':
+            'https://tanabe-ryokan.jp/english.html',
+        'https://www.booking.com/searchresults.html?ss=Ryokan+Asunaro+Takayama':
+            'https://www.yado-asunaro.com/en/',
+        'https://kshouse.jp/':
+            'https://kshouse.jp/takayama-oasis-e/index.html',
+        'https://www.booking.com/searchresults.html?ss=Guesthouse+Tomaru+Takayama':
+            'https://www.hidatakayama-guesthouse.com/',
+        'https://www.booking.com/searchresults.html?ss=Hostel+Murasaki+Takayama':
+            'https://www.booking.com/hotel/jp/zi-lu-guan.html',
+        'https://sotetsu-hotels.com/en/fresa-inn/shinagawa-higashiguchi/':
+            'https://sotetsu-hotels.com/en/grand-fresa/shinagawa-seaside/',
+        'https://www.hotespa.net/hotels/gotanda/':
+            'https://en.dormy-hotels.com/hotel/kanto/tokyo/12849/',
+        'https://www.hotelmets.jp/en/shinagawa/':
+            'https://www.hotelmets.jp/en/gotanda/',
+        'https://www.kanameinn.com/':
+            'https://kaname-inn.com/',
+    }
+    # Also fix property names that were wrong
+    NAME_FIXES = {
+        'Sotetsu Fresa Inn Shinagawa': 'Sotetsu Grand Fresa Shinagawa Seaside',
+        'Dormy Inn Premium Gotanda': 'Dormy Inn Meguro Aobadai',
+        'Hotel Mets Shinagawa': 'JR-East Hotel Mets Premier Gotanda',
+    }
+    changed = False
+    for old_url, new_url in URL_FIXES.items():
+        opt = AccommodationOption.query.filter_by(booking_url=old_url).first()
+        if opt:
+            opt.booking_url = new_url
+            changed = True
+    for old_name, new_name in NAME_FIXES.items():
+        opt = AccommodationOption.query.filter_by(name=old_name).first()
+        if opt:
+            opt.name = new_name
+            changed = True
+    if changed:
+        db.session.commit()
+        app.logger.info('Fixed booking URLs and property names.')
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -272,6 +317,7 @@ def create_app():
         db.create_all()
         _run_migrations(app)
         _seed_checklist_decisions(app)
+        _fix_booking_urls(app)
 
     return app
 
