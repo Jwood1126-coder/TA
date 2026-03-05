@@ -4,6 +4,15 @@
 {% block content %}
 {% from "icons.html" import icon_sakura, icon_lightbulb, icon_check, icon_book, icon_hotel, icon_plane %}
 <header class="dash-header">
+    <!-- Falling sakura petals -->
+    <div class="sakura-shower" aria-hidden="true">
+        <div class="petal p1"></div>
+        <div class="petal p2"></div>
+        <div class="petal p3"></div>
+        <div class="petal p4"></div>
+        <div class="petal p5"></div>
+        <div class="petal p6"></div>
+    </div>
     <h1>Japan 2026 {{ icon_sakura(22) }}</h1>
     {% if days_until is not none and days_until > 0 %}
         <p class="countdown">{{ days_until }} days to go!</p>
@@ -115,6 +124,11 @@
     </section>
     {% endfor %}
 </section>
+
+<!-- Wave Divider -->
+<div class="wave-divider" aria-hidden="true">
+    <svg viewBox="0 0 400 24" preserveAspectRatio="none"><path d="M0 12 Q25 0 50 12 T100 12 T150 12 T200 12 T250 12 T300 12 T350 12 T400 12" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.2"/></svg>
+</div>
 
 <!-- Quick Links -->
 <section class="quick-links-section">
