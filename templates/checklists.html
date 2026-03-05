@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Checklists{% endblock %}
 
-{% macro render_checklist_item(item) %}
+{% macro render_checklist_item(item, deletable=false) %}
 <div class="checklist-item {% if item.is_completed %}completed{% endif %}"
      data-id="{{ item.id }}">
 
@@ -17,6 +17,10 @@
         {% if item.url %}
         <a href="{{ item.url }}" target="_blank" rel="noopener" class="task-link-icon"
            onclick="event.stopPropagation()">&#x1f517;</a>
+        {% endif %}
+        {% if deletable %}
+        <button class="delete-item-btn" onclick="event.stopPropagation(); deleteItem({{ item.id }})"
+                title="Delete item">&#x2715;</button>
         {% endif %}
     </div>
 
@@ -73,6 +77,15 @@
         </p>
         {% if accom_loc.quick_notes %}
         <p class="accom-quick-note">{{ accom_loc.quick_notes }}</p>
+        {% endif %}
+
+        {% if accom_loc.options | list | length == 0 %}
+        {# No options yet — show clear not-booked state #}
+        <div class="accom-empty-state">
+            <span class="booking-badge not-booked">Not Booked</span>
+            <p class="empty-options">No hotel options added yet.</p>
+            <button class="add-option-btn" onclick="showAddOption({{ item.id }})">+ Add option</button>
+        </div>
         {% endif %}
 
         {% for option in accom_loc.options %}
@@ -215,6 +228,8 @@
         {% if section.progress.decided %} &middot; {{ section.progress.decided }} decided{% endif %}
     </div>
 
+    {% set deletable = section.key in ('preparation', 'packing') %}
+
     {% if section.subgroups %}
     {% for subgroup in section.subgroups %}
     <div class="checklist-subgroup">
@@ -226,14 +241,18 @@
             <span class="subgroup-count">{{ subgroup.entries | length }}</span>
         </div>
         {% for item in subgroup.entries %}
-            {{ render_checklist_item(item) }}
+            {{ render_checklist_item(item, deletable=deletable) }}
         {% endfor %}
     </div>
     {% endfor %}
     {% else %}
     {% for item in section.entries %}
-        {{ render_checklist_item(item) }}
+        {{ render_checklist_item(item, deletable=deletable) }}
     {% endfor %}
+    {% endif %}
+
+    {% if section.key in ('preparation', 'packing') %}
+    <button class="add-item-section-btn" onclick="showAddItem('{{ section.key }}')">+ Add item</button>
     {% endif %}
 </section>
 {% endfor %}

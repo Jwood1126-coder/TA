@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, jsonify, request
-from models import db, AccommodationLocation, AccommodationOption
+from models import db, AccommodationLocation, AccommodationOption, ChecklistItem
 
 accommodations_bp = Blueprint('accommodations', __name__)
 
@@ -62,6 +62,11 @@ def update_status(option_id):
     option.confirmation_number = data.get('confirmation_number',
                                           option.confirmation_number)
     option.user_notes = data.get('user_notes', option.user_notes)
+
+    # Sync booking status to linked checklist item
+    if new_status is not None:
+        _sync_checklist_status(option)
+
     db.session.commit()
 
     from app import socketio
@@ -72,3 +77,28 @@ def update_status(option_id):
     })
 
     return jsonify({'ok': True})
+
+
+def _sync_checklist_status(option):
+    """Keep the linked ChecklistItem status in sync with accommodation booking."""
+    cl_item = ChecklistItem.query.filter_by(
+        accommodation_location_id=option.location_id).first()
+    if not cl_item:
+        return
+    status_map = {
+        'booked': 'booked',
+        'confirmed': 'booked',
+        'not_booked': 'pending',
+        'researching': 'researching',
+        'cancelled': 'pending',
+    }
+    new_cl_status = status_map.get(option.booking_status)
+    if new_cl_status and cl_item.status != new_cl_status:
+        cl_item.status = new_cl_status
+        if new_cl_status == 'booked':
+            cl_item.is_completed = True
+            from datetime import datetime
+            cl_item.completed_at = datetime.utcnow()
+        elif cl_item.is_completed:
+            cl_item.is_completed = False
+            cl_item.completed_at = None

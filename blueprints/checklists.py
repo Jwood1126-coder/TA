@@ -137,7 +137,9 @@ def checklists_view():
                                sections=None)
 
     # Pre-trip: eagerly load options and accommodation data
-    items = ChecklistItem.query.options(
+    items = ChecklistItem.query.filter(
+        ChecklistItem.sort_order < 9999
+    ).options(
         db.joinedload(ChecklistItem.options),
         db.joinedload(ChecklistItem.accommodation_location)
             .joinedload(AccommodationLocation.options)
@@ -245,6 +247,59 @@ def update_option_notes(option_id):
     data = request.get_json()
     option.user_notes = data.get('user_notes', '')
     db.session.commit()
+    return jsonify({'ok': True})
+
+
+ADDABLE_CATEGORIES = {'pre_departure_month', 'packing_essential', 'packing_helpful'}
+
+
+@checklists_bp.route('/api/checklists', methods=['POST'])
+def create_checklist_item():
+    """Create a new checklist item (preparation or packing only)."""
+    data = request.get_json()
+    title = (data.get('title') or '').strip()
+    category = data.get('category', 'pre_departure_month')
+    if not title:
+        return jsonify({'ok': False, 'error': 'Title is required'}), 400
+    if category not in ADDABLE_CATEGORIES:
+        return jsonify({'ok': False, 'error': f'Cannot add items to category: {category}'}), 400
+
+    max_order = db.session.query(
+        db.func.max(ChecklistItem.sort_order)
+    ).filter_by(category=category).scalar() or 0
+
+    item = ChecklistItem(
+        category=category,
+        title=title,
+        item_type=data.get('item_type', 'task'),
+        status='pending',
+        sort_order=max_order + 1,
+    )
+    db.session.add(item)
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('checklist_added', {'id': item.id, 'category': item.category})
+    return jsonify({'ok': True, 'id': item.id})
+
+
+DELETABLE_CATEGORIES = {'pre_departure_month', 'packing_essential', 'packing_helpful'}
+
+
+@checklists_bp.route('/api/checklists/<int:item_id>', methods=['DELETE'])
+def delete_checklist_item(item_id):
+    """Delete a checklist item (preparation or packing only)."""
+    item = ChecklistItem.query.get_or_404(item_id)
+    if item.category not in DELETABLE_CATEGORIES:
+        return jsonify({'ok': False, 'error': 'Cannot delete booking/accommodation items'}), 400
+
+    # Delete child options first
+    ChecklistOption.query.filter_by(checklist_item_id=item.id).delete()
+    db.session.delete(item)
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('checklist_deleted', {'id': item_id})
     return jsonify({'ok': True})
 
 

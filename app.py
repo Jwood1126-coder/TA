@@ -660,6 +660,53 @@ def _seed_activity_urls():
             a.url = url
 
 
+def _fix_checklist_consistency(app):
+    """Fix duplicate checklist items and ensure accommodation links are correct.
+    Idempotent: skips if sentinel exists."""
+    from models import ChecklistItem, AccommodationLocation
+
+    if ChecklistItem.query.filter_by(title='__checklist_v2_fixed').first():
+        return
+
+    with app.app_context():
+        # Remove duplicate "Book Minneapolis hotel" entries (keep the one with accom link)
+        dupes = ChecklistItem.query.filter(
+            ChecklistItem.title.contains('Minneapolis hotel')
+        ).all()
+        linked = [d for d in dupes if d.accommodation_location_id]
+        unlinked = [d for d in dupes if not d.accommodation_location_id]
+        if linked and unlinked:
+            for item in unlinked:
+                from models import ChecklistOption
+                ChecklistOption.query.filter_by(checklist_item_id=item.id).delete()
+                db.session.delete(item)
+
+        # Ensure the linked Minneapolis item exists; create if missing
+        mpls_loc = AccommodationLocation.query.filter_by(
+            location_name='Minneapolis').first()
+        if mpls_loc:
+            mpls_item = ChecklistItem.query.filter_by(
+                accommodation_location_id=mpls_loc.id).first()
+            if not mpls_item:
+                mpls_item = ChecklistItem(
+                    category='pre_departure_week',
+                    title='Book Minneapolis hotel',
+                    item_type='decision',
+                    status='pending',
+                    accommodation_location_id=mpls_loc.id,
+                    sort_order=5,
+                )
+                db.session.add(mpls_item)
+
+        # Sentinel to prevent re-running
+        db.session.add(ChecklistItem(
+            category='packing_helpful', title='__checklist_v2_fixed',
+            item_type='task', status='completed', is_completed=True,
+            sort_order=9999,
+        ))
+        db.session.commit()
+
+
 def _revise_itinerary_activities(app):
     """Comprehensive revision of itinerary activities — fixes sparse days,
     wrong time slots, incorrect optional flags, and missing activities.
@@ -1098,6 +1145,7 @@ def create_app():
         _restructure_osaka(app)
         _seed_osaka_and_substitutes(app)
         _revise_itinerary_activities(app)
+        _fix_checklist_consistency(app)
 
     return app
 

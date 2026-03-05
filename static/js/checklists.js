@@ -180,6 +180,73 @@ async function updateAccomNotes(optionId, value) {
     }
 }
 
+// ---------- Delete checklist item ----------
+
+async function deleteItem(itemId) {
+    if (!confirm('Delete this item?')) return;
+    try {
+        const resp = await fetch(`/api/checklists/${itemId}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (data.ok) {
+            const el = document.querySelector(`[data-id="${itemId}"]`);
+            if (el) el.remove();
+            showToast('Item deleted');
+        } else {
+            showToast(data.error || 'Cannot delete', 'error');
+        }
+    } catch (err) {
+        console.error('Delete failed:', err);
+        showToast('Failed to delete', 'error');
+    }
+}
+
+// ---------- Add new checklist item ----------
+
+function showAddItem(sectionKey) {
+    const section = document.getElementById(`cat-${sectionKey}`);
+    if (!section || section.querySelector('.add-item-form')) return;
+
+    let categoryOptions = '';
+    if (sectionKey === 'preparation') {
+        categoryOptions = '<option value="pre_departure_month">Preparation</option>';
+    } else if (sectionKey === 'packing') {
+        categoryOptions = '<option value="packing_essential">Essential</option>' +
+                          '<option value="packing_helpful">Helpful</option>';
+    }
+
+    const form = document.createElement('div');
+    form.className = 'add-item-form';
+    form.innerHTML = `
+        <input type="text" placeholder="Item name" class="new-item-title"
+               onkeydown="if(event.key==='Enter')submitNewItem('${sectionKey}',this)">
+        <select class="new-item-category">${categoryOptions}</select>
+        <div class="add-option-form-btns">
+            <button onclick="submitNewItem('${sectionKey}', this)" class="select-btn-sm">Add</button>
+            <button onclick="this.closest('.add-item-form').remove()" class="eliminate-btn">Cancel</button>
+        </div>
+    `;
+    section.appendChild(form);
+    form.querySelector('.new-item-title').focus();
+}
+
+async function submitNewItem(sectionKey, el) {
+    const form = el.closest('.add-item-form');
+    const title = form.querySelector('.new-item-title').value.trim();
+    const category = form.querySelector('.new-item-category').value;
+    if (!title) return;
+    try {
+        const resp = await fetch('/api/checklists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, category })
+        });
+        if ((await resp.json()).ok) location.reload();
+    } catch (err) {
+        console.error('Add item failed:', err);
+        showToast('Failed to add', 'error');
+    }
+}
+
 // ---------- Add new option ----------
 
 function showAddOption(itemId) {
