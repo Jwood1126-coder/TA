@@ -22,6 +22,7 @@ class Location(db.Model):
     vibe = db.Column(db.Text)
     why = db.Column(db.Text)
     address = db.Column(db.String(500))
+    guide_url = db.Column(db.String(500))
     arrival_date = db.Column(db.Date)
     departure_date = db.Column(db.Date)
     sort_order = db.Column(db.Integer, nullable=False)

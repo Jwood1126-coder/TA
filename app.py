@@ -23,6 +23,7 @@ def _run_migrations(app):
         ('flight', 'confirmation_number', 'TEXT'),
         ('chat_message', 'image_filename', 'TEXT'),
         ('checklist_item', 'url', 'TEXT'),
+        ('location', 'guide_url', 'TEXT'),
         ('checklist_item', 'item_type', "TEXT DEFAULT 'task'"),
         ('checklist_item', 'status', "TEXT DEFAULT 'pending'"),
         ('checklist_item', 'accommodation_location_id', 'INTEGER'),
@@ -255,6 +256,29 @@ def _fix_booking_urls(app):
         app.logger.info('Fixed booking URLs and property names.')
 
 
+def _seed_guide_urls(app):
+    """Add travel guide URLs to locations (idempotent)."""
+    from models import Location
+    GUIDE_URLS = {
+        'Tokyo': 'https://www.japan-guide.com/e/e2164.html',
+        'Hakone': 'https://www.japan-guide.com/e/e5200.html',
+        'Takayama': 'https://www.japan-guide.com/e/e5900.html',
+        'Shirakawa-go': 'https://www.japan-guide.com/e/e5950.html',
+        'Kanazawa': 'https://www.japan-guide.com/e/e2167.html',
+        'Kyoto': 'https://www.japan-guide.com/e/e2158.html',
+        'Osaka': 'https://www.japan-guide.com/e/e2157.html',
+    }
+    changed = False
+    for name, url in GUIDE_URLS.items():
+        loc = Location.query.filter_by(name=name).first()
+        if loc and not loc.guide_url:
+            loc.guide_url = url
+            changed = True
+    if changed:
+        db.session.commit()
+        app.logger.info('Seeded travel guide URLs for locations.')
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -318,6 +342,7 @@ def create_app():
         _run_migrations(app)
         _seed_checklist_decisions(app)
         _fix_booking_urls(app)
+        _seed_guide_urls(app)
 
     return app
 

@@ -23,7 +23,12 @@
     </div>
     <h2 class="day-title">{{ day.title }}</h2>
     {% if day.location %}
-    <span class="location-badge">{{ day.location.name }}</span>
+    <div class="location-row">
+        <span class="location-badge">{{ day.location.name }}</span>
+        {% if day.location.guide_url %}
+        <a href="{{ day.location.guide_url }}" target="_blank" rel="noopener" class="guide-link">&#x1f4d6; Travel Guide</a>
+        {% endif %}
+    </div>
     {% if day.location.vibe %}
     <div class="location-vibe">{{ day.location.vibe }}</div>
     {% endif %}

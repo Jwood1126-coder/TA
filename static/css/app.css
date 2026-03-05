@@ -205,6 +205,14 @@ body {
     color: var(--jr-green);
 }
 
+.location-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 .location-badge {
     display: inline-block;
     background: var(--sakura-light);
@@ -213,6 +221,25 @@ body {
     border-radius: 20px;
     font-size: 0.85rem;
     font-weight: 600;
+}
+
+.guide-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.guide-link:hover {
+    opacity: 0.85;
+    text-decoration: none;
 }
 
 .buffer-badge {
