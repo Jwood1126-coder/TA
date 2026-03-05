@@ -19,3 +19,8 @@ class Config:
     THUMBNAIL_SIZE = (400, 400)
     TRIP_PASSWORD = os.environ.get('TRIP_PASSWORD', 'changeme')
     ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+
+    # Session security
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get('RAILWAY_ENVIRONMENT') is not None

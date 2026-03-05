@@ -1,16 +1,24 @@
 // Service Worker for offline support
-const CACHE_NAME = 'japan-trip-v1';
-const CACHE_URLS = [
-    '/',
+const CACHE_NAME = 'japan-trip-v2';
+const STATIC_ASSETS = [
     '/static/css/app.css',
     '/static/js/app.js',
     '/static/js/itinerary.js',
+    '/static/js/checklists.js',
     'https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css',
+];
+
+// Pages to pre-cache for offline access
+const PAGE_URLS = [
+    '/',
+    '/itinerary',
 ];
 
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(CACHE_URLS))
+        caches.open(CACHE_NAME).then(cache =>
+            cache.addAll([...STATIC_ASSETS, ...PAGE_URLS])
+        )
     );
     self.skipWaiting();
 });
@@ -25,18 +33,40 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    // Network-first strategy for API calls, cache-first for assets
-    if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
-        return; // Let the browser handle API requests normally
+    const url = new URL(event.request.url);
+
+    // Skip non-GET requests and API calls
+    if (event.request.method !== 'GET') return;
+    if (url.pathname.startsWith('/api/')) return;
+    if (url.pathname.startsWith('/chat')) return; // Chat needs live connection
+
+    // Static assets: cache-first
+    if (url.pathname.startsWith('/static/') || url.hostname !== location.hostname) {
+        event.respondWith(
+            caches.match(event.request).then(cached => {
+                if (cached) return cached;
+                return fetch(event.request).then(response => {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    return response;
+                });
+            })
+        );
+        return;
     }
 
+    // HTML pages: network-first, fall back to cache
     event.respondWith(
-        fetch(event.request)
-            .then(response => {
-                const clone = response.clone();
-                caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-                return response;
+        fetch(event.request).then(response => {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+            return response;
+        }).catch(() =>
+            caches.match(event.request).then(cached => {
+                if (cached) return cached;
+                // Final fallback: show cached homepage
+                return caches.match('/');
             })
-            .catch(() => caches.match(event.request))
+        )
     );
 });

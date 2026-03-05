@@ -1,5 +1,12 @@
 // Japan Travel Assistant - Core JS
 
+// Register service worker for offline support
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js')
+        .then(reg => console.log('SW registered, scope:', reg.scope))
+        .catch(err => console.warn('SW registration failed:', err));
+}
+
 // Toast notifications
 function showToast(message, type = 'success') {
     let container = document.getElementById('toastContainer');

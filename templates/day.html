@@ -6,9 +6,9 @@
 <header class="day-header">
     <div class="day-nav-row">
         {% if prev_day %}
-        <a href="{{ url_for('itinerary.day_view', day_number=prev_day) }}" class="day-nav-btn">&larr;</a>
+        <a href="{{ url_for('itinerary.day_view', day_number=prev_day) }}" class="day-nav-btn" aria-label="Previous day">&larr;</a>
         {% else %}
-        <span class="day-nav-btn disabled">&larr;</span>
+        <span class="day-nav-btn disabled" aria-hidden="true">&larr;</span>
         {% endif %}
 
         <div class="day-header-center">
@@ -17,9 +17,9 @@
         </div>
 
         {% if next_day %}
-        <a href="{{ url_for('itinerary.day_view', day_number=next_day) }}" class="day-nav-btn">&rarr;</a>
+        <a href="{{ url_for('itinerary.day_view', day_number=next_day) }}" class="day-nav-btn" aria-label="Next day">&rarr;</a>
         {% else %}
-        <span class="day-nav-btn disabled">&rarr;</span>
+        <span class="day-nav-btn disabled" aria-hidden="true">&rarr;</span>
         {% endif %}
     </div>
     <h2 class="day-title">{{ day.title }}</h2>
@@ -243,7 +243,7 @@
             </div>
         </div>
         <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
-                title="Add note">&#x270F;</button>
+                title="Add note" aria-label="Add note to {{ activity.title }}">&#x270F;</button>
     </div>
     {% endfor %}
 

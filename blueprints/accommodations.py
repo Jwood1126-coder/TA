@@ -46,12 +46,19 @@ def eliminate_option(option_id):
     return jsonify({'ok': True, 'is_eliminated': option.is_eliminated})
 
 
+VALID_BOOKING_STATUSES = {'not_booked', 'researching', 'booked', 'confirmed', 'cancelled'}
+
+
 @accommodations_bp.route('/api/accommodations/<int:option_id>/status',
                           methods=['PUT'])
 def update_status(option_id):
     option = AccommodationOption.query.get_or_404(option_id)
     data = request.get_json()
-    option.booking_status = data.get('booking_status', option.booking_status)
+    new_status = data.get('booking_status')
+    if new_status is not None:
+        if new_status not in VALID_BOOKING_STATUSES:
+            return jsonify({'ok': False, 'error': f'Invalid status: {new_status}'}), 400
+        option.booking_status = new_status
     option.confirmation_number = data.get('confirmation_number',
                                           option.confirmation_number)
     option.user_notes = data.get('user_notes', option.user_notes)

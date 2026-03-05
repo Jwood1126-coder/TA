@@ -84,11 +84,17 @@ def toggle_checklist(item_id):
 
 # ---------- New: Update item status ----------
 
+VALID_CHECKLIST_STATUSES = {'pending', 'researching', 'decided', 'booked', 'completed'}
+
+
 @checklists_bp.route('/api/checklists/<int:item_id>/status', methods=['PUT'])
 def update_checklist_status(item_id):
     item = ChecklistItem.query.get_or_404(item_id)
     data = request.get_json()
-    item.status = data.get('status', item.status)
+    new_status = data.get('status', item.status)
+    if new_status not in VALID_CHECKLIST_STATUSES:
+        return jsonify({'ok': False, 'error': f'Invalid status: {new_status}'}), 400
+    item.status = new_status
     if item.status == 'completed':
         item.is_completed = True
         item.completed_at = datetime.utcnow()

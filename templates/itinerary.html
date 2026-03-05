@@ -8,7 +8,7 @@
     <p class="itin-dates">{{ trip.start_date.strftime('%b %d') }} &ndash; {{ trip.end_date.strftime('%b %d, %Y') }}</p>
     {% endif %}
     <div class="itin-progress-row">
-        <div class="itin-progress-bar">
+        <div class="itin-progress-bar" role="progressbar" aria-valuenow="{{ overall_pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="Trip progress: {{ completed }} of {{ total }} activities">
             <div class="itin-progress-fill" style="width: {{ overall_pct }}%"></div>
         </div>
         <span class="itin-progress-text">{{ completed }}/{{ total }}</span>
@@ -37,7 +37,7 @@
             {% endif %}
         </div>
         <div class="itin-day-progress">
-            <div class="progress-bar">
+            <div class="progress-bar" role="progressbar" aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100" aria-label="Day {{ day.day_number }} progress">
                 <div class="progress-fill" style="width: {{ day.completion_pct() }}%"></div>
             </div>
         </div>

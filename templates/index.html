@@ -64,7 +64,7 @@
             <div class="day-card-location">{{ day.location.name }}</div>
             {% endif %}
             <div class="day-progress">
-                <div class="progress-bar">
+                <div class="progress-bar" role="progressbar" aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100" aria-label="Day {{ day.day_number }} progress">
                     <div class="progress-fill" style="width: {{ day.completion_pct() }}%"></div>
                 </div>
                 <span class="progress-text">{{ day.completion_pct() }}%</span>

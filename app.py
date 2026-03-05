@@ -1,8 +1,28 @@
 import os
+import time
+from collections import defaultdict
 from flask import Flask, redirect, url_for, session, request, render_template
 from flask_socketio import SocketIO
 from config import Config
 from models import db
+
+# Simple in-memory rate limiter for login
+_login_attempts = defaultdict(list)  # ip -> [timestamps]
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+
+def _is_rate_limited(ip):
+    """Check if IP has exceeded login attempt limit."""
+    now = time.time()
+    # Prune old attempts outside window
+    _login_attempts[ip] = [t for t in _login_attempts[ip]
+                           if now - t < LOGIN_WINDOW_SECONDS]
+    return len(_login_attempts[ip]) >= LOGIN_MAX_ATTEMPTS
+
+
+def _record_attempt(ip):
+    _login_attempts[ip].append(time.time())
 
 socketio = SocketIO()
 
@@ -313,10 +333,15 @@ def create_app():
     def login():
         error = None
         if request.method == 'POST':
-            if request.form.get('password') == app.config['TRIP_PASSWORD']:
+            ip = request.remote_addr or '0.0.0.0'
+            if _is_rate_limited(ip):
+                error = 'Too many attempts. Please wait a few minutes.'
+            elif request.form.get('password') == app.config['TRIP_PASSWORD']:
                 session['authenticated'] = True
                 return redirect(url_for('itinerary.index'))
-            error = 'Wrong password'
+            else:
+                _record_attempt(ip)
+                error = 'Wrong password'
         return render_template('login.html', error=error)
 
     @app.route('/logout')

@@ -14,11 +14,12 @@
             <h1 class="login-title">Japan 2026</h1>
             <p class="login-subtitle">Cherry Blossom Trip</p>
             <p class="login-emoji">&#x1f338;</p>
-            <form method="post" action="{{ url_for('login') }}">
+            <form method="post" action="{{ url_for('login') }}" aria-label="Login form">
                 {% if error %}
-                <p class="login-error">{{ error }}</p>
+                <p class="login-error" role="alert">{{ error }}</p>
                 {% endif %}
-                <input type="password" name="password" placeholder="Trip password"
+                <label for="password" class="sr-only">Trip password</label>
+                <input type="password" name="password" id="password" placeholder="Trip password"
                        autofocus required autocomplete="current-password">
                 <button type="submit">Enter</button>
             </form>
