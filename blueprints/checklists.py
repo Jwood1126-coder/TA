@@ -66,6 +66,11 @@ def toggle_checklist(item_id):
     item = ChecklistItem.query.get_or_404(item_id)
     item.is_completed = not item.is_completed
     item.completed_at = datetime.utcnow() if item.is_completed else None
+    # Keep status in sync
+    if item.is_completed and item.status != 'completed':
+        item.status = 'completed'
+    elif not item.is_completed and item.status == 'completed':
+        item.status = 'pending'
     db.session.commit()
 
     from app import socketio
@@ -87,6 +92,9 @@ def update_checklist_status(item_id):
     if item.status == 'completed':
         item.is_completed = True
         item.completed_at = datetime.utcnow()
+    elif item.is_completed and item.status != 'completed':
+        item.is_completed = False
+        item.completed_at = None
     db.session.commit()
 
     from app import socketio

@@ -13,9 +13,11 @@ async function toggleChecklist(itemId) {
         const data = await resp.json();
         if (data.ok) {
             item.classList.toggle('completed', data.is_completed);
+            showToast(data.is_completed ? 'Done!' : 'Unmarked');
         }
     } catch (err) {
         console.error('Toggle failed:', err);
+        showToast('Failed to update', 'error');
     }
 }
 
@@ -27,6 +29,9 @@ function toggleItemExpand(itemId) {
     const isOpen = panel.style.display !== 'none';
     panel.style.display = isOpen ? 'none' : '';
     if (arrow) arrow.classList.toggle('open', !isOpen);
+    if (!isOpen) {
+        setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
 }
 
 // Expand/collapse individual option details
@@ -58,8 +63,10 @@ async function updateItemStatus(itemId, status) {
         if (status === 'completed') {
             item.classList.add('completed');
         }
+        showToast('Status updated');
     } catch (err) {
         console.error('Status update failed:', err);
+        showToast('Failed to update', 'error');
     }
 }
 
@@ -78,9 +85,11 @@ async function eliminateClOption(optionId) {
                 btn.classList.toggle('active', data.is_eliminated);
                 btn.innerHTML = data.is_eliminated ? 'Restore' : '&#x2717;';
             }
+            showToast(data.is_eliminated ? 'Eliminated' : 'Restored');
         }
     } catch (err) {
         console.error('Eliminate failed:', err);
+        showToast('Failed to update', 'error');
     }
 }
 

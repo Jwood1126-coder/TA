@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, jsonify, request, Response, \
-    current_app
-from models import db, ChatMessage, Day, Activity, AccommodationOption, \
-    AccommodationLocation, Flight, TransportRoute, BudgetItem
+    current_app, copy_current_request_context
+from models import db, ChatMessage, ChecklistItem, Day, Activity, \
+    AccommodationOption, AccommodationLocation, Flight, TransportRoute, \
+    BudgetItem
 from datetime import date, datetime, timedelta
 import json
 import base64
@@ -24,7 +25,11 @@ train tickets, receipts, etc.), you should:
 You have deep knowledge of Japan: restaurants, etiquette, transit, language, \
 hidden gems. Be concise — they're reading this on a phone. \
 Give specific, actionable answers. When suggesting schedule changes, \
-explain clearly what to add, remove, or move."""
+explain clearly what to add, remove, or move.
+
+You can add items to the trip checklist (pre_trip, packing, on_trip categories). \
+If someone asks you to add a task, booking reminder, or checklist item, use the \
+add_checklist_item tool."""
 
 TOOLS = [
     {
@@ -102,6 +107,21 @@ TOOLS = [
                 "notes": {"type": "string"},
             },
             "required": ["category", "actual_amount"]
+        }
+    },
+    {
+        "name": "add_checklist_item",
+        "description": "Add a new item to the trip checklist (pre-trip tasks, bookings to make, packing items, etc.).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "The checklist item title"},
+                "category": {"type": "string", "enum": ["pre_trip", "packing", "on_trip"], "description": "Which checklist tab"},
+                "description": {"type": "string", "description": "Optional details"},
+                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                "url": {"type": "string", "description": "Optional booking or reference URL"},
+            },
+            "required": ["title", "category"]
         }
     }
 ]
@@ -195,6 +215,22 @@ def _execute_tool(tool_name, tool_input):
                 db.session.commit()
                 return {"success": True, "message": f"Updated budget: {item.category} — actual: ${item.actual_amount:.0f}"}
             return {"success": False, "error": f"Budget category '{tool_input['category']}' not found"}
+
+        elif tool_name == "add_checklist_item":
+            max_order = db.session.query(
+                db.func.max(ChecklistItem.sort_order)
+            ).filter_by(category=tool_input['category']).scalar() or 0
+            item = ChecklistItem(
+                title=tool_input['title'],
+                category=tool_input['category'],
+                description=tool_input.get('description'),
+                priority=tool_input.get('priority', 'medium'),
+                url=tool_input.get('url'),
+                sort_order=max_order + 1,
+            )
+            db.session.add(item)
+            db.session.commit()
+            return {"success": True, "message": f"Added '{item.title}' to {item.category} checklist"}
 
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -297,6 +333,7 @@ def send_message():
     messages.append({"role": "user", "content": user_content})
 
     has_image = image_data is not None
+    app = current_app._get_current_object()
 
     def generate():
         try:
@@ -320,7 +357,8 @@ def send_message():
                 for block in response.content:
                     if block.type == 'tool_use':
                         yield f"data: {json.dumps({'processing': f'Updating: {block.name}...'})}\n\n"
-                        result = _execute_tool(block.name, block.input)
+                        with app.app_context():
+                            result = _execute_tool(block.name, block.input)
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
@@ -345,21 +383,51 @@ def send_message():
                     full_response = ''.join(text_parts)
                     yield f"data: {json.dumps({'text': full_response})}\n\n"
             else:
-                # Text-only: streaming
-                with client.messages.stream(
+                # Text-only: first call with tools (non-streaming to catch tool use)
+                response = client.messages.create(
                     model='claude-sonnet-4-5-20250929',
                     max_tokens=1024,
                     system=system,
                     messages=messages,
-                ) as stream:
-                    for text in stream.text_stream:
-                        full_response += text
-                        yield f"data: {json.dumps({'text': text})}\n\n"
+                    tools=TOOLS,
+                )
+
+                tool_results = []
+                text_parts = []
+                for block in response.content:
+                    if block.type == 'tool_use':
+                        yield f"data: {json.dumps({'processing': f'Updating: {block.name}...'})}\n\n"
+                        with app.app_context():
+                            result = _execute_tool(block.name, block.input)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        })
+                    elif block.type == 'text':
+                        text_parts.append(block.text)
+
+                if tool_results:
+                    messages.append({"role": "assistant", "content": response.content})
+                    messages.append({"role": "user", "content": tool_results})
+                    with client.messages.stream(
+                        model='claude-sonnet-4-5-20250929',
+                        max_tokens=1024,
+                        system=system,
+                        messages=messages,
+                    ) as stream:
+                        for text in stream.text_stream:
+                            full_response += text
+                            yield f"data: {json.dumps({'text': text})}\n\n"
+                else:
+                    full_response = ''.join(text_parts)
+                    yield f"data: {json.dumps({'text': full_response})}\n\n"
 
             # Save assistant response
-            assistant_msg = ChatMessage(role='assistant', content=full_response)
-            db.session.add(assistant_msg)
-            db.session.commit()
+            with app.app_context():
+                assistant_msg = ChatMessage(role='assistant', content=full_response)
+                db.session.add(assistant_msg)
+                db.session.commit()
             yield f"data: {json.dumps({'done': True})}\n\n"
 
         except Exception as e:

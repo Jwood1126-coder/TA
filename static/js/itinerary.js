@@ -9,9 +9,13 @@ async function toggleActivity(activityId) {
         const data = await resp.json();
         if (data.ok) {
             card.classList.toggle('completed', data.is_completed);
+            showToast(data.is_completed ? 'Marked complete' : 'Unmarked');
+        } else {
+            showToast('Failed to update', 'error');
         }
     } catch (err) {
         console.error('Toggle failed:', err);
+        showToast('Connection error', 'error');
     }
 }
 
@@ -51,6 +55,7 @@ async function saveActivityNote(activityId, btn) {
             body: JSON.stringify({ notes: text })
         });
         editor.remove();
+        showToast('Note saved');
         // Update the display
         const card = document.querySelector(`[data-id="${activityId}"]`);
         let noteDiv = card.querySelector('.activity-user-note');
@@ -66,17 +71,21 @@ async function saveActivityNote(activityId, btn) {
         }
     } catch (err) {
         console.error('Save note failed:', err);
+        showToast('Failed to save note', 'error');
     }
 }
 
 async function saveDayNotes(dayId, text) {
     try {
-        await fetch(`/api/days/${dayId}/notes`, {
+        const resp = await fetch(`/api/days/${dayId}/notes`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notes: text })
         });
+        if (resp.ok) showToast('Notes saved');
+        else showToast('Failed to save notes', 'error');
     } catch (err) {
         console.error('Save day notes failed:', err);
+        showToast('Connection error', 'error');
     }
 }
