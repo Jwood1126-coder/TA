@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Checklists{% endblock %}
 
-{% from "icons.html" import icon_check, icon_link, icon_delete, icon_chevron, icon_pin, icon %}
+{% from "icons.html" import icon_check, icon_link, icon_delete, icon_chevron, icon_pin, icon, icon_translate %}
 
 {% macro render_checklist_item(item, deletable=false) %}
 <div class="checklist-item {% if item.is_completed %}completed{% endif %}"
@@ -126,9 +126,11 @@
                 <div class="cl-option-actions">
                     {% if option.booking_url %}
                     <a href="{{ option.booking_url }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
+                    <a href="{{ option.booking_url | translate_link }}" target="_blank" rel="noopener" class="translate-btn sm" title="Translate">{{ icon_translate(12) }}</a>
                     {% endif %}
                     {% if option.alt_booking_url %}
                     <a href="{{ option.alt_booking_url }}" target="_blank" rel="noopener" class="book-link alt">Alt &rarr;</a>
+                    <a href="{{ option.alt_booking_url | translate_link }}" target="_blank" rel="noopener" class="translate-btn sm" title="Translate">{{ icon_translate(12) }}</a>
                     {% endif %}
                     <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
                             onclick="selectAccomOption({{ option.id }})">
@@ -182,6 +184,7 @@
                 <div class="cl-option-actions">
                     {% if option.url %}
                     <a href="{{ option.url }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
+                    <a href="{{ option.url | translate_link }}" target="_blank" rel="noopener" class="translate-btn sm" title="Translate">{{ icon_translate(12) }}</a>
                     {% endif %}
                     <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
                             onclick="selectClOption({{ option.id }})">

@@ -1105,6 +1105,12 @@ def create_app():
         from urllib.parse import quote
         return f"https://www.google.com/maps/search/?api=1&query={quote(address)}"
 
+    # Google Translate link filter — opens a URL translated from Japanese to English
+    @app.template_filter('translate_link')
+    def translate_link_filter(url):
+        from urllib.parse import quote
+        return f"https://translate.google.com/translate?sl=ja&tl=en&u={quote(url, safe='')}"
+
     # Auth routes
     @app.route('/login', methods=['GET', 'POST'])
     def login():

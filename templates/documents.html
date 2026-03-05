@@ -2,7 +2,7 @@
 {% block title %}Travel Documents{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_plane, icon_hotel, icon_train, icon_shinkansen, icon_bus, icon_pin, icon_clipboard %}
+{% from "icons.html" import icon_plane, icon_hotel, icon_train, icon_shinkansen, icon_bus, icon_pin, icon_clipboard, icon_translate %}
 <header>
     <h1>{{ icon_clipboard(22) }} Travel Documents</h1>
 </header>
@@ -121,6 +121,7 @@
             {% if opt.booking_url %}
             <div class="doc-detail-row">
                 <a href="{{ opt.booking_url }}" target="_blank" rel="noopener" class="doc-link">View booking</a>
+                <a href="{{ opt.booking_url | translate_link }}" target="_blank" rel="noopener" class="translate-btn" title="Open translated to English">{{ icon_translate(14) }} EN</a>
             </div>
             {% endif %}
         </div>

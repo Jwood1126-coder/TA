@@ -2400,6 +2400,29 @@ h1 svg, h2 svg, h3 svg { vertical-align: -3px; margin-right: 4px; }
 .doc-link:hover, .navigate-link:hover { text-decoration: underline; }
 .navigate-link svg { vertical-align: -2px; margin-right: 2px; }
 
+/* Translate button — inline next to external links */
+.translate-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.75rem;
+    color: var(--muted-color);
+    text-decoration: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--muted-color) 30%, transparent);
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.translate-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.translate-btn svg { vertical-align: -1px; }
+.translate-btn.sm { font-size: 0.7rem; padding: 1px 4px; margin-left: 4px; }
+
 /* Transport cards */
 .transport-card { padding: 0.5rem 1rem; }
 .transport-route {

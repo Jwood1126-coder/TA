@@ -2,7 +2,7 @@
 {% block title %}Activities{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_lightbulb, icon_pin, icon_link %}
+{% from "icons.html" import icon_lightbulb, icon_pin, icon_link, icon_translate %}
 <header>
     <h1>{{ icon_lightbulb(22) }} Activities</h1>
     <input type="search" id="actSearch" placeholder="Search activities..."
@@ -45,6 +45,9 @@
             {% if a.url %}
             <a href="{{ a.url }}" target="_blank" rel="noopener" class="doc-link">
                 {{ icon_link(14) }} Details
+            </a>
+            <a href="{{ a.url | translate_link }}" target="_blank" rel="noopener" class="translate-btn" title="Open translated to English">
+                {{ icon_translate(14) }} EN
             </a>
             {% endif %}
         </div>
