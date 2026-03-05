@@ -14,7 +14,7 @@
     <title>{% block title %}Japan 2026{% endblock %}</title>
 </head>
 <body>
-    {% from "icons.html" import icon_home, icon_check, icon_chat, icon_more, icon_hotel, icon_map, icon_book, icon_moon, icon_logout %}
+    {% from "icons.html" import icon_home, icon_check, icon_chat, icon_more, icon_hotel, icon_book, icon_moon, icon_logout, icon_clipboard, icon_lightbulb %}
     <main class="container app-main">
         {% block content %}{% endblock %}
     </main>
@@ -24,9 +24,9 @@
             <span class="nav-icon" aria-hidden="true">{{ icon_home(22) }}</span>
             <span class="nav-label">Home</span>
         </a>
-        <a href="{{ url_for('checklists.checklists_view') }}" class="nav-item {% if request.endpoint and request.endpoint.startswith('checklists') %}active{% endif %}" aria-label="Checklist" {% if request.endpoint and request.endpoint.startswith('checklists') %}aria-current="page"{% endif %}>
-            <span class="nav-icon" aria-hidden="true">{{ icon_check(22) }}</span>
-            <span class="nav-label">Checklist</span>
+        <a href="{{ url_for('documents.documents_view') }}" class="nav-item {% if request.endpoint and request.endpoint.startswith('documents') %}active{% endif %}" aria-label="Documents" {% if request.endpoint and request.endpoint.startswith('documents') %}aria-current="page"{% endif %}>
+            <span class="nav-icon" aria-hidden="true">{{ icon_clipboard(22) }}</span>
+            <span class="nav-label">Docs</span>
         </a>
         <a href="{{ url_for('chat.chat_view') }}" class="nav-item {% if request.endpoint and request.endpoint.startswith('chat') %}active{% endif %}" aria-label="Chat" {% if request.endpoint and request.endpoint.startswith('chat') %}aria-current="page"{% endif %}>
             <span class="nav-icon" aria-hidden="true">{{ icon_chat(22) }}</span>
@@ -43,8 +43,9 @@
         <div class="more-menu-backdrop" onclick="closeMore()"></div>
         <div class="more-menu-sheet" role="menu">
             <div class="more-menu-handle"></div>
+            <a href="{{ url_for('checklists.checklists_view') }}" class="more-link">{{ icon_check(18) }} Checklists</a>
+            <a href="{{ url_for('activities.activities_view') }}" class="more-link">{{ icon_lightbulb(18) }} Activities</a>
             <a href="{{ url_for('accommodations.accommodations_view') }}" class="more-link">{{ icon_hotel(18) }} Accommodations</a>
-            <a href="{{ url_for('itinerary.map_view') }}" class="more-link">{{ icon_map(18) }} Trip Map</a>
             <a href="{{ url_for('reference.reference_view') }}" class="more-link">{{ icon_book(18) }} Reference Guide</a>
             <a href="#" class="more-link" onclick="toggleTheme()">{{ icon_moon(18) }} Toggle Dark Mode</a>
             <a href="{{ url_for('logout') }}" class="more-link">{{ icon_logout(18) }} Logout</a>

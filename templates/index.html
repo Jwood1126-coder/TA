@@ -2,7 +2,7 @@
 {% block title %}Japan 2026 - Dashboard{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_sakura, icon_lightbulb, icon_check, icon_raindrop, icon_currency, icon_book, icon_hotel, icon_plane %}
+{% from "icons.html" import icon_sakura, icon_lightbulb, icon_check, icon_book, icon_hotel, icon_plane %}
 <header class="dash-header">
     <h1>Japan 2026 {{ icon_sakura(22) }}</h1>
     {% if days_until is not none and days_until > 0 %}
@@ -37,65 +37,6 @@
 </div>
 {% endif %}
 
-<!-- Weather + Currency Info Bar -->
-{% if (weather_data and weather_data|length > 0) or (exchange_rate and exchange_rate.rate) %}
-<div class="info-bar">
-    {% if weather_data and weather_data|length > 0 %}
-        {% if current_day and weather_data[current_day.day_number|string] is defined %}
-            {% set w = weather_data[current_day.day_number|string] %}
-            <div class="info-bar-weather">
-                <span class="weather-icon">{{ w.icon }}</span>
-                <span>{{ w.temp_high|round|int }}&deg;/{{ w.temp_low|round|int }}&deg;F</span>
-                {% if w.rain_pct and w.rain_pct > 10 %}
-                <span class="rain-badge">{{ icon_raindrop(14) }} {{ w.rain_pct }}%</span>
-                {% endif %}
-            </div>
-        {% else %}
-            {# Show first available day's weather (sorted numerically) #}
-            {% set sorted_keys = weather_data.keys()|list|map('int')|sort|map('string')|list %}
-            {% if sorted_keys %}
-                {% set dn = sorted_keys[0] %}
-                {% set w = weather_data[dn] %}
-                <div class="info-bar-weather">
-                    <span class="weather-icon">{{ w.icon }}</span>
-                    <span>Day {{ dn }}: {{ w.temp_high|round|int }}&deg;F</span>
-                    {% if w.rain_pct and w.rain_pct > 20 %}
-                    <span class="rain-badge">{{ w.rain_pct }}%</span>
-                    {% endif %}
-                </div>
-            {% endif %}
-        {% endif %}
-    {% endif %}
-
-    {% if exchange_rate and exchange_rate.rate %}
-    <div class="info-bar-currency" onclick="toggleCurrencyConverter()" data-rate="{{ exchange_rate.rate }}">
-        <span>{{ icon_currency(16) }} $1 = &yen;{{ exchange_rate.rate|round|int }}</span>
-    </div>
-    {% endif %}
-</div>
-
-<!-- Currency Converter (hidden by default) -->
-{% if exchange_rate and exchange_rate.rate %}
-<div class="currency-converter" id="currencyConverter" style="display:none">
-    <div class="currency-input-row">
-        <div class="currency-field">
-            <label>USD</label>
-            <input type="number" id="usdInput" placeholder="0.00" min="0" step="0.01"
-                   oninput="convertCurrency('usd')">
-        </div>
-        <span class="currency-arrow">&harr;</span>
-        <div class="currency-field">
-            <label>JPY</label>
-            <input type="number" id="jpyInput" placeholder="0" min="0" step="1"
-                   oninput="convertCurrency('jpy')">
-        </div>
-    </div>
-    <div class="currency-rate-note">
-        Rate: $1 = &yen;{{ exchange_rate.rate|round(2) }} &middot; Updated {{ exchange_rate.updated }}
-    </div>
-</div>
-{% endif %}
-{% endif %}
 
 <!-- Itinerary -->
 <section class="itinerary-section">
@@ -144,15 +85,6 @@
                     {% endif %}
                 </div>
             </div>
-            {% if weather_data and weather_data[day.day_number|string] is defined %}
-            {% set dw = weather_data[day.day_number|string] %}
-            <span class="day-weather-badge">
-                {{ dw.icon }} {{ dw.temp_high|round|int }}&deg;
-                {% if dw.rain_pct and dw.rain_pct > 20 %}
-                <span class="rain-sm">{{ dw.rain_pct }}%</span>
-                {% endif %}
-            </span>
-            {% endif %}
             <div class="itin-day-progress">
                 <div class="progress-bar" role="progressbar"
                      aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100"
@@ -184,61 +116,12 @@
     {% endfor %}
 </section>
 
-<!-- Flights -->
-{% if flights %}
-<section class="flights-section" id="flights">
-    <h2>{{ icon_plane(20) }} Flights</h2>
-    {% set outbound = flights | selectattr('direction', 'equalto', 'outbound') | list %}
-    {% set inbound = flights | selectattr('direction', 'equalto', 'return') | list %}
-    {% for group_label, group_flights in [('Outbound', outbound), ('Return', inbound)] %}
-    {% if group_flights %}
-    <h3 class="flight-group-title">{{ group_label }}</h3>
-    {% for flight in group_flights %}
-    <div class="flight-card-tripit">
-        <div class="flight-card-header">
-            <span class="flight-airline">{{ flight.airline }}</span>
-            <span class="flight-number">{{ flight.flight_number }}</span>
-            {% if flight.booking_status and flight.booking_status != 'not_booked' %}
-            <span class="booking-badge {{ flight.booking_status }}">{{ flight.booking_status | replace('_', ' ') | title }}</span>
-            {% endif %}
-        </div>
-        <div class="flight-route-visual">
-            <div class="flight-endpoint">
-                <div class="flight-time">{{ flight.depart_time or '--:--' }}</div>
-                <div class="flight-airport">{{ flight.route_from }}</div>
-                <div class="flight-date-sm">{{ flight.depart_date.strftime('%b %d') }}</div>
-            </div>
-            <div class="flight-connector">
-                <div class="flight-line"></div>
-                {% if flight.duration %}
-                <div class="flight-duration-label">{{ flight.duration }}</div>
-                {% endif %}
-                {% if flight.aircraft %}
-                <div class="flight-aircraft">{{ flight.aircraft }}</div>
-                {% endif %}
-            </div>
-            <div class="flight-endpoint">
-                <div class="flight-time">{{ flight.arrive_time or '--:--' }}</div>
-                <div class="flight-airport">{{ flight.route_to }}</div>
-                {% if flight.arrive_date and flight.arrive_date != flight.depart_date %}
-                <div class="flight-date-sm">{{ flight.arrive_date.strftime('%b %d') }}</div>
-                {% endif %}
-            </div>
-        </div>
-        {% if flight.cost_amount %}
-        <div class="flight-card-footer">
-            <span class="flight-cost">{{ flight.cost_type }}: {{ flight.cost_amount }}</span>
-        </div>
-        {% endif %}
-        {% if flight.notes %}
-        <div class="flight-notes">{{ flight.notes }}</div>
-        {% endif %}
-    </div>
-    {% endfor %}
-    {% endif %}
-    {% endfor %}
+<!-- Quick Links -->
+<section class="quick-links-section">
+    <a href="{{ url_for('documents.documents_view') }}" class="quick-link-card">
+        {{ icon_plane(18) }} View travel documents &rsaquo;
+    </a>
 </section>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}

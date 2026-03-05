@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Activities{% endblock %}
+
+{% block content %}
+{% from "icons.html" import icon_lightbulb, icon_pin, icon_link %}
+<header>
+    <h1>{{ icon_lightbulb(22) }} Activities</h1>
+    <input type="search" id="actSearch" placeholder="Search activities..."
+           oninput="filterActivities(this.value)">
+</header>
+
+{% for group in location_activities %}
+<details class="act-location-group" open>
+    <summary class="act-location-title">
+        {{ group.location.name }}
+        <span class="act-location-count">{{ group.activities | length }}</span>
+    </summary>
+
+    {% for item in group.activities %}
+    {% set a = item.activity %}
+    {% set d = item.day %}
+    <div class="act-browse-card" data-search="{{ a.title | lower }} {{ a.description | lower if a.description else '' }} {{ d.title | lower }}">
+        <div class="act-browse-header">
+            <span class="act-browse-title">{{ a.title }}</span>
+            {% if a.is_optional %}<span class="optional-badge">Optional</span>{% endif %}
+            {% if a.jr_pass_covered %}<span class="jr-badge">JR Pass</span>{% endif %}
+        </div>
+        <div class="act-browse-meta">
+            Day {{ d.day_number }} &middot; {{ d.date.strftime('%b %d') }}
+            {% if a.time_slot %}&middot; {{ a.time_slot | title }}{% endif %}
+            {% if a.start_time %}&middot; {{ a.start_time }}{% endif %}
+        </div>
+        {% if a.description %}
+        <div class="act-browse-desc">{{ a.description }}</div>
+        {% endif %}
+        {% if a.cost_note %}
+        <div class="act-browse-cost">{{ a.cost_note }}</div>
+        {% endif %}
+        <div class="act-browse-links">
+            {% if a.address %}
+            <a href="{{ a.address | maps_link }}" target="_blank" rel="noopener" class="navigate-link">
+                {{ icon_pin(14) }} Navigate
+            </a>
+            {% endif %}
+            {% if a.url %}
+            <a href="{{ a.url }}" target="_blank" rel="noopener" class="doc-link">
+                {{ icon_link(14) }} Details
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</details>
+{% endfor %}
+
+{% if not location_activities %}
+<p class="empty-state">No activities yet. Import your travel plan to see recommendations.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterActivities(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.act-browse-card').forEach(card => {
+        const text = card.dataset.search || '';
+        card.style.display = text.includes(q) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

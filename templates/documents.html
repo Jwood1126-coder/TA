@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Travel Documents{% endblock %}
+
+{% block content %}
+{% from "icons.html" import icon_plane, icon_hotel, icon_train, icon_shinkansen, icon_bus, icon_pin, icon_clipboard %}
+<header>
+    <h1>{{ icon_clipboard(22) }} Travel Documents</h1>
+</header>
+
+<!-- Flights -->
+{% if flights %}
+<details class="doc-section" open>
+    <summary class="doc-section-title">{{ icon_plane(18) }} Flights</summary>
+    {% set outbound = flights | selectattr('direction', 'equalto', 'outbound') | list %}
+    {% set inbound = flights | selectattr('direction', 'equalto', 'return') | list %}
+    {% for group_label, group_flights in [('Outbound', outbound), ('Return', inbound)] %}
+    {% if group_flights %}
+    <h3 class="flight-group-title">{{ group_label }}</h3>
+    {% for flight in group_flights %}
+    <div class="flight-card-tripit" data-flight-id="{{ flight.id }}">
+        <div class="flight-card-header">
+            <span class="flight-airline">{{ flight.airline }}</span>
+            <span class="flight-number">{{ flight.flight_number }}</span>
+            {% if flight.booking_status and flight.booking_status != 'not_booked' %}
+            <span class="booking-badge {{ flight.booking_status }}">{{ flight.booking_status | replace('_', ' ') | title }}</span>
+            {% endif %}
+        </div>
+        <div class="flight-route-visual">
+            <div class="flight-endpoint">
+                <div class="flight-time">{{ flight.depart_time or '--:--' }}</div>
+                <div class="flight-airport">{{ flight.route_from }}</div>
+                <div class="flight-date-sm">{{ flight.depart_date.strftime('%b %d') }}</div>
+            </div>
+            <div class="flight-connector">
+                <div class="flight-line"></div>
+                {% if flight.duration %}
+                <div class="flight-duration-label">{{ flight.duration }}</div>
+                {% endif %}
+                {% if flight.aircraft %}
+                <div class="flight-aircraft">{{ flight.aircraft }}</div>
+                {% endif %}
+            </div>
+            <div class="flight-endpoint">
+                <div class="flight-time">{{ flight.arrive_time or '--:--' }}</div>
+                <div class="flight-airport">{{ flight.route_to }}</div>
+                {% if flight.arrive_date and flight.arrive_date != flight.depart_date %}
+                <div class="flight-date-sm">{{ flight.arrive_date.strftime('%b %d') }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="doc-details">
+            {% if flight.cost_amount %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Cost</span>
+                <span>{{ flight.cost_type }}: {{ flight.cost_amount }}</span>
+            </div>
+            {% endif %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Confirmation</span>
+                <input type="text" class="confirmation-input" placeholder="Enter confirmation #"
+                       value="{{ flight.confirmation_number or '' }}"
+                       onchange="updateFlightConfirmation({{ flight.id }}, this.value)">
+            </div>
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Status</span>
+                <select class="status-select" onchange="updateFlightStatus({{ flight.id }}, this.value)">
+                    <option value="not_booked" {{ 'selected' if not flight.booking_status or flight.booking_status == 'not_booked' }}>Not Booked</option>
+                    <option value="researching" {{ 'selected' if flight.booking_status == 'researching' }}>Researching</option>
+                    <option value="booked" {{ 'selected' if flight.booking_status == 'booked' }}>Booked</option>
+                    <option value="confirmed" {{ 'selected' if flight.booking_status == 'confirmed' }}>Confirmed</option>
+                    <option value="cancelled" {{ 'selected' if flight.booking_status == 'cancelled' }}>Cancelled</option>
+                </select>
+            </div>
+            {% if flight.notes %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Notes</span>
+                <span>{{ flight.notes }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+</details>
+{% endif %}
+
+<!-- Accommodations -->
+{% if accommodations %}
+<details class="doc-section" open>
+    <summary class="doc-section-title">{{ icon_hotel(18) }} Accommodations</summary>
+    {% for item in accommodations %}
+    {% set loc = item.location %}
+    {% set opt = item.selected %}
+    <div class="doc-card">
+        <div class="doc-card-header">
+            <strong>{{ opt.name }}</strong>
+            {% if opt.booking_status and opt.booking_status != 'not_booked' %}
+            <span class="booking-badge {{ opt.booking_status }}">{{ opt.booking_status | replace('_', ' ') | title }}</span>
+            {% endif %}
+        </div>
+        <div class="doc-card-meta">
+            {{ loc.location_name }} &middot;
+            {{ loc.check_in_date.strftime('%b %d') }} &ndash; {{ loc.check_out_date.strftime('%b %d') }}
+            ({{ loc.num_nights }} night{{ 's' if loc.num_nights != 1 }})
+        </div>
+        {% if opt.address %}
+        <div class="doc-card-address">
+            <a href="{{ opt.address | maps_link }}" target="_blank" rel="noopener" class="navigate-link">
+                {{ icon_pin(14) }} {{ opt.address }}
+            </a>
+        </div>
+        {% endif %}
+        <div class="doc-details">
+            {% if opt.confirmation_number %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Confirmation</span>
+                <span class="confirmation-value">{{ opt.confirmation_number }}</span>
+            </div>
+            {% endif %}
+            {% if opt.booking_url %}
+            <div class="doc-detail-row">
+                <a href="{{ opt.booking_url }}" target="_blank" rel="noopener" class="doc-link">View booking</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</details>
+{% endif %}
+
+<!-- Transport -->
+{% if transport %}
+<details class="doc-section">
+    <summary class="doc-section-title">{{ icon_train(18) }} Transport Routes</summary>
+    {% for route in transport %}
+    <div class="doc-card transport-card">
+        <div class="transport-route">
+            <span class="transport-from">{{ route.route_from }}</span>
+            <span class="transport-arrow">&rarr;</span>
+            <span class="transport-to">{{ route.route_to }}</span>
+        </div>
+        <div class="transport-details">
+            {% if route.transport_type == 'shinkansen' %}{{ icon_shinkansen(14) }}
+            {% elif route.transport_type == 'bus' %}{{ icon_bus(14) }}
+            {% else %}{{ icon_train(14) }}{% endif %}
+            {{ route.train_name or route.transport_type | title }}
+            {% if route.duration %}&middot; {{ route.duration }}{% endif %}
+            {% if route.jr_pass_covered %}<span class="jr-badge">JR Pass</span>{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</details>
+{% endif %}
+
+{% if not flights and not accommodations and not transport %}
+<p class="empty-state">No travel documents yet. Import your travel plan to get started.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/documents.js') }}"></script>
+{% endblock %}
