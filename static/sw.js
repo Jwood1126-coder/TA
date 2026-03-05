@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const CACHE_NAME = 'japan-trip-v5';
+const CACHE_NAME = 'japan-trip-v6';
 const STATIC_ASSETS = [
     '/static/css/app.css',
     '/static/js/app.js',
@@ -11,7 +11,6 @@ const STATIC_ASSETS = [
 // Pages to pre-cache for offline access
 const PAGE_URLS = [
     '/',
-    '/itinerary',
 ];
 
 self.addEventListener('install', event => {

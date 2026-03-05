@@ -212,9 +212,37 @@ socket.on('checklist_option_updated', function(data) {
 });
 
 socket.on('accommodation_updated', function(data) {
-    // Refresh if on accommodations or checklists page
+    // Refresh if on accommodations, checklists, or home page
     if (window.location.pathname === '/accommodations' ||
-        window.location.pathname === '/checklists') {
+        window.location.pathname === '/checklists' ||
+        window.location.pathname === '/') {
         location.reload();
     }
 });
+
+// Currency converter
+function toggleCurrencyConverter() {
+    const el = document.getElementById('currencyConverter');
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function convertCurrency(from) {
+    const rateEl = document.querySelector('.info-bar-currency');
+    if (!rateEl) return;
+    const rate = parseFloat(rateEl.dataset.rate);
+    if (!rate) return;
+
+    const usdEl = document.getElementById('usdInput');
+    const jpyEl = document.getElementById('jpyInput');
+    if (!usdEl || !jpyEl) return;
+
+    if (from === 'usd' && usdEl.value) {
+        jpyEl.value = Math.round(parseFloat(usdEl.value) * rate);
+    } else if (from === 'jpy' && jpyEl.value) {
+        usdEl.value = (parseFloat(jpyEl.value) / rate).toFixed(2);
+    } else {
+        usdEl.value = '';
+        jpyEl.value = '';
+    }
+}

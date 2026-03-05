@@ -1,9 +1,149 @@
 from flask import Blueprint, render_template, jsonify, request
 from models import db, Day, Activity, Trip, Location, BudgetItem, Flight, \
-    TransportRoute, AccommodationLocation, AccommodationOption
+    TransportRoute, AccommodationLocation, AccommodationOption, ChecklistItem
 from datetime import datetime, date
 
 itinerary_bp = Blueprint('itinerary', __name__)
+
+
+def _build_location_groups(days):
+    """Group consecutive days by location with accommodation status."""
+    location_groups = []
+    current_group = None
+    for day in days:
+        loc_name = day.location.name if day.location else 'Travel'
+        if not current_group or current_group['location'] != loc_name:
+            current_group = {
+                'location': loc_name,
+                'location_obj': day.location,
+                'days': [],
+                'start_date': day.date,
+                'end_date': day.date,
+                'accom_name': None,
+                'accom_status': None,
+                'accom_pending_count': 0,
+            }
+            location_groups.append(current_group)
+        current_group['days'].append(day)
+        current_group['end_date'] = day.date
+
+    for group in location_groups:
+        accom_loc = AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains(group['location'])
+        ).first()
+        if accom_loc:
+            selected = AccommodationOption.query.filter_by(
+                location_id=accom_loc.id, is_selected=True).first()
+            if selected:
+                group['accom_name'] = selected.name
+                group['accom_status'] = selected.booking_status
+            else:
+                pending = AccommodationOption.query.filter_by(
+                    location_id=accom_loc.id, is_eliminated=False).count()
+                group['accom_pending_count'] = pending
+
+    # Build brief activity summaries per day
+    for group in location_groups:
+        for day in group['days']:
+            titles = [a.title for a in day.activities if not a.is_substitute][:3]
+            summary = ', '.join(titles)
+            if len(summary) > 80:
+                summary = summary[:77] + '...'
+            day.activity_summary = summary
+
+    return location_groups
+
+
+def _compute_next_up(today, trip):
+    """Determine the single most urgent action item for the hero card."""
+    # Priority 1: Unbooked accommodations (nearest check-in first)
+    accom_locs = AccommodationLocation.query.order_by(
+        AccommodationLocation.check_in_date).all()
+    for loc in accom_locs:
+        selected = AccommodationOption.query.filter_by(
+            location_id=loc.id, is_selected=True).first()
+        if not selected:
+            pending = AccommodationOption.query.filter_by(
+                location_id=loc.id, is_eliminated=False).count()
+            return {
+                'type': 'accommodation',
+                'title': f'Choose hotel: {loc.location_name}',
+                'subtitle': f'Check-in {loc.check_in_date.strftime("%b %d")} \u2022 {pending} option{"s" if pending != 1 else ""}',
+                'tip': loc.quick_notes or None,
+                'url': '/checklists?tab=pre_trip',
+                'urgency': 'high' if (loc.check_in_date - today).days < 45 else 'medium',
+            }
+        elif selected.booking_status in ('not_booked', None):
+            return {
+                'type': 'accommodation',
+                'title': f'Book: {selected.name}',
+                'subtitle': f'{loc.location_name} \u2022 Check-in {loc.check_in_date.strftime("%b %d")}',
+                'tip': loc.quick_notes or None,
+                'url': '/accommodations',
+                'urgency': 'high' if (loc.check_in_date - today).days < 45 else 'medium',
+            }
+
+    # Priority 2: Flights needing confirmation
+    for flight in Flight.query.order_by(Flight.depart_date).all():
+        if flight.booking_status in ('not_booked', None):
+            return {
+                'type': 'flight',
+                'title': f'Confirm {flight.airline} {flight.flight_number}',
+                'subtitle': f'{flight.route_from} \u2192 {flight.route_to} \u2022 {flight.depart_date.strftime("%b %d")}',
+                'tip': flight.notes or None,
+                'url': '/#flights',
+                'urgency': 'high',
+            }
+
+    # Priority 3: Pending booking checklist items
+    booking_item = ChecklistItem.query.filter(
+        ChecklistItem.is_completed == False,
+        ChecklistItem.sort_order < 9999,
+        ChecklistItem.category.in_(['pre_departure_today', 'pre_departure_week',
+                                     'pre_departure_miles']),
+    ).order_by(ChecklistItem.sort_order).first()
+    if booking_item:
+        return {
+            'type': 'checklist',
+            'title': booking_item.title,
+            'subtitle': 'Pre-trip task',
+            'tip': None,
+            'url': '/checklists?tab=pre_trip',
+            'urgency': 'medium',
+        }
+
+    # Priority 4: Fallback
+    if trip and today < trip.start_date:
+        return {
+            'type': 'all_set',
+            'title': 'All caught up!',
+            'subtitle': 'Everything is booked and ready.',
+            'tip': None,
+            'url': None,
+            'urgency': 'low',
+        }
+    elif trip and trip.start_date <= today <= trip.end_date:
+        current = Day.query.filter(Day.date == today).first()
+        if current:
+            for a in current.activities:
+                if not a.is_substitute and not a.is_completed:
+                    return {
+                        'type': 'activity',
+                        'title': a.title,
+                        'subtitle': f'Day {current.day_number} \u2022 {a.time_slot or ""}',
+                        'tip': None,
+                        'url': f'/day/{current.day_number}',
+                        'urgency': 'low',
+                    }
+
+    return {
+        'type': 'all_set',
+        'title': 'All caught up!',
+        'subtitle': 'Everything is booked and ready.',
+        'tip': None,
+        'url': None,
+        'urgency': 'low',
+    }
 
 
 @itinerary_bp.route('/')
@@ -32,10 +172,19 @@ def index():
     total_activities = Activity.query.filter_by(is_substitute=False).count()
     completed_activities = Activity.query.filter_by(
         is_substitute=False, is_completed=True).count()
+    overall_pct = int(completed_activities / total_activities * 100) \
+        if total_activities else 0
 
-    total_locations = AccommodationLocation.query.count()
-    booked_accommodations = AccommodationOption.query.filter_by(
-        is_selected=True).count()
+    # Location-grouped itinerary
+    location_groups = _build_location_groups(days)
+
+    # Next Up hero card
+    next_up = _compute_next_up(today, trip)
+
+    # Weather + Currency
+    from weather import get_weather_data, get_exchange_rate
+    weather_data = get_weather_data(days, location_groups)
+    exchange_rate = get_exchange_rate()
 
     return render_template('index.html',
                            trip=trip,
@@ -47,71 +196,17 @@ def index():
                            days_until=days_until,
                            total_activities=total_activities,
                            completed_activities=completed_activities,
-                           booked_accommodations=booked_accommodations,
-                           total_locations=total_locations)
-
-
-@itinerary_bp.route('/itinerary')
-def itinerary_overview():
-    trip = Trip.query.first()
-    days = Day.query.order_by(Day.day_number).all()
-
-    # Group consecutive days by location
-    location_groups = []
-    current_group = None
-    for day in days:
-        loc_name = day.location.name if day.location else 'Travel'
-        if not current_group or current_group['location'] != loc_name:
-            current_group = {
-                'location': loc_name,
-                'location_obj': day.location,
-                'days': [],
-                'start_date': day.date,
-                'end_date': day.date,
-                'accom_name': None,
-                'accom_status': None,
-                'accom_pending_count': 0,
-            }
-            location_groups.append(current_group)
-        current_group['days'].append(day)
-        current_group['end_date'] = day.date
-
-    # Attach accommodation status per group
-    for group in location_groups:
-        accom_loc = AccommodationLocation.query.filter(
-            AccommodationLocation.location_name.contains(group['location'])
-        ).first()
-        if accom_loc:
-            selected = AccommodationOption.query.filter_by(
-                location_id=accom_loc.id, is_selected=True).first()
-            if selected:
-                group['accom_name'] = selected.name
-                group['accom_status'] = selected.booking_status
-            else:
-                pending = AccommodationOption.query.filter_by(
-                    location_id=accom_loc.id, is_eliminated=False).count()
-                group['accom_pending_count'] = pending
-
-    # Build brief activity summaries per day
-    for group in location_groups:
-        for day in group['days']:
-            titles = [a.title for a in day.activities if not a.is_substitute][:3]
-            summary = ', '.join(titles)
-            if len(summary) > 80:
-                summary = summary[:77] + '...'
-            day.activity_summary = summary
-
-    # Overall trip progress
-    total = Activity.query.filter_by(is_substitute=False).count()
-    done = Activity.query.filter_by(is_substitute=False, is_completed=True).count()
-    overall_pct = int(done / total * 100) if total else 0
-
-    return render_template('itinerary.html',
-                           trip=trip,
-                           location_groups=location_groups,
                            overall_pct=overall_pct,
-                           completed=done,
-                           total=total)
+                           location_groups=location_groups,
+                           next_up=next_up,
+                           weather_data=weather_data,
+                           exchange_rate=exchange_rate)
+
+
+@itinerary_bp.route('/api/exchange-rate')
+def exchange_rate_api():
+    from weather import get_exchange_rate
+    return jsonify(get_exchange_rate())
 
 
 @itinerary_bp.route('/day/<int:day_number>')

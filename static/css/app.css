@@ -2203,6 +2203,154 @@ body {
     color: var(--pico-primary-inverse);
 }
 
+/* --- Next Up Hero Card --- */
+.next-up-card {
+    display: block;
+    background: linear-gradient(135deg, var(--sakura-light), #fff);
+    border: 2px solid var(--sakura);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.next-up-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    color: inherit;
+}
+.next-up-card.urgency-high { border-color: var(--accent); }
+.next-up-card.urgency-medium { border-color: var(--sakura-dark); }
+.next-up-card.urgency-low { border-color: var(--sakura); }
+.next-up-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+.next-up-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.next-up-subtitle { font-size: 0.85rem; color: #6b7280; margin-top: 0.15rem; }
+.next-up-tip {
+    font-size: 0.8rem;
+    color: var(--sakura-text);
+    margin-top: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(255,183,197,0.15);
+    border-radius: 8px;
+}
+
+/* --- Weather + Currency Info Bar --- */
+.info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--sakura-light);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+}
+.info-bar-weather { display: flex; align-items: center; gap: 0.35rem; }
+.weather-icon { font-size: 1.1rem; }
+.rain-badge {
+    font-size: 0.75rem;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+}
+.info-bar-currency {
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.5);
+    white-space: nowrap;
+    user-select: none;
+}
+.info-bar-currency:active { background: rgba(255,255,255,0.8); }
+
+/* --- Currency Converter Widget --- */
+.currency-converter {
+    background: var(--sakura-light);
+    border-radius: 10px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+.currency-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.currency-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.currency-field label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin: 0;
+}
+.currency-field input {
+    padding: 0.5rem;
+    border: 1px solid var(--sakura);
+    border-radius: 8px;
+    font-size: 1rem;
+    text-align: center;
+    margin: 0;
+}
+.currency-arrow { font-size: 1.2rem; color: #9ca3af; margin-top: 1rem; }
+.currency-rate-note {
+    font-size: 0.7rem;
+    color: #9ca3af;
+    text-align: center;
+    margin-top: 0.4rem;
+}
+
+/* --- Day Weather Badge --- */
+.day-weather-badge {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    padding: 0.15rem 0.4rem;
+    flex-shrink: 0;
+}
+.day-weather-badge .rain-sm {
+    font-size: 0.65rem;
+    color: #3b82f6;
+}
+
+/* --- Today highlight on day row --- */
+.itin-day-row.today {
+    border-left: 3px solid var(--accent);
+    background: var(--sakura-light);
+}
+
+/* --- Dark mode: new components --- */
+[data-theme="dark"] .next-up-card {
+    background: linear-gradient(135deg, rgba(255,183,197,0.08), transparent);
+    border-color: #4a2030;
+}
+[data-theme="dark"] .next-up-card.urgency-high { border-color: var(--accent); }
+[data-theme="dark"] .next-up-subtitle { color: #9ca3af; }
+[data-theme="dark"] .next-up-tip { background: rgba(255,183,197,0.1); }
+[data-theme="dark"] .info-bar { background: #2a1a2a; }
+[data-theme="dark"] .info-bar-currency { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .currency-converter { background: #2a1a2a; }
+[data-theme="dark"] .currency-field input {
+    background: #1e1e1e;
+    border-color: #4a2030;
+    color: #fff;
+}
+[data-theme="dark"] .rain-badge { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .itin-day-row.today { background: rgba(255,183,197,0.08); }
+
 /* Utilities */
 @media (max-width: 480px) {
     .app-main {

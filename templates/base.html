@@ -19,13 +19,9 @@
     </main>
 
     <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
-        <a href="{{ url_for('itinerary.index') }}" class="nav-item {% if request.endpoint == 'itinerary.index' %}active{% endif %}" aria-label="Today" {% if request.endpoint == 'itinerary.index' %}aria-current="page"{% endif %}>
+        <a href="{{ url_for('itinerary.index') }}" class="nav-item {% if request.endpoint in ('itinerary.index', 'itinerary.day_view') %}active{% endif %}" aria-label="Home" {% if request.endpoint in ('itinerary.index', 'itinerary.day_view') %}aria-current="page"{% endif %}>
             <span class="nav-icon" aria-hidden="true">&#x1f3e0;</span>
-            <span class="nav-label">Today</span>
-        </a>
-        <a href="{{ url_for('itinerary.itinerary_overview') }}" class="nav-item {% if request.endpoint in ('itinerary.itinerary_overview', 'itinerary.day_view') %}active{% endif %}" aria-label="Itinerary" {% if request.endpoint in ('itinerary.itinerary_overview', 'itinerary.day_view') %}aria-current="page"{% endif %}>
-            <span class="nav-icon" aria-hidden="true">&#x1f4c5;</span>
-            <span class="nav-label">Itinerary</span>
+            <span class="nav-label">Home</span>
         </a>
         <a href="{{ url_for('checklists.checklists_view') }}" class="nav-item {% if request.endpoint and request.endpoint.startswith('checklists') %}active{% endif %}" aria-label="Checklist" {% if request.endpoint and request.endpoint.startswith('checklists') %}aria-current="page"{% endif %}>
             <span class="nav-icon" aria-hidden="true">&#x2705;</span>
@@ -46,6 +42,7 @@
         <div class="more-menu-backdrop" onclick="closeMore()"></div>
         <div class="more-menu-sheet" role="menu">
             <div class="more-menu-handle"></div>
+            <a href="{{ url_for('accommodations.accommodations_view') }}" class="more-link">&#x1f3e8; Accommodations</a>
             <a href="{{ url_for('itinerary.map_view') }}" class="more-link">&#x1f5fa; Trip Map</a>
             <a href="{{ url_for('reference.reference_view') }}" class="more-link">&#x1f4d6; Reference Guide</a>
             <a href="#" class="more-link" onclick="toggleTheme()">&#x1f319; Toggle Dark Mode</a>

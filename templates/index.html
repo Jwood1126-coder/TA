@@ -12,71 +12,179 @@
     {% elif trip_ended %}
         <p class="countdown ended">Trip complete!</p>
     {% else %}
-        <p class="countdown">April 4 - 18, 2026</p>
+        <p class="countdown">April 4 &ndash; 18, 2026</p>
     {% endif %}
 </header>
 
-<!-- Quick Stats -->
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="stat-number">{{ completed_activities }}/{{ total_activities }}</div>
-        <div class="stat-label">Activities done</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-number">{{ booked_accommodations }}/{{ total_locations }}</div>
-        <div class="stat-label">Booked</div>
-    </div>
+<!-- Next Up Hero Card -->
+{% if next_up and next_up.type != 'all_set' %}
+<a href="{{ next_up.url or '#' }}" class="next-up-card urgency-{{ next_up.urgency }}">
+    <div class="next-up-label">Next Up</div>
+    <div class="next-up-title">{{ next_up.title }}</div>
+    {% if next_up.subtitle %}
+    <div class="next-up-subtitle">{{ next_up.subtitle }}</div>
+    {% endif %}
+    {% if next_up.tip %}
+    <div class="next-up-tip">&#x1f4a1; {{ next_up.tip }}</div>
+    {% endif %}
+</a>
+{% elif next_up and next_up.type == 'all_set' %}
+<div class="next-up-card urgency-low">
+    <div class="next-up-label">&#x2705; Status</div>
+    <div class="next-up-title">{{ next_up.title }}</div>
+    <div class="next-up-subtitle">{{ next_up.subtitle }}</div>
 </div>
-
-<!-- Today's Activities (or next upcoming day) -->
-{% if current_day %}
-<section class="today-section">
-    <h2>Today - Day {{ current_day.day_number }}</h2>
-    {% for activity in current_day.activities if not activity.is_substitute %}
-    <div class="activity-card {% if activity.is_completed %}completed{% endif %}"
-         data-id="{{ activity.id }}">
-        <label class="activity-check">
-            <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
-                   onchange="toggleActivity({{ activity.id }})">
-            <span class="activity-title">{{ activity.title }}</span>
-        </label>
-        {% if activity.time_slot %}
-        <span class="time-badge">{{ activity.time_slot }}</span>
-        {% endif %}
-    </div>
-    {% endfor %}
-</section>
 {% endif %}
 
-<!-- Day Overview Cards -->
-<section class="days-overview">
-    <h2>Itinerary Overview</h2>
-    {% for day in days %}
-    <a href="{{ url_for('itinerary.day_view', day_number=day.day_number) }}"
-       class="day-overview-card {% if current_day and day.id == current_day.id %}today{% endif %}">
-        <div class="day-card-left">
-            <div class="day-num">{{ day.day_number }}</div>
-            <div class="day-date">{{ day.date.strftime('%b %d') }}</div>
+<!-- Weather + Currency Info Bar -->
+{% if (weather_data and weather_data|length > 0) or (exchange_rate and exchange_rate.rate) %}
+<div class="info-bar">
+    {% if weather_data and weather_data|length > 0 %}
+        {% if current_day and weather_data[current_day.day_number|string] is defined %}
+            {% set w = weather_data[current_day.day_number|string] %}
+            <div class="info-bar-weather">
+                <span class="weather-icon">{{ w.icon }}</span>
+                <span>{{ w.temp_high|round|int }}&deg;/{{ w.temp_low|round|int }}&deg;F</span>
+                {% if w.rain_pct and w.rain_pct > 10 %}
+                <span class="rain-badge">&#x1f4a7; {{ w.rain_pct }}%</span>
+                {% endif %}
+            </div>
+        {% else %}
+            {# Show first available day's weather #}
+            {% for dn in weather_data|sort %}
+                {% set w = weather_data[dn] %}
+                <div class="info-bar-weather">
+                    <span class="weather-icon">{{ w.icon }}</span>
+                    <span>Day {{ dn }}: {{ w.temp_high|round|int }}&deg;F</span>
+                    {% if w.rain_pct and w.rain_pct > 20 %}
+                    <span class="rain-badge">{{ w.rain_pct }}%</span>
+                    {% endif %}
+                </div>
+                {% if loop.first %}{% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endif %}
+
+    {% if exchange_rate and exchange_rate.rate %}
+    <div class="info-bar-currency" onclick="toggleCurrencyConverter()" data-rate="{{ exchange_rate.rate }}">
+        <span>&#x1f4b1; $1 = &yen;{{ exchange_rate.rate|round|int }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Currency Converter (hidden by default) -->
+{% if exchange_rate and exchange_rate.rate %}
+<div class="currency-converter" id="currencyConverter" style="display:none">
+    <div class="currency-input-row">
+        <div class="currency-field">
+            <label>USD</label>
+            <input type="number" id="usdInput" placeholder="0.00" min="0" step="0.01"
+                   oninput="convertCurrency('usd')">
         </div>
-        <div class="day-card-right">
-            <div class="day-card-title">{{ day.title }}</div>
-            {% if day.location %}
-            <div class="day-card-location">{{ day.location.name }}</div>
+        <span class="currency-arrow">&harr;</span>
+        <div class="currency-field">
+            <label>JPY</label>
+            <input type="number" id="jpyInput" placeholder="0" min="0" step="1"
+                   oninput="convertCurrency('jpy')">
+        </div>
+    </div>
+    <div class="currency-rate-note">
+        Rate: $1 = &yen;{{ exchange_rate.rate|round(2) }} &middot; Updated {{ exchange_rate.updated }}
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- Itinerary -->
+<section class="itinerary-section">
+    <div class="itin-progress-row">
+        <div class="itin-progress-bar" role="progressbar"
+             aria-valuenow="{{ overall_pct }}" aria-valuemin="0" aria-valuemax="100"
+             aria-label="Trip progress: {{ completed_activities }} of {{ total_activities }} activities">
+            <div class="itin-progress-fill" style="width: {{ overall_pct }}%"></div>
+        </div>
+        <span class="itin-progress-text">{{ completed_activities }}/{{ total_activities }}</span>
+    </div>
+
+    {% for group in location_groups %}
+    <section class="loc-group">
+        <div class="loc-group-header">
+            <div class="loc-group-title">
+                <span class="loc-group-name">{{ group.location }}</span>
+                <span class="loc-group-dates">
+                    {{ group.start_date.strftime('%b %d') }}
+                    {% if group.start_date != group.end_date %}
+                    &ndash; {{ group.end_date.strftime('%b %d') }}
+                    {% endif %}
+                </span>
+            </div>
+            {% if group.location_obj and group.location_obj.guide_url %}
+            <a href="{{ group.location_obj.guide_url }}" target="_blank" rel="noopener"
+               class="guide-link-sm" onclick="event.stopPropagation()">&#x1f4d6;</a>
             {% endif %}
-            <div class="day-progress">
-                <div class="progress-bar" role="progressbar" aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100" aria-label="Day {{ day.day_number }} progress">
+        </div>
+        {% if group.location_obj and group.location_obj.vibe %}
+        <div class="loc-group-vibe">{{ group.location_obj.vibe }}</div>
+        {% endif %}
+
+        {% for day in group.days %}
+        <a href="{{ url_for('itinerary.day_view', day_number=day.day_number) }}"
+           class="itin-day-row {% if current_day and day.id == current_day.id %}today{% endif %}">
+            <span class="itin-day-num">{{ day.day_number }}</span>
+            <div class="itin-day-info">
+                <div class="itin-day-info-text">
+                    <span class="itin-day-title">{{ day.title }}</span>
+                    {% if day.is_buffer_day %}
+                    <span class="buffer-badge-sm">Buffer</span>
+                    {% endif %}
+                    {% if day.activity_summary %}
+                    <span class="itin-day-summary">{{ day.activity_summary }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if weather_data and weather_data[day.day_number|string] is defined %}
+            {% set dw = weather_data[day.day_number|string] %}
+            <span class="day-weather-badge">
+                {{ dw.icon }} {{ dw.temp_high|round|int }}&deg;
+                {% if dw.rain_pct and dw.rain_pct > 20 %}
+                <span class="rain-sm">{{ dw.rain_pct }}%</span>
+                {% endif %}
+            </span>
+            {% endif %}
+            <div class="itin-day-progress">
+                <div class="progress-bar" role="progressbar"
+                     aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100"
+                     aria-label="Day {{ day.day_number }} progress">
                     <div class="progress-fill" style="width: {{ day.completion_pct() }}%"></div>
                 </div>
-                <span class="progress-text">{{ day.completion_pct() }}%</span>
             </div>
+            <span class="itin-day-arrow">&rsaquo;</span>
+        </a>
+        {% endfor %}
+
+        {% if group.accom_name %}
+        <div class="loc-group-accom">
+            <span class="loc-accom-icon">&#x1f3e8;</span>
+            <span class="loc-accom-name">{{ group.accom_name }}</span>
+            {% if group.accom_status and group.accom_status != 'not_booked' %}
+            <span class="booking-badge {{ group.accom_status }}">
+                {{ group.accom_status | replace('_', ' ') | title }}
+            </span>
+            {% endif %}
         </div>
-    </a>
+        {% elif group.accom_pending_count > 0 %}
+        <div class="loc-group-accom pending">
+            <span class="loc-accom-icon">&#x1f3e8;</span>
+            <span class="loc-accom-name">Not booked &middot; {{ group.accom_pending_count }} option{{ 's' if group.accom_pending_count != 1 }}</span>
+        </div>
+        {% endif %}
+    </section>
     {% endfor %}
 </section>
 
 <!-- Flights -->
 {% if flights %}
-<section class="flights-section">
+<section class="flights-section" id="flights">
     <h2>&#x2708; Flights</h2>
     {% set outbound = flights | selectattr('direction', 'equalto', 'outbound') | list %}
     {% set inbound = flights | selectattr('direction', 'equalto', 'return') | list %}
