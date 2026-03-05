@@ -5,7 +5,7 @@ from datetime import datetime, date
 
 checklists_bp = Blueprint('checklists', __name__)
 
-# Map old categories to new groupings
+# Map old categories to high-level groupings
 CATEGORY_MAP = {
     'pre_departure_today': 'booking',
     'pre_departure_week': 'booking',
@@ -15,13 +15,107 @@ CATEGORY_MAP = {
     'packing_helpful': 'packing',
 }
 
-GROUP_LABELS = {
-    'booking': 'Bookings & Tickets',
-    'preparation': 'Preparation',
-    'packing': 'Packing',
-}
+# Keywords for flight/transport items
+TRANSPORT_KEYWORDS = ['delta', 'united', 'jr pass', 'nohi bus']
 
-GROUP_ORDER = ['booking', 'preparation', 'packing']
+
+def _is_transport_item(item):
+    title_lower = item.title.lower()
+    return any(kw in title_lower for kw in TRANSPORT_KEYWORDS)
+
+
+def _section_progress(items_list):
+    done = sum(1 for i in items_list if i.is_completed)
+    decided = sum(1 for i in items_list if i.status in ('decided', 'booked'))
+    return {'done': done, 'total': len(items_list), 'decided': decided}
+
+
+def _build_pretip_sections(items):
+    """Build structured checklist sections for pre-trip tab."""
+    flights_transport = []
+    accommodations = {}  # location_name -> list of items
+    preparation = []
+    packing_essential = []
+    packing_helpful = []
+
+    for item in items:
+        group = CATEGORY_MAP.get(item.category, 'preparation')
+
+        if group == 'booking':
+            if _is_transport_item(item):
+                flights_transport.append(item)
+            elif item.accommodation_location_id and item.accommodation_location:
+                loc_name = item.accommodation_location.location_name
+                accommodations.setdefault(loc_name, []).append(item)
+            else:
+                preparation.append(item)
+        elif group == 'packing':
+            if item.category == 'packing_essential':
+                packing_essential.append(item)
+            else:
+                packing_helpful.append(item)
+        else:
+            preparation.append(item)
+
+    # Sort accommodations by their location sort_order
+    accom_locs = {al.location_name: al.sort_order
+                  for al in AccommodationLocation.query.all()}
+    sorted_accom = sorted(
+        accommodations.items(),
+        key=lambda x: accom_locs.get(x[0], 999)
+    )
+
+    sections = []
+
+    if flights_transport:
+        sections.append({
+            'key': 'flights',
+            'label': 'Flights & Transport',
+            'icon': '&#x2708;',
+            'items': flights_transport,
+            'subgroups': None,
+            'progress': _section_progress(flights_transport),
+        })
+
+    if sorted_accom:
+        all_accom_items = [i for _, items_list in sorted_accom for i in items_list]
+        sections.append({
+            'key': 'accommodations',
+            'label': 'Accommodations',
+            'icon': '&#x1f3e8;',
+            'items': None,
+            'subgroups': [{'name': name, 'items': items_list}
+                          for name, items_list in sorted_accom],
+            'progress': _section_progress(all_accom_items),
+        })
+
+    if preparation:
+        sections.append({
+            'key': 'preparation',
+            'label': 'Preparation',
+            'icon': '&#x1f4cb;',
+            'items': preparation,
+            'subgroups': None,
+            'progress': _section_progress(preparation),
+        })
+
+    if packing_essential or packing_helpful:
+        all_packing = packing_essential + packing_helpful
+        subgroups = []
+        if packing_essential:
+            subgroups.append({'name': 'Essential', 'items': packing_essential})
+        if packing_helpful:
+            subgroups.append({'name': 'Helpful', 'items': packing_helpful})
+        sections.append({
+            'key': 'packing',
+            'label': 'Packing',
+            'icon': '&#x1f392;',
+            'items': None,
+            'subgroups': subgroups,
+            'progress': _section_progress(all_packing),
+        })
+
+    return sections
 
 
 @checklists_bp.route('/checklists')
@@ -40,7 +134,7 @@ def checklists_view():
     if tab == 'on_trip':
         upcoming = _build_upcoming_events()
         return render_template('checklists.html', tab=tab, upcoming=upcoming,
-                               categories=None, group_labels=None, group_order=None)
+                               sections=None)
 
     # Pre-trip: eagerly load options and accommodation data
     items = ChecklistItem.query.options(
@@ -49,13 +143,9 @@ def checklists_view():
             .joinedload(AccommodationLocation.options)
     ).order_by(ChecklistItem.sort_order).all()
 
-    categories = {}
-    for item in items:
-        group = CATEGORY_MAP.get(item.category, 'preparation')
-        categories.setdefault(group, []).append(item)
+    sections = _build_pretip_sections(items)
 
-    return render_template('checklists.html', tab=tab, categories=categories,
-                           group_labels=GROUP_LABELS, group_order=GROUP_ORDER,
+    return render_template('checklists.html', tab=tab, sections=sections,
                            upcoming=None)
 
 

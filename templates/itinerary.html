@@ -26,15 +26,23 @@
         <a href="{{ group.location_obj.guide_url }}" target="_blank" rel="noopener" class="guide-link-sm">&#x1f4d6; Guide</a>
         {% endif %}
     </div>
+    {% if group.location_obj and group.location_obj.vibe %}
+    <div class="loc-group-vibe">{{ group.location_obj.vibe }}</div>
+    {% endif %}
 
     {% for day in group.days %}
     <a href="{{ url_for('itinerary.day_view', day_number=day.day_number) }}" class="itin-day-row">
         <span class="itin-day-num">{{ day.day_number }}</span>
         <div class="itin-day-info">
-            <span class="itin-day-title">{{ day.title }}</span>
-            {% if day.is_buffer_day %}
-            <span class="buffer-badge-sm">Buffer</span>
-            {% endif %}
+            <div class="itin-day-info-text">
+                <span class="itin-day-title">{{ day.title }}</span>
+                {% if day.is_buffer_day %}
+                <span class="buffer-badge-sm">Buffer</span>
+                {% endif %}
+                {% if day.activity_summary %}
+                <span class="itin-day-summary">{{ day.activity_summary }}</span>
+                {% endif %}
+            </div>
         </div>
         <div class="itin-day-progress">
             <div class="progress-bar" role="progressbar" aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100" aria-label="Day {{ day.day_number }} progress">

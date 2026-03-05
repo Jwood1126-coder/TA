@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Trip Map - Japan 2026{% endblock %}
+
+{% block content %}
+<header>
+    <h1>Trip Map</h1>
+</header>
+<div id="trip-map"></div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const markers = {{ markers | tojson }};
+
+    // Filter to Japan markers for initial view
+    const japanMarkers = markers.filter(m => m.lat > 30 && m.lat < 45);
+
+    const map = L.map('trip-map').fitBounds(
+        japanMarkers.map(m => [m.lat, m.lng]),
+        { padding: [30, 30] }
+    );
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18,
+    }).addTo(map);
+
+    // Custom sakura marker icon
+    const sakuraIcon = L.divIcon({
+        className: 'map-marker-icon',
+        html: '<div class="map-pin"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+        popupAnchor: [0, -12],
+    });
+
+    // Plot markers with popups
+    japanMarkers.forEach((m, i) => {
+        let popup = '<strong>' + m.name + '</strong>';
+        if (m.vibe) popup += '<br><em>' + m.vibe + '</em>';
+        if (m.arrival && m.departure) popup += '<br>' + m.arrival + ' &ndash; ' + m.departure;
+        if (m.accom) popup += '<br>&#x1f3e8; ' + m.accom;
+        if (m.guide_url) popup += '<br><a href="' + m.guide_url + '" target="_blank" rel="noopener">&#x1f4d6; Travel Guide</a>';
+
+        L.marker([m.lat, m.lng], { icon: sakuraIcon })
+            .addTo(map)
+            .bindPopup(popup);
+    });
+
+    // Route line connecting cities in order
+    const routeCoords = japanMarkers.map(m => [m.lat, m.lng]);
+    L.polyline(routeCoords, {
+        color: '#E91E7A',
+        weight: 3,
+        opacity: 0.7,
+        dashArray: '10, 6',
+    }).addTo(map);
+</script>
+{% endblock %}

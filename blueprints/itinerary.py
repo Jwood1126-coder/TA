@@ -92,6 +92,15 @@ def itinerary_overview():
                     location_id=accom_loc.id, is_eliminated=False).count()
                 group['accom_pending_count'] = pending
 
+    # Build brief activity summaries per day
+    for group in location_groups:
+        for day in group['days']:
+            titles = [a.title for a in day.activities if not a.is_substitute][:3]
+            summary = ', '.join(titles)
+            if len(summary) > 80:
+                summary = summary[:77] + '...'
+            day.activity_summary = summary
+
     # Overall trip progress
     total = Activity.query.filter_by(is_substitute=False).count()
     done = Activity.query.filter_by(is_substitute=False, is_completed=True).count()
@@ -231,3 +240,49 @@ def get_budget():
         'actual_amount': i.actual_amount,
         'notes': i.notes,
     } for i in items])
+
+
+CITY_COORDS = {
+    'Minneapolis': (44.9778, -93.2650),
+    'Tokyo': (35.6762, 139.6503),
+    'Hakone': (35.2326, 139.1070),
+    'Takayama': (36.1461, 137.2522),
+    'Shirakawa-go': (36.2578, 136.9060),
+    'Kanazawa': (36.5613, 136.6562),
+    'Kyoto': (35.0116, 135.7681),
+    'Osaka': (34.6937, 135.5023),
+}
+
+
+@itinerary_bp.route('/map')
+def map_view():
+    locations = Location.query.order_by(Location.sort_order).all()
+
+    markers = []
+    for loc in locations:
+        coords = CITY_COORDS.get(loc.name)
+        if not coords:
+            continue
+
+        accom_loc = AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains(loc.name)
+        ).first()
+        accom_name = None
+        if accom_loc:
+            selected = AccommodationOption.query.filter_by(
+                location_id=accom_loc.id, is_selected=True).first()
+            if selected:
+                accom_name = selected.name
+
+        markers.append({
+            'name': loc.name,
+            'lat': coords[0],
+            'lng': coords[1],
+            'vibe': loc.vibe,
+            'arrival': loc.arrival_date.strftime('%b %d') if loc.arrival_date else None,
+            'departure': loc.departure_date.strftime('%b %d') if loc.departure_date else None,
+            'accom': accom_name,
+            'guide_url': loc.guide_url,
+        })
+
+    return render_template('map.html', markers=markers)

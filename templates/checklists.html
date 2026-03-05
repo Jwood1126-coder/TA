@@ -1,6 +1,200 @@
 {% extends "base.html" %}
 {% block title %}Checklists{% endblock %}
 
+{% macro render_checklist_item(item) %}
+<div class="checklist-item {% if item.is_completed %}completed{% endif %}"
+     data-id="{{ item.id }}">
+
+    {% if item.item_type == 'task' %}
+    {# ===== SIMPLE TASK: checkbox ===== #}
+    <div class="checklist-item-header">
+        <label class="check-label">
+            <input type="checkbox" {% if item.is_completed %}checked{% endif %}
+                   onchange="toggleChecklist({{ item.id }})">
+            <span class="checkmark"></span>
+            <span class="check-text">{{ item.title }}</span>
+        </label>
+        {% if item.url %}
+        <a href="{{ item.url }}" target="_blank" rel="noopener" class="task-link-icon"
+           onclick="event.stopPropagation()">&#x1f517;</a>
+        {% endif %}
+    </div>
+
+    {% else %}
+    {# ===== DECISION ITEM: expandable with options ===== #}
+    <div class="checklist-item-header decision-header"
+         onclick="toggleItemExpand({{ item.id }})">
+        <span class="expand-arrow" id="arrow-{{ item.id }}">&#x25B6;</span>
+        <span class="decision-title">{{ item.title }}</span>
+
+        {# Option count for accommodation items #}
+        {% if item.accommodation_location_id and item.accommodation_location %}
+            {% set active_count = item.accommodation_location.options | rejectattr('is_eliminated') | list | length %}
+            {% set total_count = item.accommodation_location.options | list | length %}
+            <span class="option-count">{{ active_count }}/{{ total_count }}</span>
+        {% elif item.options %}
+            {% set active_count = item.options | rejectattr('is_eliminated') | list | length %}
+            <span class="option-count">{{ active_count }}/{{ item.options|length }}</span>
+        {% endif %}
+
+        <span class="decision-status-badge {{ item.status }}">
+            {% if item.status == 'pending' %}Pending
+            {% elif item.status == 'researching' %}Researching
+            {% elif item.status == 'decided' %}Decided
+            {% elif item.status == 'booked' %}Booked
+            {% elif item.status == 'completed' %}Done
+            {% endif %}
+        </span>
+    </div>
+
+    {# Expanded options panel (hidden by default) #}
+    <div class="checklist-options-panel" id="options-{{ item.id }}" style="display:none;">
+
+        {# Status selector #}
+        <div class="item-status-row">
+            <select class="status-select-sm"
+                    onchange="updateItemStatus({{ item.id }}, this.value)"
+                    onclick="event.stopPropagation()">
+                <option value="pending" {% if item.status == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="researching" {% if item.status == 'researching' %}selected{% endif %}>Researching</option>
+                <option value="decided" {% if item.status == 'decided' %}selected{% endif %}>Decided</option>
+                <option value="booked" {% if item.status == 'booked' %}selected{% endif %}>Booked</option>
+                <option value="completed" {% if item.status == 'completed' %}selected{% endif %}>Completed</option>
+            </select>
+        </div>
+
+        {% if item.accommodation_location_id and item.accommodation_location %}
+        {# ===== ACCOMMODATION OPTIONS ===== #}
+        {% set accom_loc = item.accommodation_location %}
+        <p class="accom-dates-inline">
+            {{ accom_loc.check_in_date.strftime('%b %d') }} &ndash;
+            {{ accom_loc.check_out_date.strftime('%b %d') }}
+            ({{ accom_loc.num_nights }} night{{ 's' if accom_loc.num_nights != 1 else '' }})
+        </p>
+        {% if accom_loc.quick_notes %}
+        <p class="accom-quick-note">{{ accom_loc.quick_notes }}</p>
+        {% endif %}
+
+        {% for option in accom_loc.options %}
+        <div class="cl-option-card {% if option.is_eliminated %}eliminated{% endif %} {% if option.is_selected %}selected{% endif %}"
+             data-option-id="accom-{{ option.id }}">
+            <div class="cl-option-header" onclick="toggleClOptionDetails(this)">
+                <span class="cl-option-rank">#{{ option.rank }}</span>
+                <span class="cl-option-name">{{ option.name }}</span>
+                {% if option.property_type %}
+                <span class="cl-option-type">{{ option.property_type }}</span>
+                {% endif %}
+                {% if option.price_tier %}
+                <span class="cl-option-price">{{ option.price_tier }}</span>
+                {% endif %}
+            </div>
+            <div class="cl-option-body" style="display:none;">
+                {% if option.standout %}
+                <p class="cl-option-why">{{ option.standout }}</p>
+                {% endif %}
+                <div class="option-badges">
+                    {% if option.breakfast_included %}
+                    <span class="badge breakfast">Breakfast</span>
+                    {% endif %}
+                    {% if option.has_onsen %}
+                    <span class="badge onsen">Onsen</span>
+                    {% endif %}
+                </div>
+                {% if option.total_low and option.total_high %}
+                <div class="cl-option-total">Total: ${{ option.total_low|int }}&ndash;${{ option.total_high|int }}</div>
+                {% endif %}
+                {% if option.address %}
+                <a href="{{ option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
+                    &#x1f4cd; {{ option.address }}
+                </a>
+                {% endif %}
+                <div class="cl-option-actions">
+                    {% if option.booking_url %}
+                    <a href="{{ option.booking_url }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
+                    {% endif %}
+                    {% if option.alt_booking_url %}
+                    <a href="{{ option.alt_booking_url }}" target="_blank" rel="noopener" class="book-link alt">Alt &rarr;</a>
+                    {% endif %}
+                    <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
+                            onclick="selectAccomOption({{ option.id }})">
+                        {{ '&#x2713; Selected' | safe if option.is_selected else 'Select' }}
+                    </button>
+                    <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
+                            onclick="eliminateAccomOption({{ option.id }})">
+                        {{ 'Restore' if option.is_eliminated else '&#x2717;' | safe }}
+                    </button>
+                </div>
+                {# Booking tracker for selected option #}
+                {% if option.is_selected %}
+                <div class="booking-tracker">
+                    <select class="status-select"
+                            onchange="updateBookingStatus({{ option.id }}, this.value)">
+                        <option value="not_booked" {% if option.booking_status == 'not_booked' %}selected{% endif %}>Not Booked</option>
+                        <option value="booked" {% if option.booking_status == 'booked' %}selected{% endif %}>Booked</option>
+                        <option value="confirmed" {% if option.booking_status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                    </select>
+                    <input type="text" class="confirmation-input"
+                           placeholder="Confirmation #"
+                           value="{{ option.confirmation_number or '' }}"
+                           onchange="updateConfirmation({{ option.id }}, this.value)">
+                </div>
+                {% endif %}
+                <textarea class="option-notes" placeholder="Notes..."
+                          onchange="updateAccomNotes({{ option.id }}, this.value)"
+                >{{ option.user_notes or '' }}</textarea>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% elif item.options %}
+        {# ===== GENERIC CHECKLIST OPTIONS ===== #}
+        {% for option in item.options %}
+        <div class="cl-option-card {% if option.is_eliminated %}eliminated{% endif %} {% if option.is_selected %}selected{% endif %}"
+             data-option-id="cl-{{ option.id }}">
+            <div class="cl-option-header" onclick="toggleClOptionDetails(this)">
+                <span class="cl-option-name">{{ option.name }}</span>
+                {% if option.price_note %}
+                <span class="cl-option-price">{{ option.price_note }}</span>
+                {% endif %}
+            </div>
+            <div class="cl-option-body" style="display:none;">
+                {% if option.description %}
+                <p class="cl-option-desc">{{ option.description }}</p>
+                {% endif %}
+                {% if option.why %}
+                <p class="cl-option-why">{{ option.why }}</p>
+                {% endif %}
+                <div class="cl-option-actions">
+                    {% if option.url %}
+                    <a href="{{ option.url }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
+                    {% endif %}
+                    <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
+                            onclick="selectClOption({{ option.id }})">
+                        {{ '&#x2713; Selected' | safe if option.is_selected else 'Select' }}
+                    </button>
+                    <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
+                            onclick="eliminateClOption({{ option.id }})">
+                        {{ 'Restore' if option.is_eliminated else '&#x2717;' | safe }}
+                    </button>
+                </div>
+                <textarea class="option-notes" placeholder="Notes..."
+                          onchange="updateClOptionNotes({{ option.id }}, this.value)"
+                >{{ option.user_notes or '' }}</textarea>
+            </div>
+        </div>
+        {% endfor %}
+        <button class="add-option-btn" onclick="showAddOption({{ item.id }})">+ Add option</button>
+
+        {% else %}
+        {# Decision item with no options yet #}
+        <p class="empty-options">No options yet.</p>
+        <button class="add-option-btn" onclick="showAddOption({{ item.id }})">+ Add option</button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
 {% block content %}
 <header>
     <h1>&#x2705; Checklists</h1>
@@ -12,216 +206,36 @@
     <a href="?tab=on_trip" class="mode-tab {% if tab == 'on_trip' %}active{% endif %}">On-Trip</a>
 </div>
 
-{% if tab == 'pre_trip' and categories %}
-<!-- Pre-Trip: layered decision checklist -->
-{% for group_key in group_order %}
-{% if group_key in categories %}
-{% set items = categories[group_key] %}
-<section class="checklist-section" id="cat-{{ group_key }}">
-    <h2>{{ group_labels[group_key] }}</h2>
+{% if tab == 'pre_trip' and sections %}
+{% for section in sections %}
+<section class="checklist-section" id="cat-{{ section.key }}">
+    <h2>{{ section.icon | safe }} {{ section.label }}</h2>
     <div class="checklist-progress">
-        {% set done = items | selectattr('is_completed') | list | length %}
-        {% set decided = items | selectattr('status', 'equalto', 'decided') | list | length %}
-        {% set booked = items | selectattr('status', 'equalto', 'booked') | list | length %}
-        {{ done }}/{{ items|length }} complete
-        {% if decided or booked %} &middot; {{ decided + booked }} decided{% endif %}
+        {{ section.progress.done }}/{{ section.progress.total }} complete
+        {% if section.progress.decided %} &middot; {{ section.progress.decided }} decided{% endif %}
     </div>
 
-    {% for item in items %}
-    <div class="checklist-item {% if item.is_completed %}completed{% endif %}"
-         data-id="{{ item.id }}">
-
-        {% if item.item_type == 'task' %}
-        {# ===== SIMPLE TASK: checkbox ===== #}
-        <div class="checklist-item-header">
-            <label class="check-label">
-                <input type="checkbox" {% if item.is_completed %}checked{% endif %}
-                       onchange="toggleChecklist({{ item.id }})">
-                <span class="checkmark"></span>
-                <span class="check-text">{{ item.title }}</span>
-            </label>
-            {% if item.url %}
-            <a href="{{ item.url }}" target="_blank" rel="noopener" class="task-link-icon"
-               onclick="event.stopPropagation()">&#x1f517;</a>
+    {% if section.subgroups %}
+    {% for subgroup in section.subgroups %}
+    <div class="checklist-subgroup">
+        <div class="checklist-subgroup-header">
+            {% if section.key == 'accommodations' %}
+            <span class="subgroup-icon">&#x1f4cd;</span>
             {% endif %}
+            <span class="subgroup-name">{{ subgroup.name }}</span>
+            <span class="subgroup-count">{{ subgroup.items | length }}</span>
         </div>
-
-        {% else %}
-        {# ===== DECISION ITEM: expandable with options ===== #}
-        <div class="checklist-item-header decision-header"
-             onclick="toggleItemExpand({{ item.id }})">
-            <span class="expand-arrow" id="arrow-{{ item.id }}">&#x25B6;</span>
-            <span class="decision-title">{{ item.title }}</span>
-
-            {# Option count for accommodation items #}
-            {% if item.accommodation_location_id and item.accommodation_location %}
-                {% set active_count = item.accommodation_location.options | rejectattr('is_eliminated') | list | length %}
-                {% set total_count = item.accommodation_location.options | list | length %}
-                <span class="option-count">{{ active_count }}/{{ total_count }}</span>
-            {% elif item.options %}
-                {% set active_count = item.options | rejectattr('is_eliminated') | list | length %}
-                <span class="option-count">{{ active_count }}/{{ item.options|length }}</span>
-            {% endif %}
-
-            <span class="decision-status-badge {{ item.status }}">
-                {% if item.status == 'pending' %}Pending
-                {% elif item.status == 'researching' %}Researching
-                {% elif item.status == 'decided' %}Decided
-                {% elif item.status == 'booked' %}Booked
-                {% elif item.status == 'completed' %}Done
-                {% endif %}
-            </span>
-        </div>
-
-        {# Expanded options panel (hidden by default) #}
-        <div class="checklist-options-panel" id="options-{{ item.id }}" style="display:none;">
-
-            {# Status selector #}
-            <div class="item-status-row">
-                <select class="status-select-sm"
-                        onchange="updateItemStatus({{ item.id }}, this.value)"
-                        onclick="event.stopPropagation()">
-                    <option value="pending" {% if item.status == 'pending' %}selected{% endif %}>Pending</option>
-                    <option value="researching" {% if item.status == 'researching' %}selected{% endif %}>Researching</option>
-                    <option value="decided" {% if item.status == 'decided' %}selected{% endif %}>Decided</option>
-                    <option value="booked" {% if item.status == 'booked' %}selected{% endif %}>Booked</option>
-                    <option value="completed" {% if item.status == 'completed' %}selected{% endif %}>Completed</option>
-                </select>
-            </div>
-
-            {% if item.accommodation_location_id and item.accommodation_location %}
-            {# ===== ACCOMMODATION OPTIONS ===== #}
-            {% set accom_loc = item.accommodation_location %}
-            <p class="accom-dates-inline">
-                {{ accom_loc.check_in_date.strftime('%b %d') }} &ndash;
-                {{ accom_loc.check_out_date.strftime('%b %d') }}
-                ({{ accom_loc.num_nights }} night{{ 's' if accom_loc.num_nights != 1 else '' }})
-            </p>
-            {% if accom_loc.quick_notes %}
-            <p class="accom-quick-note">{{ accom_loc.quick_notes }}</p>
-            {% endif %}
-
-            {% for option in accom_loc.options %}
-            <div class="cl-option-card {% if option.is_eliminated %}eliminated{% endif %} {% if option.is_selected %}selected{% endif %}"
-                 data-option-id="accom-{{ option.id }}">
-                <div class="cl-option-header" onclick="toggleClOptionDetails(this)">
-                    <span class="cl-option-rank">#{{ option.rank }}</span>
-                    <span class="cl-option-name">{{ option.name }}</span>
-                    {% if option.property_type %}
-                    <span class="cl-option-type">{{ option.property_type }}</span>
-                    {% endif %}
-                    {% if option.price_tier %}
-                    <span class="cl-option-price">{{ option.price_tier }}</span>
-                    {% endif %}
-                </div>
-                <div class="cl-option-body" style="display:none;">
-                    {% if option.standout %}
-                    <p class="cl-option-why">{{ option.standout }}</p>
-                    {% endif %}
-                    <div class="option-badges">
-                        {% if option.breakfast_included %}
-                        <span class="badge breakfast">Breakfast</span>
-                        {% endif %}
-                        {% if option.has_onsen %}
-                        <span class="badge onsen">Onsen</span>
-                        {% endif %}
-                    </div>
-                    {% if option.total_low and option.total_high %}
-                    <div class="cl-option-total">Total: ${{ option.total_low|int }}&ndash;${{ option.total_high|int }}</div>
-                    {% endif %}
-                    {% if option.address %}
-                    <a href="{{ option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-                        &#x1f4cd; {{ option.address }}
-                    </a>
-                    {% endif %}
-                    <div class="cl-option-actions">
-                        {% if option.booking_url %}
-                        <a href="{{ option.booking_url }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
-                        {% endif %}
-                        {% if option.alt_booking_url %}
-                        <a href="{{ option.alt_booking_url }}" target="_blank" rel="noopener" class="book-link alt">Alt &rarr;</a>
-                        {% endif %}
-                        <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
-                                onclick="selectAccomOption({{ option.id }})">
-                            {{ '&#x2713; Selected' | safe if option.is_selected else 'Select' }}
-                        </button>
-                        <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
-                                onclick="eliminateAccomOption({{ option.id }})">
-                            {{ 'Restore' if option.is_eliminated else '&#x2717;' | safe }}
-                        </button>
-                    </div>
-                    {# Booking tracker for selected option #}
-                    {% if option.is_selected %}
-                    <div class="booking-tracker">
-                        <select class="status-select"
-                                onchange="updateBookingStatus({{ option.id }}, this.value)">
-                            <option value="not_booked" {% if option.booking_status == 'not_booked' %}selected{% endif %}>Not Booked</option>
-                            <option value="booked" {% if option.booking_status == 'booked' %}selected{% endif %}>Booked</option>
-                            <option value="confirmed" {% if option.booking_status == 'confirmed' %}selected{% endif %}>Confirmed</option>
-                        </select>
-                        <input type="text" class="confirmation-input"
-                               placeholder="Confirmation #"
-                               value="{{ option.confirmation_number or '' }}"
-                               onchange="updateConfirmation({{ option.id }}, this.value)">
-                    </div>
-                    {% endif %}
-                    <textarea class="option-notes" placeholder="Notes..."
-                              onchange="updateAccomNotes({{ option.id }}, this.value)"
-                    >{{ option.user_notes or '' }}</textarea>
-                </div>
-            </div>
-            {% endfor %}
-
-            {% elif item.options %}
-            {# ===== GENERIC CHECKLIST OPTIONS ===== #}
-            {% for option in item.options %}
-            <div class="cl-option-card {% if option.is_eliminated %}eliminated{% endif %} {% if option.is_selected %}selected{% endif %}"
-                 data-option-id="cl-{{ option.id }}">
-                <div class="cl-option-header" onclick="toggleClOptionDetails(this)">
-                    <span class="cl-option-name">{{ option.name }}</span>
-                    {% if option.price_note %}
-                    <span class="cl-option-price">{{ option.price_note }}</span>
-                    {% endif %}
-                </div>
-                <div class="cl-option-body" style="display:none;">
-                    {% if option.description %}
-                    <p class="cl-option-desc">{{ option.description }}</p>
-                    {% endif %}
-                    {% if option.why %}
-                    <p class="cl-option-why">{{ option.why }}</p>
-                    {% endif %}
-                    <div class="cl-option-actions">
-                        {% if option.url %}
-                        <a href="{{ option.url }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
-                        {% endif %}
-                        <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
-                                onclick="selectClOption({{ option.id }})">
-                            {{ '&#x2713; Selected' | safe if option.is_selected else 'Select' }}
-                        </button>
-                        <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
-                                onclick="eliminateClOption({{ option.id }})">
-                            {{ 'Restore' if option.is_eliminated else '&#x2717;' | safe }}
-                        </button>
-                    </div>
-                    <textarea class="option-notes" placeholder="Notes..."
-                              onchange="updateClOptionNotes({{ option.id }}, this.value)"
-                    >{{ option.user_notes or '' }}</textarea>
-                </div>
-            </div>
-            {% endfor %}
-            <button class="add-option-btn" onclick="showAddOption({{ item.id }})">+ Add option</button>
-
-            {% else %}
-            {# Decision item with no options yet #}
-            <p class="empty-options">No options yet.</p>
-            <button class="add-option-btn" onclick="showAddOption({{ item.id }})">+ Add option</button>
-            {% endif %}
-        </div>
-        {% endif %}
+        {% for item in subgroup.items %}
+            {{ render_checklist_item(item) }}
+        {% endfor %}
     </div>
     {% endfor %}
+    {% else %}
+    {% for item in section.items %}
+        {{ render_checklist_item(item) }}
+    {% endfor %}
+    {% endif %}
 </section>
-{% endif %}
 {% endfor %}
 
 {% elif tab == 'on_trip' and upcoming %}
