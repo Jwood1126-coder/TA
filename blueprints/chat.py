@@ -22,6 +22,20 @@ train tickets, receipts, etc.), you should:
 4. Note budget impact if costs are included
 5. Confirm what you updated in your response
 
+ACCOMMODATION MANAGEMENT:
+- Use add_accommodation_option to add a new hotel/hostel option to a location
+- Use select_accommodation to pick which option to book
+- Use eliminate_accommodation to remove bad options
+- Use update_accommodation to update booking status, confirmation #, address, notes
+- When adding a hotel, match it to the right location by check-in dates or city name
+- Always include the booking URL when the user shares a link
+
+ACTIVITY MANAGEMENT:
+- Use update_activity with create_new=true to add new activities to any day
+- Include description, url, address, cost info when available
+- Use toggle_activity to mark activities complete or incomplete
+- Use update_activity to modify existing activities (address, time, notes, url, etc.)
+
 You have deep knowledge of Japan: restaurants, etiquette, transit, language, \
 hidden gems. Be concise — they're reading this on a phone. \
 Give specific, actionable answers. When suggesting schedule changes, \
@@ -64,8 +78,54 @@ TOOLS = [
         }
     },
     {
+        "name": "add_accommodation_option",
+        "description": "Add a new hotel/accommodation option to a location. Match location by city name or check-in date.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location_name": {"type": "string", "description": "City/area name to match (e.g. 'Tokyo', 'Kyoto', 'Osaka')"},
+                "name": {"type": "string", "description": "Hotel/accommodation name"},
+                "property_type": {"type": "string", "description": "e.g. 'Hotel', 'Ryokan', 'Hostel', 'Capsule hotel', 'Airbnb'"},
+                "price_low": {"type": "number", "description": "Low end per-night price in USD"},
+                "price_high": {"type": "number", "description": "High end per-night price in USD"},
+                "address": {"type": "string"},
+                "booking_url": {"type": "string", "description": "URL to the booking page"},
+                "alt_booking_url": {"type": "string", "description": "Alternative booking URL"},
+                "standout": {"type": "string", "description": "What makes this place special"},
+                "breakfast_included": {"type": "boolean"},
+                "has_onsen": {"type": "boolean"},
+                "user_notes": {"type": "string"},
+            },
+            "required": ["location_name", "name"]
+        }
+    },
+    {
+        "name": "select_accommodation",
+        "description": "Select an accommodation option as the chosen one for a location, or deselect it.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Hotel name (partial match ok)"},
+                "select": {"type": "boolean", "description": "True to select, false to deselect", "default": True},
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "eliminate_accommodation",
+        "description": "Mark an accommodation option as eliminated (removed from consideration) or restore it.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Hotel name (partial match ok)"},
+                "eliminate": {"type": "boolean", "description": "True to eliminate, false to restore", "default": True},
+            },
+            "required": ["name"]
+        }
+    },
+    {
         "name": "update_activity",
-        "description": "Update an existing activity's address, notes, or cost. Or add a new activity to a day.",
+        "description": "Update an existing activity or add a new one. Supports full activity details.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -74,11 +134,28 @@ TOOLS = [
                 "time_slot": {"type": "string", "enum": ["morning", "afternoon", "evening", "night"]},
                 "start_time": {"type": "string"},
                 "cost_per_person": {"type": "number"},
+                "cost_note": {"type": "string", "description": "Cost description e.g. '¥500 entry'"},
                 "address": {"type": "string"},
+                "description": {"type": "string", "description": "Activity description"},
+                "url": {"type": "string", "description": "Website or booking URL"},
                 "notes": {"type": "string"},
+                "is_optional": {"type": "boolean"},
                 "create_new": {"type": "boolean", "description": "True to add a new activity, false to update existing"},
             },
             "required": ["day_number", "title"]
+        }
+    },
+    {
+        "name": "toggle_activity",
+        "description": "Mark an activity as completed or not completed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "title": {"type": "string", "description": "Activity title (partial match ok)"},
+                "completed": {"type": "boolean", "description": "True to mark done, false to unmark"},
+            },
+            "required": ["day_number", "title", "completed"]
         }
     },
     {
@@ -164,6 +241,81 @@ def _execute_tool(tool_name, tool_input):
             loc = AccommodationLocation.query.get(option.location_id)
             return {"success": True, "message": f"Updated {option.name} at {loc.location_name}"}
 
+        elif tool_name == "add_accommodation_option":
+            loc_name = tool_input['location_name']
+            accom_loc = AccommodationLocation.query.filter(
+                AccommodationLocation.location_name.ilike(f"%{loc_name}%")
+            ).first()
+            if not accom_loc:
+                return {"success": False, "error": f"No accommodation location matching '{loc_name}'. "
+                        f"Available: {', '.join(l.location_name for l in AccommodationLocation.query.all())}"}
+            # Determine next rank
+            existing = AccommodationOption.query.filter_by(location_id=accom_loc.id).all()
+            next_rank = max([o.rank for o in existing] or [0]) + 1
+            # Calculate totals from per-night prices
+            price_low = tool_input.get('price_low')
+            price_high = tool_input.get('price_high')
+            total_low = price_low * accom_loc.num_nights if price_low else None
+            total_high = price_high * accom_loc.num_nights if price_high else None
+            option = AccommodationOption(
+                location_id=accom_loc.id,
+                rank=next_rank,
+                name=tool_input['name'],
+                property_type=tool_input.get('property_type'),
+                price_low=price_low,
+                price_high=price_high,
+                total_low=total_low,
+                total_high=total_high,
+                address=tool_input.get('address'),
+                booking_url=tool_input.get('booking_url'),
+                alt_booking_url=tool_input.get('alt_booking_url'),
+                standout=tool_input.get('standout'),
+                breakfast_included=tool_input.get('breakfast_included', False),
+                has_onsen=tool_input.get('has_onsen', False),
+                user_notes=tool_input.get('user_notes'),
+            )
+            db.session.add(option)
+            db.session.commit()
+            return {"success": True, "message": f"Added '{option.name}' as option #{next_rank} for {accom_loc.location_name} "
+                    f"({accom_loc.check_in_date.strftime('%b %d')}-{accom_loc.check_out_date.strftime('%b %d')})"}
+
+        elif tool_name == "select_accommodation":
+            name = tool_input['name']
+            select = tool_input.get('select', True)
+            option = AccommodationOption.query.filter(
+                AccommodationOption.name.ilike(f"%{name}%")
+            ).first()
+            if not option:
+                return {"success": False, "error": f"Accommodation '{name}' not found"}
+            if select:
+                # Deselect all other options for this location first
+                AccommodationOption.query.filter_by(
+                    location_id=option.location_id
+                ).update({'is_selected': False})
+                option.is_selected = True
+            else:
+                option.is_selected = False
+            db.session.commit()
+            loc = AccommodationLocation.query.get(option.location_id)
+            action = "Selected" if select else "Deselected"
+            return {"success": True, "message": f"{action} '{option.name}' for {loc.location_name}"}
+
+        elif tool_name == "eliminate_accommodation":
+            name = tool_input['name']
+            eliminate = tool_input.get('eliminate', True)
+            option = AccommodationOption.query.filter(
+                AccommodationOption.name.ilike(f"%{name}%")
+            ).first()
+            if not option:
+                return {"success": False, "error": f"Accommodation '{name}' not found"}
+            option.is_eliminated = eliminate
+            if eliminate and option.is_selected:
+                option.is_selected = False
+            db.session.commit()
+            loc = AccommodationLocation.query.get(option.location_id)
+            action = "Eliminated" if eliminate else "Restored"
+            return {"success": True, "message": f"{action} '{option.name}' for {loc.location_name}"}
+
         elif tool_name == "update_activity":
             day = Day.query.filter_by(day_number=tool_input['day_number']).first()
             if not day:
@@ -177,8 +329,12 @@ def _execute_tool(tool_name, tool_input):
                     time_slot=tool_input.get('time_slot'),
                     start_time=tool_input.get('start_time'),
                     cost_per_person=tool_input.get('cost_per_person'),
+                    cost_note=tool_input.get('cost_note'),
                     address=tool_input.get('address'),
+                    description=tool_input.get('description'),
+                    url=tool_input.get('url'),
                     notes=tool_input.get('notes'),
+                    is_optional=tool_input.get('is_optional', False),
                     sort_order=max_order + 1,
                 )
                 db.session.add(activity)
@@ -191,11 +347,28 @@ def _execute_tool(tool_name, tool_input):
                 ).first()
                 if not activity:
                     return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
-                for field in ['address', 'notes', 'start_time', 'cost_per_person']:
+                for field in ['address', 'notes', 'start_time', 'cost_per_person',
+                              'cost_note', 'description', 'url', 'time_slot', 'is_optional']:
                     if tool_input.get(field) is not None:
                         setattr(activity, field, tool_input[field])
                 db.session.commit()
                 return {"success": True, "message": f"Updated '{activity.title}' on Day {day.day_number}"}
+
+        elif tool_name == "toggle_activity":
+            day = Day.query.filter_by(day_number=tool_input['day_number']).first()
+            if not day:
+                return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
+            activity = Activity.query.filter(
+                Activity.day_id == day.id,
+                Activity.title.ilike(f"%{tool_input['title']}%")
+            ).first()
+            if not activity:
+                return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
+            activity.is_completed = tool_input['completed']
+            activity.completed_at = datetime.utcnow() if activity.is_completed else None
+            db.session.commit()
+            status = "completed" if activity.is_completed else "not completed"
+            return {"success": True, "message": f"Marked '{activity.title}' as {status}"}
 
         elif tool_name == "flag_conflict":
             return {
@@ -503,16 +676,19 @@ def _build_context():
         for loc in accom_locs:
             opts = opts_by_loc.get(loc.id, [])
             selected = next((o for o in opts if o.is_selected), None)
+            active = [o for o in opts if not o.is_eliminated]
+            parts.append(f"  {loc.location_name} ({loc.check_in_date.strftime('%b %d')}-"
+                         f"{loc.check_out_date.strftime('%b %d')}, {loc.num_nights} nights):")
             if selected:
                 conf = f" [Conf: {selected.confirmation_number}]" if selected.confirmation_number else ""
-                parts.append(f"  {loc.location_name} ({loc.check_in_date.strftime('%b %d')}-"
-                             f"{loc.check_out_date.strftime('%b %d')}): "
-                             f"{selected.name} ({selected.booking_status}){conf}")
-            else:
-                active = [o for o in opts if not o.is_eliminated]
-                parts.append(f"  {loc.location_name} ({loc.check_in_date.strftime('%b %d')}-"
-                             f"{loc.check_out_date.strftime('%b %d')}): "
-                             f"UNDECIDED — {len(active)} options remaining")
+                parts.append(f"    SELECTED: {selected.name} ({selected.booking_status}){conf}")
+            for o in active:
+                if o == selected:
+                    continue
+                price = f" ${o.price_low:.0f}-{o.price_high:.0f}/nt" if o.price_low else ""
+                parts.append(f"    #{o.rank} {o.name}{price}")
+            if not selected and not active:
+                parts.append(f"    NO OPTIONS — needs hotel recommendations")
 
     # Transport routes
     routes = TransportRoute.query.order_by(TransportRoute.sort_order).all()
