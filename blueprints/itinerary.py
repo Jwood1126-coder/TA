@@ -51,6 +51,60 @@ def index():
                            total_locations=total_locations)
 
 
+@itinerary_bp.route('/itinerary')
+def itinerary_overview():
+    trip = Trip.query.first()
+    days = Day.query.order_by(Day.day_number).all()
+
+    # Group consecutive days by location
+    location_groups = []
+    current_group = None
+    for day in days:
+        loc_name = day.location.name if day.location else 'Travel'
+        if not current_group or current_group['location'] != loc_name:
+            current_group = {
+                'location': loc_name,
+                'location_obj': day.location,
+                'days': [],
+                'start_date': day.date,
+                'end_date': day.date,
+                'accom_name': None,
+                'accom_status': None,
+                'accom_pending_count': 0,
+            }
+            location_groups.append(current_group)
+        current_group['days'].append(day)
+        current_group['end_date'] = day.date
+
+    # Attach accommodation status per group
+    for group in location_groups:
+        accom_loc = AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains(group['location'])
+        ).first()
+        if accom_loc:
+            selected = AccommodationOption.query.filter_by(
+                location_id=accom_loc.id, is_selected=True).first()
+            if selected:
+                group['accom_name'] = selected.name
+                group['accom_status'] = selected.booking_status
+            else:
+                pending = AccommodationOption.query.filter_by(
+                    location_id=accom_loc.id, is_eliminated=False).count()
+                group['accom_pending_count'] = pending
+
+    # Overall trip progress
+    total = Activity.query.filter_by(is_substitute=False).count()
+    done = Activity.query.filter_by(is_substitute=False, is_completed=True).count()
+    overall_pct = int(done / total * 100) if total else 0
+
+    return render_template('itinerary.html',
+                           trip=trip,
+                           location_groups=location_groups,
+                           overall_pct=overall_pct,
+                           completed=done,
+                           total=total)
+
+
 @itinerary_bp.route('/day/<int:day_number>')
 def day_view(day_number):
     day = Day.query.filter_by(day_number=day_number).first_or_404()

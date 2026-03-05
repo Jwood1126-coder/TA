@@ -2,6 +2,7 @@
 {% block title %}Day {{ day.day_number }} - {{ day.title }}{% endblock %}
 
 {% block content %}
+<a href="{{ url_for('itinerary.itinerary_overview') }}" class="back-to-overview">&larr; All Days</a>
 <header class="day-header">
     <div class="day-nav-row">
         {% if prev_day %}

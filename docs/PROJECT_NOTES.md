@@ -109,14 +109,22 @@ japan-travel-app/
 | Kyoto | https://www.japan-guide.com/e/e2158.html |
 | Osaka | https://www.japan-guide.com/e/e2157.html |
 
+### Bug Fixes & UX Improvements (commit 79f3ccd)
+- Fixed chat SSE generator application context error (DB ops outside request context)
+- Enabled tool use for text-only chat (was image-only before)
+- Added `add_checklist_item` tool to chat AI
+- Added toast notification system (success/error/info) across all pages
+- Fixed `is_completed`/`status` bidirectional sync on checklist items
+- Added scrollIntoView when expanding checklist option panels
+
 ## Known Issues / Future Work
 From the full app review:
-- Toast notifications for user feedback (instead of silent saves)
 - Session security flags (httponly, secure cookies)
+- CSRF protection (Flask-WTF)
+- Rate limiting on login
 - ARIA labels for accessibility
-- ScrollIntoView on expand for better UX
 - Enum validation on status fields
-- Pull-to-refresh could use visual indicator improvement
+- Service worker for offline capability during trip
 
 ## Deployment Notes
 - Push to `main` branch triggers auto-deploy on Railway

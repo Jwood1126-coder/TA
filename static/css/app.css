@@ -361,6 +361,193 @@ body {
     min-width: 30px;
 }
 
+/* Itinerary Summary Page */
+.itin-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.itin-header h1 {
+    margin-bottom: 0.25rem;
+}
+
+.itin-dates {
+    font-size: 0.85rem;
+    color: var(--pico-muted-color);
+    margin-bottom: 0.75rem;
+}
+
+.itin-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.itin-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.itin-progress-fill {
+    height: 100%;
+    background: var(--jr-green);
+    border-radius: 3px;
+    transition: width 0.3s;
+}
+
+.itin-progress-text {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+}
+
+/* Location Groups */
+.loc-group {
+    margin-bottom: 1rem;
+    border: 1px solid var(--pico-muted-border-color, #e2e8f0);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.loc-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--sakura-light);
+}
+
+.loc-group-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.loc-group-dates {
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
+    margin-left: 8px;
+}
+
+.guide-link-sm {
+    font-size: 0.7rem;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+/* Day rows inside location group */
+.itin-day-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    text-decoration: none;
+    color: inherit;
+    border-top: 1px solid var(--pico-muted-border-color, #e2e8f0);
+    transition: background 0.1s;
+}
+
+.itin-day-row:hover {
+    background: var(--sakura-light);
+}
+
+.itin-day-num {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--accent);
+    min-width: 24px;
+    text-align: center;
+}
+
+.itin-day-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.itin-day-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.buffer-badge-sm {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #fef3c7;
+    color: #92400e;
+    white-space: nowrap;
+}
+
+.itin-day-progress {
+    width: 50px;
+}
+
+.itin-day-arrow {
+    font-size: 1.2rem;
+    color: var(--pico-muted-color);
+    font-weight: 300;
+}
+
+/* Accommodation status in location group */
+.loc-group-accom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--pico-muted-border-color, #e2e8f0);
+    font-size: 0.8rem;
+    background: rgba(0,0,0,0.02);
+}
+
+.loc-group-accom.pending {
+    color: var(--pico-muted-color);
+}
+
+.loc-accom-icon {
+    font-size: 0.85rem;
+}
+
+.loc-accom-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+/* Back to overview link */
+.back-to-overview {
+    display: inline-block;
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    text-decoration: none;
+    margin-bottom: 0.5rem;
+}
+
+.back-to-overview:hover {
+    color: var(--accent);
+}
+
+/* Dark mode for itinerary summary */
+[data-theme="dark"] .loc-group { border-color: #333; }
+[data-theme="dark"] .loc-group-header { background: #2a1a2a; }
+[data-theme="dark"] .itin-day-row { border-color: #333; }
+[data-theme="dark"] .itin-day-row:hover { background: #2a1a2a; }
+[data-theme="dark"] .loc-group-accom { border-color: #333; background: rgba(255,255,255,0.03); }
+[data-theme="dark"] .itin-progress-bar { background: #333; }
+[data-theme="dark"] .buffer-badge-sm { background: #3d3520; color: #fef3c7; }
+
 /* Day View */
 .day-header {
     text-align: center;

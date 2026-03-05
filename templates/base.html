@@ -23,7 +23,7 @@
             <span class="nav-icon">&#x1f3e0;</span>
             <span class="nav-label">Today</span>
         </a>
-        <a href="{{ url_for('itinerary.day_view', day_number=1) }}" class="nav-item {% if request.endpoint == 'itinerary.day_view' %}active{% endif %}">
+        <a href="{{ url_for('itinerary.itinerary_overview') }}" class="nav-item {% if request.endpoint in ('itinerary.itinerary_overview', 'itinerary.day_view') %}active{% endif %}">
             <span class="nav-icon">&#x1f4c5;</span>
             <span class="nav-label">Itinerary</span>
         </a>
