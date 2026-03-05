@@ -1,16 +1,16 @@
 from flask import Blueprint, render_template, jsonify, request
-from models import db, ChecklistItem, Flight, AccommodationLocation, \
-    AccommodationOption, TransportRoute, Day, Activity, Trip
+from models import db, ChecklistItem, ChecklistOption, Flight, \
+    AccommodationLocation, AccommodationOption, TransportRoute, Day, Activity, Trip
 from datetime import datetime, date
 
 checklists_bp = Blueprint('checklists', __name__)
 
 # Map old categories to new groupings
 CATEGORY_MAP = {
-    'pre_departure_today': 'preparation',
-    'pre_departure_week': 'preparation',
+    'pre_departure_today': 'booking',
+    'pre_departure_week': 'booking',
     'pre_departure_miles': 'booking',
-    'pre_departure_month': 'booking',
+    'pre_departure_month': 'preparation',
     'packing_essential': 'packing',
     'packing_helpful': 'packing',
 }
@@ -42,8 +42,13 @@ def checklists_view():
         return render_template('checklists.html', tab=tab, upcoming=upcoming,
                                categories=None, group_labels=None, group_order=None)
 
-    # Pre-trip: group items
-    items = ChecklistItem.query.order_by(ChecklistItem.sort_order).all()
+    # Pre-trip: eagerly load options and accommodation data
+    items = ChecklistItem.query.options(
+        db.joinedload(ChecklistItem.options),
+        db.joinedload(ChecklistItem.accommodation_location)
+            .joinedload(AccommodationLocation.options)
+    ).order_by(ChecklistItem.sort_order).all()
+
     categories = {}
     for item in items:
         group = CATEGORY_MAP.get(item.category, 'preparation')
@@ -53,6 +58,114 @@ def checklists_view():
                            group_labels=GROUP_LABELS, group_order=GROUP_ORDER,
                            upcoming=None)
 
+
+# ---------- Existing toggle endpoint ----------
+
+@checklists_bp.route('/api/checklists/<int:item_id>/toggle', methods=['POST'])
+def toggle_checklist(item_id):
+    item = ChecklistItem.query.get_or_404(item_id)
+    item.is_completed = not item.is_completed
+    item.completed_at = datetime.utcnow() if item.is_completed else None
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('checklist_toggled', {
+        'id': item.id,
+        'is_completed': item.is_completed,
+    })
+
+    return jsonify({'ok': True, 'is_completed': item.is_completed})
+
+
+# ---------- New: Update item status ----------
+
+@checklists_bp.route('/api/checklists/<int:item_id>/status', methods=['PUT'])
+def update_checklist_status(item_id):
+    item = ChecklistItem.query.get_or_404(item_id)
+    data = request.get_json()
+    item.status = data.get('status', item.status)
+    if item.status == 'completed':
+        item.is_completed = True
+        item.completed_at = datetime.utcnow()
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('checklist_status_changed', {
+        'id': item.id, 'status': item.status,
+    })
+    return jsonify({'ok': True})
+
+
+# ---------- New: ChecklistOption endpoints ----------
+
+@checklists_bp.route('/api/checklist-options/<int:option_id>/eliminate', methods=['POST'])
+def toggle_option_elimination(option_id):
+    option = ChecklistOption.query.get_or_404(option_id)
+    option.is_eliminated = not option.is_eliminated
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('checklist_option_updated', {
+        'checklist_item_id': option.checklist_item_id,
+        'option_id': option.id,
+        'is_eliminated': option.is_eliminated,
+    })
+    return jsonify({'ok': True, 'is_eliminated': option.is_eliminated})
+
+
+@checklists_bp.route('/api/checklist-options/<int:option_id>/select', methods=['POST'])
+def select_checklist_option(option_id):
+    option = ChecklistOption.query.get_or_404(option_id)
+    # Deselect others in same item
+    ChecklistOption.query.filter_by(
+        checklist_item_id=option.checklist_item_id
+    ).update({'is_selected': False})
+    option.is_selected = True
+    # Update parent status
+    item = ChecklistItem.query.get(option.checklist_item_id)
+    if item and item.status in ('pending', 'researching'):
+        item.status = 'decided'
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('checklist_option_updated', {
+        'checklist_item_id': option.checklist_item_id,
+        'selected_id': option.id,
+    })
+    return jsonify({'ok': True})
+
+
+@checklists_bp.route('/api/checklist-options/<int:option_id>/notes', methods=['PUT'])
+def update_option_notes(option_id):
+    option = ChecklistOption.query.get_or_404(option_id)
+    data = request.get_json()
+    option.user_notes = data.get('user_notes', '')
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@checklists_bp.route('/api/checklists/<int:item_id>/options', methods=['POST'])
+def add_checklist_option(item_id):
+    item = ChecklistItem.query.get_or_404(item_id)
+    data = request.get_json()
+    max_order = db.session.query(
+        db.func.max(ChecklistOption.sort_order)
+    ).filter_by(checklist_item_id=item_id).scalar() or 0
+    option = ChecklistOption(
+        checklist_item_id=item_id,
+        name=data['name'],
+        description=data.get('description'),
+        why=data.get('why'),
+        url=data.get('url'),
+        price_note=data.get('price_note'),
+        sort_order=max_order + 1,
+    )
+    db.session.add(option)
+    db.session.commit()
+    return jsonify({'ok': True, 'option': option.to_dict()})
+
+
+# ---------- Upcoming events (On-Trip tab) ----------
 
 def _build_upcoming_events():
     """Build dynamic list of upcoming logistics from itinerary data."""
@@ -176,19 +289,3 @@ def _build_upcoming_events():
     # Sort by date, then time
     events.sort(key=lambda e: (e['date'], e['time'] or ''))
     return events
-
-
-@checklists_bp.route('/api/checklists/<int:item_id>/toggle', methods=['POST'])
-def toggle_checklist(item_id):
-    item = ChecklistItem.query.get_or_404(item_id)
-    item.is_completed = not item.is_completed
-    item.completed_at = datetime.utcnow() if item.is_completed else None
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('checklist_toggled', {
-        'id': item.id,
-        'is_completed': item.is_completed,
-    })
-
-    return jsonify({'ok': True, 'is_completed': item.is_completed})

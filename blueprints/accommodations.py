@@ -30,6 +30,22 @@ def select_option(option_id):
     return jsonify({'ok': True})
 
 
+@accommodations_bp.route('/api/accommodations/<int:option_id>/eliminate',
+                          methods=['POST'])
+def eliminate_option(option_id):
+    option = AccommodationOption.query.get_or_404(option_id)
+    option.is_eliminated = not option.is_eliminated
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('accommodation_updated', {
+        'location_id': option.location_id,
+        'option_id': option.id,
+        'is_eliminated': option.is_eliminated,
+    })
+    return jsonify({'ok': True, 'is_eliminated': option.is_eliminated})
+
+
 @accommodations_bp.route('/api/accommodations/<int:option_id>/status',
                           methods=['PUT'])
 def update_status(option_id):

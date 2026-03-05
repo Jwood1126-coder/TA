@@ -1408,6 +1408,243 @@ body {
 [data-theme="dark"] .maps-link { color: var(--accent); }
 [data-theme="dark"] .minor-activities summary { color: #9ca3af; }
 
+/* ===== Decision Checklist Items ===== */
+.decision-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.expand-arrow {
+    font-size: 0.65rem;
+    color: var(--pico-muted-color);
+    transition: transform 0.15s;
+    min-width: 16px;
+    text-align: center;
+}
+.expand-arrow.open { transform: rotate(90deg); }
+.decision-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 0.95rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.option-count {
+    font-size: 0.7rem;
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+}
+.decision-status-badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.decision-status-badge.pending { background: #f3f4f6; color: #6b7280; }
+.decision-status-badge.researching { background: #dbeafe; color: #1e40af; }
+.decision-status-badge.decided { background: #d1fae5; color: #065f46; }
+.decision-status-badge.booked { background: #d1fae5; color: #065f46; }
+.decision-status-badge.completed { background: var(--jr-green); color: #fff; }
+
+/* Options panel */
+.checklist-options-panel {
+    padding: 0 0 0.5rem 24px;
+}
+.item-status-row {
+    margin-bottom: 0.5rem;
+}
+.status-select-sm {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    margin-bottom: 0;
+    border-radius: 6px;
+    border: 1px solid var(--pico-muted-border-color);
+    background: var(--pico-background-color);
+}
+.accom-dates-inline {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    margin: 0.25rem 0 0.5rem;
+}
+.accom-quick-note {
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-style: italic;
+    margin: 0 0 0.5rem;
+}
+.empty-options {
+    font-size: 0.85rem;
+    color: var(--pico-muted-color);
+    margin: 0.5rem 0;
+}
+
+/* Option cards (nested inside checklist items) */
+.cl-option-card {
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 8px;
+    margin-bottom: 0.4rem;
+    overflow: hidden;
+}
+.cl-option-card.selected {
+    border-color: var(--accent);
+    background: var(--sakura-light);
+}
+.cl-option-card.eliminated {
+    opacity: 0.45;
+}
+.cl-option-card.eliminated .cl-option-name {
+    text-decoration: line-through;
+}
+.cl-option-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.5rem 0.65rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.cl-option-rank {
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 20px;
+    font-size: 0.8rem;
+}
+.cl-option-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 0.85rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cl-option-type {
+    font-size: 0.7rem;
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+}
+.cl-option-price {
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--sakura-text);
+}
+.cl-option-body {
+    padding: 0.4rem 0.65rem 0.65rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+}
+.cl-option-desc {
+    font-size: 0.8rem;
+    margin: 0.3rem 0;
+}
+.cl-option-why {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    font-style: italic;
+    margin: 0.3rem 0;
+}
+.cl-option-total {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin: 0.3rem 0;
+}
+.cl-option-actions {
+    display: flex;
+    gap: 6px;
+    margin: 0.5rem 0;
+    flex-wrap: wrap;
+}
+.select-btn-sm {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.select-btn-sm.active {
+    background: var(--accent);
+    color: #fff;
+}
+.eliminate-btn {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--pico-muted-color);
+    background: transparent;
+    color: var(--pico-muted-color);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.eliminate-btn.active {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+}
+.option-notes {
+    width: 100%;
+    min-height: 36px;
+    font-size: 0.8rem;
+    padding: 6px 8px;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+    resize: vertical;
+    margin-top: 0.4rem;
+    background: var(--pico-background-color);
+}
+.add-option-btn {
+    width: 100%;
+    padding: 6px;
+    border: 1px dashed var(--pico-muted-border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--pico-muted-color);
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-top: 0.25rem;
+}
+.add-option-form {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    border: 1px solid var(--sakura);
+    border-radius: 8px;
+}
+.add-option-form input {
+    font-size: 0.8rem;
+    padding: 6px 8px;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+}
+.add-option-form-btns {
+    display: flex;
+    gap: 6px;
+}
+
+/* Dark mode - decision checklist */
+[data-theme="dark"] .decision-status-badge.pending { background: #2d2d2d; color: #9ca3af; }
+[data-theme="dark"] .decision-status-badge.researching { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .decision-status-badge.decided,
+[data-theme="dark"] .decision-status-badge.booked { background: #064e3b; color: #6ee7b7; }
+[data-theme="dark"] .cl-option-card { border-color: #333; }
+[data-theme="dark"] .cl-option-card.selected { border-color: var(--accent); background: rgba(233, 30, 122, 0.08); }
+[data-theme="dark"] .cl-option-body { border-top-color: #333; }
+[data-theme="dark"] .eliminate-btn.active { background: #7f1d1d; color: #fca5a5; border-color: #991b1b; }
+[data-theme="dark"] .add-option-btn { border-color: #444; color: #666; }
+[data-theme="dark"] .add-option-form { border-color: #4a2030; }
+[data-theme="dark"] .option-notes { background: #1e1e1e; border-color: #333; color: #ccc; }
+[data-theme="dark"] .status-select-sm { background: #1e1e1e; border-color: #333; color: #ccc; }
+
 /* Utilities */
 @media (max-width: 480px) {
     .app-main {

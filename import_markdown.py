@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app import create_app
 from models import db, Trip, Location, Day, Activity, AccommodationLocation, \
     AccommodationOption, Flight, TransportRoute, BudgetItem, ChecklistItem, \
-    ReferenceContent
+    ChecklistOption, ReferenceContent
 
 # Look in source_data/ first (repo), then fall back to ../Japan/ (local dev)
 _base = os.path.dirname(__file__)
@@ -663,58 +663,189 @@ def import_budget(master):
 def import_checklists(master):
     print("  Importing checklists...")
 
+    # (category, title, priority, sort_order, item_type, accommodation_location_name)
     checklists = [
-        # Today
-        ('pre_departure_today', 'Book Delta outbound CLE → MSP → HND ($638/pp)', 'today', 1),
-        ('pre_departure_today', 'Book Takayama ryokan on Japanican.com', 'today', 2),
-        ('pre_departure_today', 'Book Piece Hostel Sanjo private room', 'today', 3),
-        ('pre_departure_today', 'Reserve Nohi Bus (nouhibus.co.jp)', 'today', 4),
-        # This week
-        ('pre_departure_week', 'Book Minneapolis hotel via united.com (apply $100 credit)', 'this_week', 5),
-        ('pre_departure_week', 'Book Dormy Inn Asakusa (3 nights, Apr 6-8)', 'this_week', 6),
-        ('pre_departure_week', 'Book Takayama budget night (Rickshaw Inn)', 'this_week', 7),
-        ('pre_departure_week', 'Book Kaname Inn Kanazawa (1 night, Apr 11)', 'this_week', 8),
-        ('pre_departure_week', 'Purchase 14-day JR Pass at japanrailpass.net', 'this_week', 9),
-        ('pre_departure_week', 'Book Kyoto machiya (Rinn or Airbnb, 2 nights)', 'this_week', 10),
-        ('pre_departure_week', 'Book Toyoko Inn Shinagawa (1 night, Apr 17)', 'this_week', 11),
+        # Today — booking decisions linked to accommodations
+        ('pre_departure_today', 'Book Delta outbound CLE → MSP → HND', 'today', 1, 'decision', None),
+        ('pre_departure_today', 'Book Takayama ryokan', 'today', 2, 'decision', 'Takayama Ryokan'),
+        ('pre_departure_today', 'Book Piece Hostel Sanjo private room', 'today', 3, 'decision', 'Kyoto (3 nights)'),
+        ('pre_departure_today', 'Reserve Nohi Bus (Takayama → Kanazawa)', 'today', 4, 'decision', None),
+        # This week — accommodation decisions
+        ('pre_departure_week', 'Book Minneapolis hotel', 'this_week', 5, 'decision', 'Minneapolis'),
+        ('pre_departure_week', 'Book Tokyo hotel (Asakusa, 3 nights)', 'this_week', 6, 'decision', 'Tokyo (Asakusa area)'),
+        ('pre_departure_week', 'Book Takayama budget night', 'this_week', 7, 'decision', 'Takayama Budget'),
+        ('pre_departure_week', 'Book Kanazawa hotel (1 night)', 'this_week', 8, 'decision', 'Kanazawa'),
+        ('pre_departure_week', 'Purchase 14-day JR Pass', 'this_week', 9, 'decision', None),
+        ('pre_departure_week', 'Book Kyoto machiya (2 nights)', 'this_week', 10, 'decision', 'Kyoto Machiya'),
+        ('pre_departure_week', 'Book Tokyo final night hotel', 'this_week', 11, 'decision', 'Tokyo Final Night'),
         # When miles post
-        ('pre_departure_miles', 'Book United award return NRT → LAX → CLE', 'miles', 12),
-        ('pre_departure_miles', 'Buy remaining miles if needed', 'miles', 13),
-        # 2-4 weeks before
-        ('pre_departure_month', 'Reserve pocket WiFi or purchase eSIM', 'month', 14),
-        ('pre_departure_month', 'Book TeamLab Planets tickets', 'month', 15),
-        ('pre_departure_month', 'Register on Visit Japan Web (vjw.digital.go.jp)', 'month', 16),
-        ('pre_departure_month', 'Confirm travel insurance coverage', 'month', 17),
-        ('pre_departure_month', 'Notify bank of Japan travel dates', 'month', 18),
-        ('pre_departure_month', 'Download apps: Google Maps, Translate, Tabelog', 'month', 19),
-        ('pre_departure_month', 'Check passport validity', 'month', 20),
-        ('pre_departure_month', 'Make copies of passport + hotel confirmations', 'month', 21),
-        # Packing - Essential
-        ('packing_essential', 'Passport', 'packing', 22),
-        ('packing_essential', 'Phone + charger', 'packing', 23),
-        ('packing_essential', 'Portable battery pack / power bank', 'packing', 24),
-        ('packing_essential', 'Comfortable walking shoes (BROKEN IN)', 'packing', 25),
-        ('packing_essential', 'Slip-on shoes for temples', 'packing', 26),
-        ('packing_essential', 'Light jacket + warm layer for mountains', 'packing', 27),
-        ('packing_essential', 'Rain jacket or compact umbrella', 'packing', 28),
-        ('packing_essential', 'Small daypack', 'packing', 29),
-        # Packing - Helpful
-        ('packing_helpful', 'Neck pillow + eye mask for flight', 'packing', 30),
-        ('packing_helpful', 'Compression socks for flight', 'packing', 31),
-        ('packing_helpful', 'Small towel/handkerchief', 'packing', 32),
-        ('packing_helpful', 'Ziplock bags for snacks/trash', 'packing', 33),
-        ('packing_helpful', 'Packing cubes', 'packing', 34),
-        ('packing_helpful', 'Small notebook/pen', 'packing', 35),
-        ('packing_helpful', 'Earplugs', 'packing', 36),
-        ('packing_helpful', 'Sunglasses', 'packing', 37),
+        ('pre_departure_miles', 'Book United award return NRT → LAX → CLE', 'miles', 12, 'decision', None),
+        ('pre_departure_miles', 'Buy remaining miles if needed', 'miles', 13, 'task', None),
+        # 2-4 weeks before — research decisions
+        ('pre_departure_month', 'Reserve pocket WiFi or purchase eSIM', 'month', 14, 'decision', None),
+        ('pre_departure_month', 'Book TeamLab tickets', 'month', 15, 'decision', None),
+        ('pre_departure_month', 'Register on Visit Japan Web', 'month', 16, 'task', None),
+        ('pre_departure_month', 'Confirm travel insurance coverage', 'month', 17, 'decision', None),
+        ('pre_departure_month', 'Notify bank of Japan travel dates', 'month', 18, 'decision', None),
+        ('pre_departure_month', 'Download travel apps', 'month', 19, 'decision', None),
+        ('pre_departure_month', 'Check passport validity (6+ months)', 'month', 20, 'task', None),
+        ('pre_departure_month', 'Make copies of passport + confirmations', 'month', 21, 'task', None),
+        # Packing - Essential (simple tasks)
+        ('packing_essential', 'Passport', 'packing', 22, 'task', None),
+        ('packing_essential', 'Phone + charger', 'packing', 23, 'task', None),
+        ('packing_essential', 'Portable battery pack / power bank', 'packing', 24, 'task', None),
+        ('packing_essential', 'Comfortable walking shoes (BROKEN IN)', 'packing', 25, 'task', None),
+        ('packing_essential', 'Slip-on shoes for temples', 'packing', 26, 'task', None),
+        ('packing_essential', 'Light jacket + warm layer for mountains', 'packing', 27, 'task', None),
+        ('packing_essential', 'Rain jacket or compact umbrella', 'packing', 28, 'task', None),
+        ('packing_essential', 'Small daypack', 'packing', 29, 'task', None),
+        # Packing - Helpful (simple tasks)
+        ('packing_helpful', 'Neck pillow + eye mask for flight', 'packing', 30, 'task', None),
+        ('packing_helpful', 'Compression socks for flight', 'packing', 31, 'task', None),
+        ('packing_helpful', 'Small towel/handkerchief', 'packing', 32, 'task', None),
+        ('packing_helpful', 'Ziplock bags for snacks/trash', 'packing', 33, 'task', None),
+        ('packing_helpful', 'Packing cubes', 'packing', 34, 'task', None),
+        ('packing_helpful', 'Small notebook/pen', 'packing', 35, 'task', None),
+        ('packing_helpful', 'Earplugs', 'packing', 36, 'task', None),
+        ('packing_helpful', 'Sunglasses', 'packing', 37, 'task', None),
     ]
 
-    for cat, title, priority, order in checklists:
+    for cat, title, priority, order, item_type, accom_name in checklists:
+        accom_id = None
+        if accom_name:
+            loc = AccommodationLocation.query.filter_by(
+                location_name=accom_name).first()
+            if loc:
+                accom_id = loc.id
         item = ChecklistItem(
             category=cat, title=title,
             priority=priority, sort_order=order,
+            item_type=item_type,
+            accommodation_location_id=accom_id,
         )
         db.session.add(item)
+
+    db.session.flush()
+    _import_checklist_options()
+
+
+def _import_checklist_options():
+    """Pre-populate research options for non-accommodation decision items."""
+    print("  Importing checklist options...")
+
+    options_data = {
+        'Book Delta outbound CLE → MSP → HND': [
+            {'name': 'Delta CLE → MSP → HND', 'desc': 'Delta via Minneapolis hub',
+             'why': 'Direct booking, earn SkyMiles. ~$638/pp.',
+             'url': 'https://www.delta.com/', 'price': '~$638/pp'},
+        ],
+        'Reserve Nohi Bus (Takayama → Kanazawa)': [
+            {'name': 'Nohi Bus (Official)', 'desc': 'Direct highway bus, 2hr 15min',
+             'why': 'JR Pass does NOT cover this route. Reserve online.',
+             'url': 'https://www.nouhibus.co.jp/english/', 'price': '~¥3,900/pp'},
+            {'name': 'Hokuriku Railroad Bus', 'desc': 'Alternative operator, same route',
+             'why': 'Same price, sometimes different schedule.',
+             'url': 'https://www.hokutetsu.co.jp/', 'price': '~¥3,900/pp'},
+        ],
+        'Purchase 14-day JR Pass': [
+            {'name': 'Japan Rail Pass (Official)', 'desc': 'Official JR Pass site — buy exchange order online, activate at JR station',
+             'why': 'Most reliable. Order ships to your address.',
+             'url': 'https://japanrailpass.net/en/', 'price': '¥50,000/pp (14-day)'},
+            {'name': 'JRailPass.com', 'desc': 'Authorized reseller, sometimes has promos',
+             'why': 'Good alternative, ships voucher.',
+             'url': 'https://www.jrailpass.com/', 'price': '~¥50,000/pp'},
+            {'name': 'Buy at JR Station in Japan', 'desc': 'Purchase on arrival at major stations',
+             'why': 'Available since 2023 but ~10% more expensive. No shipping needed.',
+             'url': 'https://www.japanrailpass.net/en/purchase.html', 'price': '~¥55,000/pp'},
+        ],
+        'Book United award return NRT → LAX → CLE': [
+            {'name': 'United MileagePlus Award', 'desc': 'Book with United miles',
+             'why': 'Use accumulated miles. Check saver availability.',
+             'url': 'https://www.united.com/en/us/awardtravel', 'price': '~35K-70K miles + taxes'},
+            {'name': 'Buy Miles if Short', 'desc': 'Purchase additional miles from United',
+             'why': 'Sometimes cheaper than cash tickets if close to having enough.',
+             'url': 'https://www.united.com/ual/en/us/fly/mileageplus/buy-miles.html', 'price': '~3.5¢/mile'},
+        ],
+        'Reserve pocket WiFi or purchase eSIM': [
+            {'name': 'Ubigi eSIM', 'desc': 'Digital eSIM — instant activation via app, no physical device',
+             'why': 'Works on any eSIM phone (iPhone XS+). No pickup needed.',
+             'url': 'https://www.ubigi.com/en/japan-esim', 'price': '$15-30 / 2 weeks'},
+            {'name': 'Airalo eSIM', 'desc': 'Largest eSIM marketplace with Japan plans',
+             'why': 'More plan options, widely recommended by travelers.',
+             'url': 'https://www.airalo.com/japan-esim', 'price': '$15-25 / 2 weeks'},
+            {'name': 'Japan Wireless Pocket WiFi', 'desc': 'Physical hotspot device — share between 2 phones',
+             'why': 'One device, both phones connected. Strongest signal in rural areas.',
+             'url': 'https://www.japan-wireless.com/', 'price': '$4-6/day (~$60-85 total)'},
+            {'name': 'Sakura Mobile WiFi', 'desc': 'Airport pickup at Haneda/Narita',
+             'why': 'Convenient pickup on arrival. Good coverage.',
+             'url': 'https://www.sakuramobile.jp/wifi-rental/', 'price': '$5-7/day'},
+        ],
+        'Book TeamLab tickets': [
+            {'name': 'TeamLab Planets (Toyosu)', 'desc': 'Immersive water art museum — walk barefoot through installations',
+             'why': 'The original. Walk through knee-deep water. Sells out 2-3 weeks ahead.',
+             'url': 'https://planets.teamlab.art/tokyo/en/', 'price': '~¥3,800/pp'},
+            {'name': 'TeamLab Borderless (Azabudai Hills)', 'desc': 'New 2024 location — no fixed path, rooms bleed into each other',
+             'why': 'Relocated from Odaiba. Larger, newer. Also sells out fast.',
+             'url': 'https://www.teamlab.art/e/borderless-azabudai/', 'price': '~¥4,000/pp'},
+        ],
+        'Confirm travel insurance coverage': [
+            {'name': 'Chase Sapphire Trip Protection', 'desc': 'Credit card included benefit — trip cancellation + interruption',
+             'why': 'Free if flights paid with Sapphire. Check your card benefits.',
+             'url': 'https://www.chase.com/personal/credit-cards/sapphire/preferred', 'price': 'Free (included)'},
+            {'name': 'World Nomads', 'desc': 'Comprehensive travel insurance — adventure activities covered',
+             'why': 'Popular with travelers. Covers medical, gear, adventure sports.',
+             'url': 'https://www.worldnomads.com/', 'price': '~$50-80 / 2 weeks'},
+            {'name': 'SafetyWing', 'desc': 'Subscription travel insurance — month-to-month',
+             'why': 'Flexible monthly billing. Good for longer trips.',
+             'url': 'https://safetywing.com/', 'price': '~$40 / 4 weeks'},
+        ],
+        'Notify bank of Japan travel dates': [
+            {'name': 'Chase Travel Notice', 'desc': 'Set travel notification in Chase app or website',
+             'why': 'Prevents fraud blocks on Japan transactions. Takes 30 seconds.',
+             'url': 'https://www.chase.com/digital/login', 'price': 'Free'},
+            {'name': 'Check ATM Strategy', 'desc': 'Know where to get yen: 7-Eleven ATMs accept foreign cards',
+             'why': '7-Eleven and Japan Post ATMs are most reliable for foreign cards.',
+             'url': 'https://www.japan-guide.com/e/e2208.html', 'price': '~$3-5 fee/withdrawal'},
+        ],
+        'Download travel apps': [
+            {'name': 'Google Translate (offline JP pack)', 'desc': 'Download Japanese offline pack for camera translate',
+             'why': 'Camera mode reads menus, signs. Works offline.',
+             'url': 'https://translate.google.com/', 'price': 'Free'},
+            {'name': 'Navitime for Japan Travel', 'desc': 'Best app for Japan train routes, includes IC card balance',
+             'why': 'Better than Google Maps for trains. Shows platform numbers.',
+             'url': 'https://www.navitime.co.jp/inbound/', 'price': 'Free'},
+            {'name': 'Suica/PASMO (Apple Wallet)', 'desc': 'Add IC card to Apple Wallet — tap to ride trains, pay at konbini',
+             'why': 'No physical card needed. Recharge in-app. Works everywhere.',
+             'url': 'https://support.apple.com/en-us/HT207154', 'price': 'Free (load ¥)'},
+            {'name': 'Google Maps (offline: Tokyo, Kyoto, Takayama)', 'desc': 'Download offline maps for each city',
+             'why': 'Works without data. Download before you leave.',
+             'url': 'https://support.google.com/maps/answer/6291838', 'price': 'Free'},
+            {'name': 'Tabelog', 'desc': 'Japan\'s #1 restaurant rating app (like Japanese Yelp)',
+             'why': 'More accurate than Google reviews for Japan. 3.5+ is excellent.',
+             'url': 'https://tabelog.com/', 'price': 'Free'},
+        ],
+        'Register on Visit Japan Web': [
+            {'name': 'Visit Japan Web', 'desc': 'Pre-fill customs & immigration forms online before landing',
+             'why': 'Skip the paper forms on the plane. QR code at immigration.',
+             'url': 'https://www.vjw.digital.go.jp/', 'price': 'Free'},
+        ],
+    }
+
+    for title, opts in options_data.items():
+        item = ChecklistItem.query.filter_by(title=title).first()
+        if not item:
+            continue
+        for i, opt in enumerate(opts, 1):
+            option = ChecklistOption(
+                checklist_item_id=item.id,
+                name=opt['name'],
+                description=opt.get('desc'),
+                why=opt.get('why'),
+                url=opt.get('url'),
+                price_note=opt.get('price'),
+                sort_order=i,
+            )
+            db.session.add(option)
 
 
 def import_reference(master):

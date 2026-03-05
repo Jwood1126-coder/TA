@@ -115,6 +115,7 @@ class AccommodationOption(db.Model):
     booking_url = db.Column(db.String(500))
     alt_booking_url = db.Column(db.String(500))
     is_selected = db.Column(db.Boolean, default=False)
+    is_eliminated = db.Column(db.Boolean, default=False)
     booking_status = db.Column(db.String(50), default='not_booked')
     confirmation_number = db.Column(db.String(100))
     address = db.Column(db.String(500))
@@ -198,6 +199,15 @@ class ChecklistItem(db.Model):
     completed_at = db.Column(db.DateTime)
     priority = db.Column(db.String(50))
     sort_order = db.Column(db.Integer)
+    item_type = db.Column(db.String(20), default='task')  # 'task' or 'decision'
+    status = db.Column(db.String(20), default='pending')   # pending/researching/decided/booked/completed
+    accommodation_location_id = db.Column(db.Integer,
+                                          db.ForeignKey('accommodation_location.id'),
+                                          nullable=True)
+    options = db.relationship('ChecklistOption', backref='checklist_item',
+                              lazy=True, order_by='ChecklistOption.sort_order')
+    accommodation_location = db.relationship('AccommodationLocation',
+                                             backref='checklist_item')
 
     def to_dict(self):
         return {
@@ -206,6 +216,38 @@ class ChecklistItem(db.Model):
             'title': self.title,
             'is_completed': self.is_completed,
             'priority': self.priority,
+            'item_type': self.item_type,
+            'status': self.status,
+        }
+
+
+class ChecklistOption(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    checklist_item_id = db.Column(db.Integer,
+                                  db.ForeignKey('checklist_item.id'),
+                                  nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    why = db.Column(db.Text)
+    url = db.Column(db.String(500))
+    price_note = db.Column(db.String(100))
+    is_eliminated = db.Column(db.Boolean, default=False)
+    is_selected = db.Column(db.Boolean, default=False)
+    user_notes = db.Column(db.Text)
+    sort_order = db.Column(db.Integer, default=0)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'checklist_item_id': self.checklist_item_id,
+            'name': self.name,
+            'description': self.description,
+            'why': self.why,
+            'url': self.url,
+            'price_note': self.price_note,
+            'is_eliminated': self.is_eliminated,
+            'is_selected': self.is_selected,
+            'user_notes': self.user_notes,
         }
 
 

@@ -18,9 +18,13 @@ def _run_migrations(app):
     migrations = [
         ('activity', 'address', 'TEXT'),
         ('accommodation_option', 'address', 'TEXT'),
+        ('accommodation_option', 'is_eliminated', 'BOOLEAN DEFAULT 0'),
         ('location', 'address', 'TEXT'),
         ('flight', 'confirmation_number', 'TEXT'),
         ('chat_message', 'image_filename', 'TEXT'),
+        ('checklist_item', 'item_type', "TEXT DEFAULT 'task'"),
+        ('checklist_item', 'status', "TEXT DEFAULT 'pending'"),
+        ('checklist_item', 'accommodation_location_id', 'INTEGER'),
     ]
     for table, column, col_type in migrations:
         try:
