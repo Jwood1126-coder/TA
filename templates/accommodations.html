@@ -2,7 +2,7 @@
 {% block title %}Accommodations{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_hotel, icon_pin, icon_budget, icon_translate %}
+{% from "icons.html" import icon_hotel, icon_pin, icon_budget, icon_translate, icon_delete, icon_chevron %}
 <header>
     <h1>{{ icon_hotel(22) }} Accommodations</h1>
     <p>Pick one option per location. Track your bookings.</p>
@@ -84,12 +84,22 @@
                    class="translate-btn" title="Open translated to English">{{ icon_translate(14) }} EN</a>
                 {% endif %}
             </div>
+            <div class="editable-url">
+                <input type="url" placeholder="Booking URL" value="{{ option.booking_url or '' }}"
+                       id="url-{{ option.id }}">
+                <button class="save-url-btn" onclick="updateOptionUrl({{ option.id }})">Save URL</button>
+            </div>
 
             <div class="option-actions">
                 <button class="select-btn {% if option.is_selected %}active{% endif %}"
                         onclick="selectOption({{ option.id }})">
                     {% if option.is_selected %}Selected{% else %}Select This{% endif %}
                 </button>
+                <div class="option-manage">
+                    <button class="reorder-btn" onclick="reorderOption({{ option.id }}, 'up')" title="Move up">{{ icon_chevron(14) }}</button>
+                    <button class="reorder-btn down" onclick="reorderOption({{ option.id }}, 'down')" title="Move down">{{ icon_chevron(14) }}</button>
+                    <button class="delete-btn" onclick="deleteOption({{ option.id }}, '{{ option.name | e }}')" title="Remove">{{ icon_delete(14) }}</button>
+                </div>
             </div>
 
             <div class="booking-tracker">

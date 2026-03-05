@@ -1119,6 +1119,59 @@ body {
     color: #fff;
 }
 
+.option-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0.5rem;
+}
+.option-actions .select-btn { flex: 1; width: auto; }
+.option-manage {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.reorder-btn, .delete-btn {
+    background: transparent;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--pico-muted-color);
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+}
+.reorder-btn svg { transform: rotate(180deg); }
+.reorder-btn.down svg { transform: rotate(0deg); }
+.reorder-btn:hover { color: var(--accent); border-color: var(--accent); }
+.delete-btn:hover { color: #dc2626; border-color: #dc2626; }
+
+.editable-url {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-top: 4px;
+}
+.editable-url input {
+    flex: 1;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+}
+.editable-url .save-url-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
 .booking-tracker {
     display: flex;
     gap: 8px;
@@ -2344,6 +2397,11 @@ h1 svg, h2 svg, h3 svg { vertical-align: -3px; margin-right: 4px; }
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
+}
+.doc-card-type {
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
+    font-weight: 400;
 }
 .doc-card-meta {
     font-size: 0.8rem;

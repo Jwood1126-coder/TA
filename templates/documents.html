@@ -2,7 +2,7 @@
 {% block title %}Travel Documents{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_plane, icon_hotel, icon_train, icon_shinkansen, icon_bus, icon_pin, icon_clipboard, icon_translate %}
+{% from "icons.html" import icon_plane, icon_hotel, icon_train, icon_shinkansen, icon_bus, icon_pin, icon_clipboard, icon_translate, icon_lightbulb, icon_ticket, icon_link %}
 <header>
     <h1>{{ icon_clipboard(22) }} Travel Documents</h1>
 </header>
@@ -95,6 +95,7 @@
     <div class="doc-card">
         <div class="doc-card-header">
             <strong>{{ opt.name }}</strong>
+            {% if opt.property_type %}<span class="doc-card-type">{{ opt.property_type }}</span>{% endif %}
             {% if opt.booking_status and opt.booking_status != 'not_booked' %}
             <span class="booking-badge {{ opt.booking_status }}">{{ opt.booking_status | replace('_', ' ') | title }}</span>
             {% endif %}
@@ -112,6 +113,14 @@
         </div>
         {% endif %}
         <div class="doc-details">
+            {% if opt.price_low and opt.price_high %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Rate</span>
+                <span>${{ opt.price_low|int }}&ndash;${{ opt.price_high|int }}/night
+                    {% if opt.total_low %}&middot; Total: ${{ opt.total_low|int }}&ndash;${{ opt.total_high|int }}{% endif %}
+                </span>
+            </div>
+            {% endif %}
             {% if opt.confirmation_number %}
             <div class="doc-detail-row">
                 <span class="doc-detail-label">Confirmation</span>
@@ -154,7 +163,52 @@
 </details>
 {% endif %}
 
-{% if not flights and not accommodations and not transport %}
+<!-- Ticketed Activities & Events -->
+{% if ticketed_activities %}
+<details class="doc-section">
+    <summary class="doc-section-title">{{ icon_lightbulb(18) }} Activities &amp; Events</summary>
+    {% for item in ticketed_activities %}
+    {% set a = item.activity %}
+    {% set d = item.day %}
+    <div class="doc-card">
+        <div class="doc-card-header">
+            <strong>{{ a.title }}</strong>
+            {% if a.jr_pass_covered %}<span class="jr-badge">JR Pass</span>{% endif %}
+        </div>
+        <div class="doc-card-meta">
+            Day {{ d.day_number }} &middot; {{ d.date.strftime('%b %d') }} &middot; {{ item.location.name }}
+            {% if a.time_slot %}&middot; {{ a.time_slot | title }}{% endif %}
+        </div>
+        <div class="doc-details">
+            {% if a.cost_note %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Cost</span>
+                <span>{{ a.cost_note }}</span>
+            </div>
+            {% elif a.cost_per_person %}
+            <div class="doc-detail-row">
+                <span class="doc-detail-label">Cost</span>
+                <span>&yen;{{ a.cost_per_person|int }}/person</span>
+            </div>
+            {% endif %}
+            {% if a.address %}
+            <div class="doc-detail-row">
+                <a href="{{ a.address | maps_link }}" target="_blank" rel="noopener" class="navigate-link">{{ icon_pin(14) }} {{ a.address }}</a>
+            </div>
+            {% endif %}
+            {% if a.url %}
+            <div class="doc-detail-row">
+                <a href="{{ a.url }}" target="_blank" rel="noopener" class="doc-link">{{ icon_link(14) }} Details / Tickets</a>
+                <a href="{{ a.url | translate_link }}" target="_blank" rel="noopener" class="translate-btn" title="Translate">{{ icon_translate(14) }} EN</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</details>
+{% endif %}
+
+{% if not flights and not accommodations and not transport and not ticketed_activities %}
 <p class="empty-state">No travel documents yet. Import your travel plan to get started.</p>
 {% endif %}
 {% endblock %}

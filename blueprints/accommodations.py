@@ -46,6 +46,47 @@ def eliminate_option(option_id):
     return jsonify({'ok': True, 'is_eliminated': option.is_eliminated})
 
 
+@accommodations_bp.route('/api/accommodations/<int:option_id>/delete',
+                          methods=['DELETE'])
+def delete_option(option_id):
+    option = AccommodationOption.query.get_or_404(option_id)
+    loc_id = option.location_id
+    db.session.delete(option)
+    # Re-rank remaining options
+    remaining = AccommodationOption.query.filter_by(
+        location_id=loc_id).order_by(AccommodationOption.rank).all()
+    for i, opt in enumerate(remaining, 1):
+        opt.rank = i
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('accommodation_updated', {'location_id': loc_id})
+    return jsonify({'ok': True})
+
+
+@accommodations_bp.route('/api/accommodations/<int:option_id>/reorder',
+                          methods=['PUT'])
+def reorder_option(option_id):
+    option = AccommodationOption.query.get_or_404(option_id)
+    data = request.get_json()
+    direction = data.get('direction')  # 'up' or 'down'
+    siblings = AccommodationOption.query.filter_by(
+        location_id=option.location_id
+    ).order_by(AccommodationOption.rank).all()
+    idx = next((i for i, o in enumerate(siblings) if o.id == option.id), None)
+    if idx is None:
+        return jsonify({'ok': False}), 400
+    if direction == 'up' and idx > 0:
+        siblings[idx].rank, siblings[idx-1].rank = siblings[idx-1].rank, siblings[idx].rank
+    elif direction == 'down' and idx < len(siblings) - 1:
+        siblings[idx].rank, siblings[idx+1].rank = siblings[idx+1].rank, siblings[idx].rank
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('accommodation_updated', {'location_id': option.location_id})
+    return jsonify({'ok': True})
+
+
 VALID_BOOKING_STATUSES = {'not_booked', 'researching', 'booked', 'confirmed', 'cancelled'}
 
 
@@ -62,6 +103,10 @@ def update_status(option_id):
     option.confirmation_number = data.get('confirmation_number',
                                           option.confirmation_number)
     option.user_notes = data.get('user_notes', option.user_notes)
+    if 'booking_url' in data:
+        option.booking_url = data['booking_url'] or None
+    if 'address' in data:
+        option.address = data['address'] or None
 
     # Sync booking status to linked checklist item
     if new_status is not None:

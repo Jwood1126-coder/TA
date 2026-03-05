@@ -59,3 +59,44 @@ async function updateOptionNotes(optionId, value) {
         console.error('Update notes failed:', err);
     }
 }
+
+async function reorderOption(optionId, direction) {
+    try {
+        const resp = await fetch(`/api/accommodations/${optionId}/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ direction })
+        });
+        const data = await resp.json();
+        if (data.ok) location.reload();
+    } catch (err) {
+        console.error('Reorder failed:', err);
+    }
+}
+
+async function updateOptionUrl(optionId) {
+    const input = document.getElementById(`url-${optionId}`);
+    try {
+        await fetch(`/api/accommodations/${optionId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ booking_url: input.value })
+        });
+        location.reload();
+    } catch (err) {
+        console.error('Update URL failed:', err);
+    }
+}
+
+async function deleteOption(optionId, name) {
+    if (!confirm(`Remove "${name}" from options?`)) return;
+    try {
+        const resp = await fetch(`/api/accommodations/${optionId}/delete`, {
+            method: 'DELETE'
+        });
+        const data = await resp.json();
+        if (data.ok) location.reload();
+    } catch (err) {
+        console.error('Delete failed:', err);
+    }
+}

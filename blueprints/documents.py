@@ -1,5 +1,6 @@
+import re
 from flask import Blueprint, render_template, jsonify, request
-from models import db, Flight, AccommodationLocation, AccommodationOption, TransportRoute
+from models import db, Flight, AccommodationLocation, AccommodationOption, TransportRoute, Location, Day
 
 documents_bp = Blueprint('documents', __name__)
 
@@ -20,10 +21,26 @@ def documents_view():
 
     transport = TransportRoute.query.order_by(TransportRoute.sort_order).all()
 
+    # Activities with tickets/bookings (have URL or cost)
+    locations = Location.query.order_by(Location.sort_order).all()
+    days = Day.query.order_by(Day.day_number).all()
+    ticketed_activities = []
+    for loc in locations:
+        loc_days = [d for d in days if d.location_id == loc.id]
+        for d in loc_days:
+            for a in d.activities:
+                if a.is_substitute:
+                    continue
+                if a.url or a.cost_per_person:
+                    ticketed_activities.append({
+                        'activity': a, 'day': d, 'location': loc
+                    })
+
     return render_template('documents.html',
                            flights=flights,
                            accommodations=accommodations,
-                           transport=transport)
+                           transport=transport,
+                           ticketed_activities=ticketed_activities)
 
 
 @documents_bp.route('/api/documents/flight/<int:flight_id>/confirmation',
