@@ -33,10 +33,9 @@ def index():
     completed_activities = Activity.query.filter_by(
         is_substitute=False, is_completed=True).count()
 
-    from models import AccommodationOption
-    booked_accommodations = AccommodationOption.query.filter(
-        AccommodationOption.booking_status != 'not_booked').count()
-    total_locations = 8  # hardcoded for simplicity
+    total_locations = AccommodationLocation.query.count()
+    booked_accommodations = AccommodationOption.query.filter_by(
+        is_selected=True).count()
 
     return render_template('index.html',
                            trip=trip,
@@ -85,19 +84,33 @@ def day_view(day_number):
     day_checkout = AccommodationLocation.query.filter_by(check_out_date=day.date).first()
     checkin_option = None
     checkout_option = None
+    checkin_options_pending = []
+    checkout_options_pending = []
+
     if day_checkin:
         checkin_option = AccommodationOption.query.filter_by(
             location_id=day_checkin.id, is_selected=True).first()
+        if not checkin_option:
+            checkin_options_pending = AccommodationOption.query.filter_by(
+                location_id=day_checkin.id, is_eliminated=False
+            ).order_by(AccommodationOption.rank).all()
+
     if day_checkout:
         checkout_option = AccommodationOption.query.filter_by(
             location_id=day_checkout.id, is_selected=True).first()
+        if not checkout_option:
+            checkout_options_pending = AccommodationOption.query.filter_by(
+                location_id=day_checkout.id, is_eliminated=False
+            ).order_by(AccommodationOption.rank).all()
 
     return render_template('day.html', day=day, prev_day=prev_day,
                            next_day=next_day, total_days=total_days,
                            transport_routes=transport_routes,
                            day_flights=day_flights,
                            day_checkin=day_checkin, checkin_option=checkin_option,
-                           day_checkout=day_checkout, checkout_option=checkout_option)
+                           day_checkout=day_checkout, checkout_option=checkout_option,
+                           checkin_options_pending=checkin_options_pending,
+                           checkout_options_pending=checkout_options_pending)
 
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/toggle', methods=['POST'])

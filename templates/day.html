@@ -47,6 +47,26 @@
         {% endif %}
     </div>
 </section>
+{% elif day_checkout and checkout_options_pending %}
+<section class="accommodation-day-card checkout pending-choice">
+    <div class="accom-day-icon">&#x1f6ce;</div>
+    <div class="accom-day-info">
+        <div class="accom-day-label">Check out &middot; {{ day_checkout.location_name }}</div>
+        <div class="accom-pending-options">
+            {% for opt in checkout_options_pending %}
+            <div class="accom-pending-option">
+                <span class="accom-pending-rank">#{{ opt.rank }}</span>
+                <span class="accom-pending-name">{{ opt.name }}</span>
+                <span class="accom-pending-price">{{ opt.price_tier }}</span>
+                {% if opt.booking_url %}
+                <a href="{{ opt.booking_url }}" target="_blank" rel="noopener" class="accom-pending-link">View</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <a href="{{ url_for('checklists.checklists_view') }}?tab=pre_trip" class="choose-link">Choose in checklist &rarr;</a>
+    </div>
+</section>
 {% endif %}
 
 <!-- Transport to this location (travel days) -->
@@ -128,6 +148,27 @@
         <span class="booking-badge {{ checkin_option.booking_status }}">
             {{ checkin_option.booking_status | replace('_', ' ') | title }}
         </span>
+    </div>
+</section>
+{% elif day_checkin and checkin_options_pending %}
+<section class="accommodation-day-card checkin pending-choice">
+    <div class="accom-day-icon">&#x1f3e8;</div>
+    <div class="accom-day-info">
+        <div class="accom-day-label">Check in &middot; {{ day_checkin.location_name }}</div>
+        <div class="accom-dates-sm">{{ day_checkin.num_nights }} night{{ 's' if day_checkin.num_nights != 1 }}</div>
+        <div class="accom-pending-options">
+            {% for opt in checkin_options_pending %}
+            <div class="accom-pending-option">
+                <span class="accom-pending-rank">#{{ opt.rank }}</span>
+                <span class="accom-pending-name">{{ opt.name }}</span>
+                <span class="accom-pending-price">{{ opt.price_tier }}</span>
+                {% if opt.booking_url %}
+                <a href="{{ opt.booking_url }}" target="_blank" rel="noopener" class="accom-pending-link">Book</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <a href="{{ url_for('checklists.checklists_view') }}?tab=pre_trip" class="choose-link">Choose in checklist &rarr;</a>
     </div>
 </section>
 {% endif %}

@@ -22,6 +22,7 @@ def _run_migrations(app):
         ('location', 'address', 'TEXT'),
         ('flight', 'confirmation_number', 'TEXT'),
         ('chat_message', 'image_filename', 'TEXT'),
+        ('checklist_item', 'url', 'TEXT'),
         ('checklist_item', 'item_type', "TEXT DEFAULT 'task'"),
         ('checklist_item', 'status', "TEXT DEFAULT 'pending'"),
         ('checklist_item', 'accommodation_location_id', 'INTEGER'),

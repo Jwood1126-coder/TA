@@ -40,6 +40,10 @@
                 <span class="checkmark"></span>
                 <span class="check-text">{{ item.title }}</span>
             </label>
+            {% if item.url %}
+            <a href="{{ item.url }}" target="_blank" rel="noopener" class="task-link-icon"
+               onclick="event.stopPropagation()">&#x1f517;</a>
+            {% endif %}
         </div>
 
         {% else %}
@@ -106,8 +110,8 @@
                     {% if option.property_type %}
                     <span class="cl-option-type">{{ option.property_type }}</span>
                     {% endif %}
-                    {% if option.price_low and option.price_high %}
-                    <span class="cl-option-price">${{ option.price_low|int }}-{{ option.price_high|int }}/nt</span>
+                    {% if option.price_tier %}
+                    <span class="cl-option-price">{{ option.price_tier }}</span>
                     {% endif %}
                 </div>
                 <div class="cl-option-body" style="display:none;">

@@ -1288,6 +1288,30 @@ body {
 .accom-day-conf { font-size: 0.8rem; color: var(--pico-muted-color); }
 .accom-day-status { flex-shrink: 0; }
 
+/* Pending accommodation choice cards */
+.accommodation-day-card.pending-choice {
+    border-left: 4px solid #f59e0b;
+    background: linear-gradient(135deg, #fffbeb, transparent);
+}
+.accom-pending-options { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.accom-pending-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: rgba(255,255,255,0.7);
+    border-radius: 6px; font-size: 0.85rem;
+}
+.accom-pending-rank { font-weight: 600; color: var(--pico-muted-color); min-width: 22px; }
+.accom-pending-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accom-pending-price { font-weight: 600; color: var(--jr-green); min-width: 24px; }
+.accom-pending-link {
+    font-size: 0.75rem; padding: 2px 8px; border-radius: 4px;
+    background: var(--sakura); color: var(--sakura-text); text-decoration: none;
+}
+.accom-dates-sm { font-size: 0.75rem; color: var(--pico-muted-color); }
+.choose-link { display: inline-block; margin-top: 8px; font-size: 0.8rem; color: var(--accent); text-decoration: none; }
+.choose-link:hover { text-decoration: underline; }
+.task-link-icon { text-decoration: none; font-size: 0.85rem; opacity: 0.6; margin-left: 4px; }
+.task-link-icon:hover { opacity: 1; }
+
 /* Google Maps Links */
 .maps-link {
     display: inline-block;
@@ -1397,6 +1421,8 @@ body {
 [data-theme="dark"] .image-preview { background: #1e1e1e; }
 [data-theme="dark"] .image-preview img { border-color: #4a2030; }
 [data-theme="dark"] .accommodation-day-card { background: linear-gradient(135deg, var(--sakura-light), transparent); border-color: #4a2030; }
+[data-theme="dark"] .accommodation-day-card.pending-choice { background: linear-gradient(135deg, #3d3520, transparent); border-color: #f59e0b; }
+[data-theme="dark"] .accom-pending-option { background: rgba(255,255,255,0.05); }
 [data-theme="dark"] .checklist-mode-tabs { border-color: #4a2030; }
 [data-theme="dark"] .mode-tab { color: var(--sakura-text); }
 [data-theme="dark"] .mode-tab.active { background: var(--accent); color: #fff; }

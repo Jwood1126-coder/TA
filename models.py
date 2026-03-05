@@ -121,6 +121,17 @@ class AccommodationOption(db.Model):
     address = db.Column(db.String(500))
     user_notes = db.Column(db.Text)
 
+    @property
+    def price_tier(self):
+        if self.price_low is None:
+            return ''
+        if self.price_low < 60:
+            return '$'
+        elif self.price_low <= 120:
+            return '$$'
+        else:
+            return '$$$'
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -199,6 +210,7 @@ class ChecklistItem(db.Model):
     completed_at = db.Column(db.DateTime)
     priority = db.Column(db.String(50))
     sort_order = db.Column(db.Integer)
+    url = db.Column(db.String(500))
     item_type = db.Column(db.String(20), default='task')  # 'task' or 'decision'
     status = db.Column(db.String(20), default='pending')   # pending/researching/decided/booked/completed
     accommodation_location_id = db.Column(db.Integer,
