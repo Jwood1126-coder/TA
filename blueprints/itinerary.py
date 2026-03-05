@@ -143,8 +143,26 @@ def day_view(day_number):
     ).order_by(Flight.leg_number).all()
 
     # Accommodation check-in/out on this day
+    # Try exact date match first, then fallback to location name match
     day_checkin = AccommodationLocation.query.filter_by(check_in_date=day.date).first()
     day_checkout = AccommodationLocation.query.filter_by(check_out_date=day.date).first()
+
+    # Fallback: match by location name if date didn't find anything
+    if not day_checkin and day.location:
+        loc_name = day.location.name
+        candidate = AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains(loc_name)
+        ).first()
+        if candidate and candidate.check_in_date == day.date:
+            day_checkin = candidate
+    if not day_checkout and day.location:
+        loc_name = day.location.name
+        candidate = AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains(loc_name)
+        ).first()
+        if candidate and candidate.check_out_date == day.date:
+            day_checkout = candidate
+
     checkin_option = None
     checkout_option = None
     checkin_options_pending = []

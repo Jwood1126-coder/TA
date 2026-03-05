@@ -660,6 +660,371 @@ def _seed_activity_urls():
             a.url = url
 
 
+def _revise_itinerary_activities(app):
+    """Comprehensive revision of itinerary activities — fixes sparse days,
+    wrong time slots, incorrect optional flags, and missing activities.
+    Idempotent: skips if sentinel activity already exists."""
+    from models import Day, Activity
+
+    # Guard: check if already revised
+    if Activity.query.filter(Activity.title.contains('ACTIVATE 14-Day JR Pass')).first():
+        return
+
+    def _replace_day(day_num, activities_data):
+        """Delete non-substitute activities for a day and insert new ones."""
+        day = Day.query.filter_by(day_number=day_num).first()
+        if not day:
+            return
+        Activity.query.filter_by(day_id=day.id).filter(
+            Activity.is_substitute == False  # noqa: E712
+        ).delete()
+        for i, a_data in enumerate(activities_data):
+            a = Activity(
+                day_id=day.id,
+                title=a_data['title'],
+                description=a_data.get('desc'),
+                time_slot=a_data.get('slot'),
+                start_time=a_data.get('start_time'),
+                cost_per_person=a_data.get('cost'),
+                cost_note=a_data.get('cost_note'),
+                is_optional=a_data.get('optional', False),
+                jr_pass_covered=a_data.get('jr', False),
+                address=a_data.get('address'),
+                url=a_data.get('url'),
+                sort_order=i + 1,
+            )
+            db.session.add(a)
+
+    # ── Day 3: Arrive Tokyo ──
+    _replace_day(3, [
+        {'title': 'Pick up Welcome Suica IC card',
+         'slot': 'afternoon', 'desc': 'At Haneda Terminal 3 JR East Travel Service Center. Load ¥3,000 initially. Expires 28 days from purchase.'},
+        {'title': 'Activate eSIM or pick up pocket WiFi',
+         'slot': 'afternoon', 'desc': 'At airport counter. Essential for navigation and translation.'},
+        {'title': 'Keikyu Line to Asakusa',
+         'slot': 'afternoon', 'desc': '~30 min, ~¥500. Use IC card.', 'cost': 500},
+        {'title': 'Check into Dormy Inn Asakusa',
+         'slot': 'afternoon', 'desc': 'Drop bags and freshen up. Rooftop onsen + free late-night ramen available.'},
+        {'title': 'Light dinner nearby',
+         'slot': 'evening', 'optional': True,
+         'desc': 'Walk-up ramen shop (¥800-1,200), conveyor belt sushi, or grab onigiri + bento from 7-Eleven.'},
+        {'title': 'Senso-ji Temple at night',
+         'slot': 'evening', 'optional': True,
+         'desc': 'Beautifully illuminated, almost empty at night. Completely different atmosphere than daytime. 5-min walk from Dormy Inn.',
+         'address': '2-3-1 Asakusa, Taito-ku, Tokyo',
+         'url': 'https://www.senso-ji.jp/english/'},
+        {'title': 'Rooftop onsen bath at Dormy Inn',
+         'slot': 'night', 'optional': True,
+         'desc': 'Soak away the long journey. Open late.'},
+        {'title': 'Free late-night ramen at Dormy Inn',
+         'slot': 'night', 'optional': True,
+         'desc': 'Served ~9:30 PM. A beloved Dormy Inn perk.'},
+    ])
+
+    # ── Day 5: Hakone Day Trip ──
+    _replace_day(5, [
+        {'title': 'ACTIVATE 14-Day JR Pass',
+         'slot': 'morning', 'start_time': '~8:00 AM',
+         'desc': 'Tokyo Station JR Ticket Office (Marunouchi side). Bring exchange voucher + passports. This activates your pass for all JR trains through Apr 21.'},
+        {'title': 'Shinkansen Tokyo → Odawara',
+         'slot': 'morning', 'jr': True,
+         'desc': '~35 min on Kodama or Hikari. First use of your JR Pass!'},
+        {'title': 'Buy Hakone Free Pass at Odawara Station',
+         'slot': 'morning', 'cost': 6000, 'cost_note': '¥6,000/person 2-day pass',
+         'desc': 'Covers all Hakone Loop transport (train, cable car, ropeway, pirate ship, bus). Separate from JR Pass. Buy at Odawara Station Hakone Tozan counter.',
+         'url': 'https://www.hakonenavi.jp/en/'},
+        {'title': 'Hakone Loop: Switchback Train to Gora',
+         'slot': 'morning',
+         'desc': 'Odawara → Gora on the Hakone Tozan Railway. Scenic mountain railway that zigzags up steep slopes.'},
+        {'title': 'Hakone Loop: Cable Car to Owakudani',
+         'slot': 'morning',
+         'desc': 'Volcanic valley with steam vents, sulfur smell, dramatic moonscape. Try the famous black eggs cooked in volcanic steam — supposedly add 7 years to your life!'},
+        {'title': 'Hakone Loop: Ropeway over mountains',
+         'slot': 'afternoon',
+         'desc': 'Aerial gondola with panoramic mountain views. On clear days, Mt. Fuji visible. Continues to Togendai on Lake Ashi.'},
+        {'title': 'Hakone Loop: Lake Ashi Pirate Ship',
+         'slot': 'afternoon',
+         'desc': 'Cruise across the lake on a replica pirate ship. Mt. Fuji views across the water on clear days. Very scenic.'},
+        {'title': 'Hakone Open-Air Museum',
+         'slot': 'afternoon', 'optional': True,
+         'desc': 'Sculptures + Picasso collection in a stunning mountain setting. Worth the detour if time allows.',
+         'url': 'https://www.hakone-oam.or.jp/en/'},
+        {'title': 'Day-use onsen: Tenzan Tohji-kyo',
+         'slot': 'afternoon', 'cost': 1300, 'cost_note': '¥1,300 entry',
+         'desc': 'Excellent outdoor baths in a forest setting near Hakone-Yumoto. The perfect end to the Hakone loop.',
+         'url': 'https://www.tenzan.jp/en/',
+         'address': '208 Yumoto-chaya, Hakone-machi'},
+        {'title': 'Shinkansen Odawara → Tokyo',
+         'slot': 'evening', 'jr': True,
+         'desc': '~35 min return trip. JR Pass covered.'},
+        {'title': 'Arrange takkyubin luggage forwarding',
+         'slot': 'evening', 'cost': 2000, 'cost_note': '~¥2,000/bag',
+         'desc': 'IMPORTANT: At Dormy Inn front desk, send big bags to your Kyoto hotel. Arrives in 1-2 days. Pack daypacks only for the Alps leg (Takayama/Kanazawa = 3 nights). Ask for "takkyubin".'},
+        {'title': 'Last free late-night ramen at Dormy Inn',
+         'slot': 'night', 'optional': True,
+         'desc': 'Your final night at Dormy Inn. Enjoy the ramen one last time.'},
+    ])
+
+    # ── Day 6: Tokyo → Takayama ──
+    _replace_day(6, [
+        {'title': 'Check out of Dormy Inn Asakusa',
+         'slot': 'morning',
+         'desc': 'Bags already sent to Kyoto via takkyubin — travel with daypacks only!'},
+        {'title': 'Shinkansen Tokyo → Nagoya',
+         'slot': 'morning', 'jr': True,
+         'desc': '~1h 40min on Hikari. Use Hikari, not Nozomi (JR Pass does not cover Nozomi).'},
+        {'title': 'JR Hida Limited Express: Nagoya → Takayama',
+         'slot': 'morning', 'jr': True,
+         'desc': "~2h 20min. One of Japan's most scenic train rides — the train winds through mountain gorges, crosses rivers, passes through tiny villages. Sit by the window."},
+        {'title': 'Check into ryokan',
+         'slot': 'afternoon',
+         'desc': 'Traditional Japanese inn. Green tea on arrival, yukata robe provided. Tatami room with futon.'},
+        {'title': 'Explore Sanmachi Suji historic district',
+         'slot': 'afternoon',
+         'desc': 'Preserved Edo-era merchant streets — dark wooden buildings, narrow alleys, willow trees. Craft shops, small galleries, pickled vegetable shops.'},
+        {'title': 'Sake brewery tastings',
+         'slot': 'afternoon', 'cost': 300, 'cost_note': '¥200-500 for tasting flights',
+         'desc': 'Look for sugidama (cedar balls) hanging outside — they indicate new sake. Many breweries offer tastings of a dozen varieties. You will buy bottles.'},
+        {'title': 'Takayama Jinya',
+         'slot': 'afternoon',
+         'desc': 'Beautifully preserved Edo-period government building with a rice storehouse. One of the last surviving magistrate offices in Japan.',
+         'url': 'https://jinya.gifu.jp/en/'},
+        {'title': 'Multi-course kaiseki dinner at ryokan',
+         'slot': 'evening',
+         'desc': '8-12 courses of seasonal Hida cuisine served in your room or a private dining area. Hida beef featured — possibly as sashimi, grilled, or in hoba miso. This is culinary art.'},
+        {'title': 'Onsen bath at ryokan',
+         'slot': 'night',
+         'desc': 'Indoor and/or outdoor baths depending on ryokan. Ask about kashikiri (private bath reservation) if you want to soak together.'},
+    ])
+
+    # ── Day 7: Full Day Takayama ──
+    _replace_day(7, [
+        {'title': 'Miyagawa Morning Market',
+         'slot': 'morning', 'start_time': '~6:00 AM',
+         'desc': 'Local farmers selling produce, pickles, crafts, and miso along the riverside. Try apple butter, mountain vegetable pickles, handmade crafts.'},
+        {'title': 'Ryokan breakfast (included)',
+         'slot': 'morning',
+         'desc': 'Traditional Japanese breakfast — rice, miso soup, grilled fish, pickles, egg. Included with ryokan stay.'},
+        {'title': 'Check out of ryokan',
+         'slot': 'morning', 'desc': 'Say goodbye to your tatami room.'},
+        {'title': 'Check into K\'s House Takayama',
+         'slot': 'morning',
+         'desc': 'Budget accommodation for the second night. Drop your bags.'},
+        {'title': 'Hida Folk Village (Hida no Sato)',
+         'slot': 'morning',
+         'desc': 'Open-air museum with 30+ traditional buildings on a hillside overlooking the Japanese Alps. Same gassho-zukuri architecture as Shirakawa-go.',
+         'url': 'https://www.hidanosato-tpo.jp/english/'},
+        {'title': 'Hida beef sushi for lunch',
+         'slot': 'afternoon', 'cost': 750, 'cost_note': '~¥600-900 for 2 pieces',
+         'desc': 'Slices of seared wagyu on rice, eaten by hand. Or try hoba miso (beef and vegetables grilled on a magnolia leaf over charcoal).'},
+        {'title': 'Sanmachi Suji & more sake breweries',
+         'slot': 'afternoon',
+         'desc': 'Return to the old town for more exploration. Different breweries, different sake. Cherry blossoms should be at or near peak bloom!'},
+        {'title': 'Takayama Festival Floats Museum (Yatai Kaikan)',
+         'slot': 'afternoon', 'optional': True,
+         'desc': 'Elaborate festival floats with intricate mechanical puppets (karakuri). The annual festival is one of Japan\'s most famous.'},
+        {'title': 'Lantern-lit old town night walk',
+         'slot': 'evening',
+         'desc': 'Walk the old streets at night — lantern-lit, nearly empty, completely different atmosphere than daytime. This is the opposite of Tokyo, and that\'s the point.'},
+        {'title': 'Izakaya dinner — Hida beef',
+         'slot': 'evening',
+         'desc': 'Try Hida beef in another preparation: sukiyaki, shabu-shabu, or sushi again. Local izakayas serve generous portions at reasonable prices.'},
+    ])
+
+    # ── Day 8: Takayama → Shirakawa-go → Kanazawa ──
+    _replace_day(8, [
+        {'title': 'Check out of K\'s House Takayama',
+         'slot': 'morning', 'desc': 'Bags packed, ready for a big travel day.'},
+        {'title': 'Nohi Bus: Takayama → Shirakawa-go',
+         'slot': 'morning', 'cost': 2800, 'cost_note': '¥2,800/person',
+         'desc': '~50 min. MUST be pre-booked at nouhibus.co.jp — sells out in cherry blossom season!',
+         'url': 'https://www.nouhibus.co.jp/english/'},
+        {'title': 'Shirakawa-go UNESCO Village',
+         'slot': 'morning',
+         'desc': 'Walk among gassho-zukuri farmhouses — steep thatched roofs built 250+ years ago to handle heavy snowfall. A storybook mountain village.'},
+        {'title': 'Wada House',
+         'slot': 'morning', 'cost': 300, 'cost_note': '~¥300 entry',
+         'desc': 'Largest preserved farmhouse, open to public. See the massive timber frame structure from inside.'},
+        {'title': 'Hike to observation deck',
+         'slot': 'morning',
+         'desc': 'THE iconic panoramic photo of the trip — the entire village spread out below with mountains behind.'},
+        {'title': 'Village lunch',
+         'slot': 'morning', 'optional': True,
+         'desc': 'Try soba noodles or gohei-mochi (grilled rice cakes with walnut-miso glaze) at a village restaurant.'},
+        {'title': 'Nohi Bus: Shirakawa-go → Kanazawa',
+         'slot': 'afternoon', 'cost': 2800, 'cost_note': '¥2,800/person',
+         'desc': '~1h 15min. Second pre-booked bus segment.'},
+        {'title': 'Check into Kaname Inn Tatemachi',
+         'slot': 'afternoon',
+         'desc': 'Boutique hotel with a vinyl record music bar downstairs. Drop bags, freshen up.'},
+        {'title': 'Kenrokuen Garden',
+         'slot': 'afternoon',
+         'desc': "One of Japan's Top 3 gardens! Possible late cherry blossoms — the garden's trees bloom slightly later. Take your time — this garden rewards slow wandering.",
+         'url': 'https://www.pref.ishikawa.jp/siro-niwa/kenrokuen/e/'},
+        {'title': 'Kanazawa Castle Park',
+         'slot': 'afternoon',
+         'desc': 'Historic castle grounds right next to Kenrokuen. Stone walls and gates with mountain backdrop.'},
+        {'title': 'Higashi Chaya Geisha District',
+         'slot': 'evening',
+         'desc': 'Atmospheric wooden teahouses lit by warm lanterns at dusk. You may hear shamisen music drifting from inside. Beautifully preserved — feels like stepping into old Japan.'},
+        {'title': 'Fresh seafood dinner at Omicho Market',
+         'slot': 'evening',
+         'desc': "Kanazawa is on the Sea of Japan coast = exceptional sushi and sashimi. Try the kaisendon (sashimi rice bowl). Snow crab if in season, buri (yellowtail), nodoguro (blackthroat seaperch).",
+         'address': 'Omicho Market, Kanazawa'},
+        {'title': 'Sai River evening walk',
+         'slot': 'night', 'optional': True,
+         'desc': 'Quiet and atmospheric riverside stroll to end the day.'},
+    ])
+
+    # ── Day 9: Kanazawa → Kyoto ──
+    _replace_day(9, [
+        {'title': '21st Century Museum of Contemporary Art',
+         'slot': 'morning',
+         'desc': 'Free outdoor installations, ticketed indoor exhibits. The "Swimming Pool" installation — you look down through glass at people who appear underwater — is iconic.',
+         'url': 'https://www.kanazawa21.jp/en/'},
+        {'title': 'D.T. Suzuki Museum',
+         'slot': 'morning',
+         'desc': 'Serene, minimalist museum of Zen Buddhism with a stunning reflective water garden. One of the most peaceful spaces in Japan. Perfect for quiet contemplation.'},
+        {'title': 'Nagamachi Samurai District',
+         'slot': 'morning',
+         'desc': 'Historic samurai residences with earthen walls and narrow stone-lined canals. Restored Nomura Samurai House is open to visitors.'},
+        {'title': 'Gold leaf ice cream at Hakuichi',
+         'slot': 'morning', 'cost': 900, 'cost_note': '~¥900',
+         'desc': 'An entire sheet of gold leaf on soft-serve ice cream. Kanazawa produces 99% of Japan\'s gold leaf. Instagram-worthy and delicious.'},
+        {'title': 'Last Omicho Market meal',
+         'slot': 'afternoon', 'optional': True,
+         'desc': 'Final chance for Kanazawa seafood. Or try Kanazawa curry — the city has its own distinct curry style.'},
+        {'title': 'Hokuriku Shinkansen: Kanazawa → Tsuruga',
+         'slot': 'afternoon', 'jr': True,
+         'desc': '~35-45 min. Use Hakutaka (faster) or Tsurugi (local shinkansen). JR Pass covered.'},
+        {'title': 'Thunderbird Express: Tsuruga → Kyoto',
+         'slot': 'afternoon', 'jr': True,
+         'desc': '~75-80 min. Timed connection at Tsuruga — same platform or adjacent, 5-10 min to transfer. Total Kanazawa→Kyoto: ~2h with transfer.'},
+        {'title': 'Check into Piece Hostel Sanjo',
+         'slot': 'evening',
+         'desc': 'Boutique hostel in central Kyoto near Keihan Line (useful for Fushimi Inari tomorrow).'},
+        {'title': 'Stroll along Kamo River',
+         'slot': 'evening',
+         'desc': 'Locals sit along the riverbanks at dusk. One of Kyoto\'s signature scenes. Very peaceful.'},
+        {'title': 'Pontocho Alley dinner',
+         'slot': 'evening',
+         'desc': 'Narrow, lantern-lit alley of restaurants running parallel to the Kamo River. Many have kamogawa terraces — outdoor riverside deck seating. Find a spot with river views. ¥2,000-5,000/person.'},
+    ])
+
+    # ── Day 12: Hiroshima & Miyajima ──
+    _replace_day(12, [
+        {'title': 'Shinkansen Kyoto → Hiroshima',
+         'slot': 'morning', 'jr': True, 'start_time': '~7:30 AM',
+         'desc': '~1h 45min on Hikari. Depart early to maximize your day. Use Hikari, not Nozomi (JR Pass).'},
+        {'title': 'Hiroshima Peace Memorial Park & Museum',
+         'slot': 'morning', 'cost': 200, 'cost_note': '¥200 museum entry',
+         'desc': 'Deeply moving. The museum tells individual human stories — letters, belongings, shadows burned into stone. Take your time. It\'s emotional. It\'s important.',
+         'url': 'https://hpmmuseum.jp/?lang=eng',
+         'address': '1-2 Nakajimacho, Naka-ku, Hiroshima'},
+        {'title': 'A-Bomb Dome',
+         'slot': 'morning',
+         'desc': 'UNESCO World Heritage Site — the only structure left standing near the hypocenter, preserved as a memorial. A short walk from the museum within Peace Park.',
+         'address': '1-10 Otemachi, Naka-ku, Hiroshima'},
+        {'title': 'Hiroshima-style okonomiyaki lunch',
+         'slot': 'afternoon',
+         'desc': 'Savory pancake layered with noodles, cabbage, pork, egg, sauce. Different from Osaka style (Osaka mixes; Hiroshima layers). Okonomimura building near Peace Park has dozens of stalls.',
+         'address': 'Okonomimura, 5-13 Shintenchi, Naka-ku, Hiroshima'},
+        {'title': 'JR train to Miyajimaguchi + JR Ferry to Miyajima',
+         'slot': 'afternoon', 'jr': True,
+         'desc': 'Train from Hiroshima station (~30 min), then JR ferry (~10 min). Both covered by JR Pass. Take the JR ferry, not the competing line.'},
+        {'title': 'Floating Itsukushima Torii Gate',
+         'slot': 'afternoon',
+         'desc': 'The iconic red gate standing in the water (restored 2022). At high tide it appears to float; at low tide you can walk to it. Check tide tables.',
+         'address': 'Miyajima, Hatsukaichi, Hiroshima'},
+        {'title': 'Itsukushima Shrine & shopping street',
+         'slot': 'afternoon',
+         'desc': 'Walk the charming shopping street to the shrine. Try momiji manju (maple leaf-shaped cakes). Friendly wild deer roam the island — they\'ll walk right up to you.'},
+        {'title': 'JR Ferry + Shinkansen Hiroshima → Kyoto',
+         'slot': 'evening', 'jr': True,
+         'desc': 'Return ferry + train to Hiroshima station, then Shinkansen back to Kyoto. Arrive ~7-8 PM. Quiet evening in your machiya.'},
+    ])
+
+    # ── Day 14: Kyoto → Tokyo ──
+    _replace_day(14, [
+        {'title': 'Last Kyoto exploration & omiyage shopping',
+         'slot': 'morning',
+         'desc': 'Pick up omiyage (souvenir gifts) — Kyoto is known for matcha sweets, yatsuhashi (cinnamon mochi), pickles. Revisit a favorite spot.'},
+        {'title': 'Check out of Kyoto accommodation',
+         'slot': 'morning', 'desc': 'Grab bags, say goodbye to Kyoto.'},
+        {'title': 'Shinkansen Kyoto → Tokyo',
+         'slot': 'afternoon', 'jr': True,
+         'desc': '~2h 15min on Hikari. Sit on the RIGHT side (seats A/B) for Mt. Fuji views around Shin-Fuji station (~1 hour in). Clear days: stunning. Cloudy: nothing. It\'s luck.',
+         'cost_note': 'Buy an ekiben (station bento box) for lunch on the train — a beloved Japanese tradition'},
+        {'title': 'Check into Toyoko Inn Shinagawa',
+         'slot': 'afternoon',
+         'desc': '1 night only — departure from Narita tomorrow.'},
+        {'title': 'TeamLab Planets',
+         'slot': 'evening',
+         'desc': 'Immersive digital art where you wade through water and walk through light. Located in Toyosu area, ~30 min from Shinagawa. Book at teamlab.art in advance — sells out! Expect 60-90 min inside.',
+         'url': 'https://planets.teamlab.art/tokyo/en/'},
+        {'title': 'Final dinner — make it special',
+         'slot': 'night',
+         'desc': 'Sushi omakase (chef\'s choice) in Ginza/Shinagawa area (¥3,000-8,000/person), or return to Omoide Yokocho for one last smoky yakitori session, or a quiet ramen shop — full circle from your first night.'},
+    ])
+
+    # ── Day 15: Departure ──
+    _replace_day(15, [
+        {'title': 'Tsukiji Outer Market farewell breakfast',
+         'slot': 'morning', 'start_time': '~7:00 AM',
+         'desc': 'Fresh sushi, tamago (egg omelette), grilled scallops, tamagoyaki. Get there early to maximize time.',
+         'address': 'Tsukiji 4-chome, Chuo-ku, Tokyo'},
+        {'title': 'Last-minute shopping',
+         'slot': 'morning', 'optional': True,
+         'desc': 'Don Quijote (discount megastore) for snack souvenirs and quirky gifts. Uniqlo for Japanese-exclusive items.'},
+        {'title': 'Check out of Toyoko Inn',
+         'slot': 'morning', 'desc': 'Grab bags. Leave Shinagawa by ~12:00 PM.'},
+        {'title': 'Narita Express: Shinagawa → Narita Airport',
+         'slot': 'afternoon', 'jr': True, 'start_time': '~12:00 PM',
+         'desc': '~50-60 min. Comfortable reserved-seat train with luggage space. Covered by JR Pass (still active through Apr 21).'},
+        {'title': 'Narita Airport omiyage shops & last meal',
+         'slot': 'afternoon', 'optional': True,
+         'desc': 'Last chance for Tokyo Banana, Royce chocolate, Kit Kat flavors, wagashi. Restaurant floor has surprisingly good food. Tax-free shopping available with passport.'},
+    ])
+
+    # ── Days 1 & 2: Minor fixes ──
+    # Day 1: fix time slots
+    day1 = Day.query.filter_by(day_number=1).first()
+    if day1:
+        afternoon_titles = ['Stone Arch Bridge', 'North Loop', 'First Avenue',
+                            'Brewery tour', 'Dinner']
+        for a in Activity.query.filter_by(day_id=day1.id).all():
+            if a.is_substitute:
+                continue
+            for title_frag in afternoon_titles:
+                if title_frag.lower() in a.title.lower():
+                    a.time_slot = 'afternoon'
+                    break
+            # Fix dinner noise
+            if a.title.startswith('Dinner:') or a.title.startswith('Dinner —'):
+                a.title = 'Dinner in North Loop'
+                a.description = 'North Loop area has excellent restaurants at reasonable prices.'
+                a.time_slot = 'evening'
+
+    # Day 2: remove noise activities
+    day2 = Day.query.filter_by(day_number=2).first()
+    if day2:
+        noise_fragments = ['walk the aisle', 'nonstop flight', '12-13h']
+        for a in Activity.query.filter_by(day_id=day2.id).all():
+            if a.is_substitute:
+                continue
+            for frag in noise_fragments:
+                if frag.lower() in a.title.lower():
+                    db.session.delete(a)
+                    break
+            # Fix truncated breakfast title
+            if 'Grab breakfast' in a.title and 'If time allows' in a.title:
+                a.title = 'Grab breakfast near the hotel'
+                a.time_slot = 'morning'
+
+    db.session.commit()
+    app.logger.info('Revised itinerary activities for all days.')
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -732,6 +1097,7 @@ def create_app():
         _seed_location_coords(app)
         _restructure_osaka(app)
         _seed_osaka_and_substitutes(app)
+        _revise_itinerary_activities(app)
 
     return app
 
