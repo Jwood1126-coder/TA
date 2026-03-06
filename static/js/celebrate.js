@@ -1,5 +1,5 @@
-// Pikachu Booking Celebration 🎉⚡
-// Full-screen dancing Pikachu with music when a booking is confirmed
+// Pikachu Booking Celebration
+// Slide-in dancing Pikachu with chiptune — app stays visible behind
 
 const PIKACHU_SVG = `
 <svg viewBox="0 0 200 220" class="pikachu-svg" xmlns="http://www.w3.org/2000/svg">
@@ -28,32 +28,39 @@ const PIKACHU_SVG = `
   <!-- Belly -->
   <ellipse cx="100" cy="170" rx="30" ry="25" fill="#FFF8DC" opacity="0.5"/>
   <!-- Left Arm -->
-  <path d="M55 145 Q30 155 35 175 Q40 185 55 178" fill="#F5D442" stroke="#333" stroke-width="2"/>
+  <g class="pikachu-arm-left">
+    <path d="M55 145 Q30 155 35 175 Q40 185 55 178" fill="#F5D442" stroke="#333" stroke-width="2"/>
+  </g>
   <!-- Right Arm (waving!) -->
   <g class="pikachu-arm-wave">
     <path d="M145 145 Q170 130 175 145 Q178 155 160 160" fill="#F5D442" stroke="#333" stroke-width="2"/>
   </g>
   <!-- Left Foot -->
-  <ellipse cx="78" cy="205" rx="18" ry="10" fill="#F5D442" stroke="#333" stroke-width="2"/>
+  <g class="pikachu-foot-left">
+    <ellipse cx="78" cy="205" rx="18" ry="10" fill="#F5D442" stroke="#333" stroke-width="2"/>
+  </g>
   <!-- Right Foot -->
-  <ellipse cx="122" cy="205" rx="18" ry="10" fill="#F5D442" stroke="#333" stroke-width="2"/>
+  <g class="pikachu-foot-right">
+    <ellipse cx="122" cy="205" rx="18" ry="10" fill="#F5D442" stroke="#333" stroke-width="2"/>
+  </g>
   <!-- Tail (lightning bolt!) -->
-  <path d="M150 155 L170 130 L160 130 L178 100 L155 125 L165 125 L148 148" fill="#F5D442" stroke="#333" stroke-width="2" stroke-linejoin="round"/>
+  <g class="pikachu-tail">
+    <path d="M150 155 L170 130 L160 130 L178 100 L155 125 L165 125 L148 148" fill="#F5D442" stroke="#333" stroke-width="2" stroke-linejoin="round"/>
+  </g>
   <!-- Sparkle effects -->
   <g class="sparkles">
-    <text x="20" y="50" font-size="18" class="sparkle s1">⚡</text>
-    <text x="170" y="40" font-size="16" class="sparkle s2">✨</text>
-    <text x="10" y="130" font-size="14" class="sparkle s3">⭐</text>
-    <text x="180" y="150" font-size="18" class="sparkle s4">⚡</text>
-    <text x="50" y="190" font-size="12" class="sparkle s5">✨</text>
-    <text x="155" y="200" font-size="14" class="sparkle s6">⭐</text>
+    <text x="20" y="50" font-size="18" class="sparkle s1">&#x26A1;</text>
+    <text x="170" y="40" font-size="16" class="sparkle s2">&#x2728;</text>
+    <text x="10" y="130" font-size="14" class="sparkle s3">&#x2B50;</text>
+    <text x="180" y="150" font-size="18" class="sparkle s4">&#x26A1;</text>
+    <text x="50" y="190" font-size="12" class="sparkle s5">&#x2728;</text>
+    <text x="155" y="200" font-size="14" class="sparkle s6">&#x2B50;</text>
   </g>
 </svg>`;
 
 function playBookingTune() {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        // Pikachu-inspired happy jingle
         const notes = [
             { freq: 523.25, start: 0,    dur: 0.15 },  // C5
             { freq: 659.25, start: 0.15, dur: 0.15 },  // E5
@@ -82,69 +89,53 @@ function playBookingTune() {
             osc.stop(ctx.currentTime + start + dur + 0.05);
         });
 
-        // Close context after tune finishes
         setTimeout(() => ctx.close(), 3000);
     } catch (e) {
-        // Audio not supported — silent celebration
+        // Audio not supported
     }
 }
 
 function showBookingCelebration(hotelName) {
-    // Create overlay
-    const overlay = document.createElement('div');
-    overlay.className = 'celebrate-overlay';
-    overlay.innerHTML = `
-        <div class="celebrate-content">
+    // Floating container — no background overlay, app stays visible
+    const container = document.createElement('div');
+    container.className = 'celebrate-float';
+    container.innerHTML = `
+        <div class="celebrate-bubble">
             ${PIKACHU_SVG}
             <div class="celebrate-text">
                 <div class="celebrate-title">PIKA PIKA!</div>
                 <div class="celebrate-subtitle">${hotelName || 'Hotel'} is booked!</div>
             </div>
-            <div class="confetti-container" id="confettiBox"></div>
         </div>
     `;
-    document.body.appendChild(overlay);
+    document.body.appendChild(container);
 
-    // Spawn confetti
-    const confettiBox = overlay.querySelector('#confettiBox');
-    const colors = ['#F5D442', '#E55', '#F2B5C4', '#3cb371', '#6366f1', '#f97316', '#fff'];
-    for (let i = 0; i < 50; i++) {
-        const piece = document.createElement('div');
-        piece.className = 'confetti-piece';
-        piece.style.left = Math.random() * 100 + '%';
-        piece.style.animationDelay = Math.random() * 0.8 + 's';
-        piece.style.animationDuration = (1.5 + Math.random() * 1.5) + 's';
-        piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        piece.style.transform = `rotate(${Math.random() * 360}deg)`;
-        confettiBox.appendChild(piece);
-    }
-
-    // Trigger entrance
+    // Trigger slide-in + dance
     requestAnimationFrame(() => {
-        overlay.classList.add('active');
-        playBookingTune();
+        requestAnimationFrame(() => {
+            container.classList.add('active');
+            playBookingTune();
+        });
     });
 
-    // Auto dismiss after 3.5s
-    const dismissTimer = setTimeout(() => {
-        dismiss();
-    }, 3500);
+    // Auto dismiss after 4s
+    const dismissTimer = setTimeout(dismiss, 4000);
 
-    // Tap to dismiss early (delay to prevent immediate dismissal from the triggering tap)
+    // Tap to dismiss (with guard against immediate phantom tap)
     let canDismiss = false;
-    setTimeout(() => { canDismiss = true; }, 600);
+    setTimeout(() => { canDismiss = true; }, 800);
 
     function dismiss() {
-        if (overlay.classList.contains('leaving')) return;
+        if (container.classList.contains('leaving')) return;
         clearTimeout(dismissTimer);
-        overlay.classList.add('leaving');
-        setTimeout(() => overlay.remove(), 600);
+        container.classList.add('leaving');
+        setTimeout(() => container.remove(), 700);
     }
 
-    overlay.addEventListener('click', () => {
+    container.addEventListener('click', () => {
         if (canDismiss) dismiss();
     });
-    overlay.addEventListener('touchend', (e) => {
+    container.addEventListener('touchend', (e) => {
         if (canDismiss) {
             e.preventDefault();
             dismiss();
@@ -152,5 +143,4 @@ function showBookingCelebration(hotelName) {
     });
 }
 
-// Make globally available
 window.showBookingCelebration = showBookingCelebration;
