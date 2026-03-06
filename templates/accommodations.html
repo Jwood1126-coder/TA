@@ -134,13 +134,6 @@
             <div class="editable-address">
                 <div class="field-row">
                     {{ icon_pin(14) }}
-                    <input type="text" placeholder="Property address"
-                           value="{{ option.address or '' }}"
-                           id="addr-{{ option.id }}"
-                           onchange="updateOptionAddress({{ option.id }})">
-                </div>
-                <div class="field-row">
-                    {{ icon_pin(14) }}
                     <input type="url" placeholder="Paste Google Maps link"
                            value="{{ option.maps_url or '' }}"
                            id="maps-{{ option.id }}"
