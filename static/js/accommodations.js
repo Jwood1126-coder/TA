@@ -173,6 +173,37 @@ async function updateOptionMapsUrl(optionId) {
     }
 }
 
+async function updatePrice(optionId) {
+    const low = document.getElementById(`priceLow-${optionId}`).value;
+    const high = document.getElementById(`priceHigh-${optionId}`).value;
+    try {
+        const res = await fetch(`/api/accommodations/${optionId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price_low: low || null, price_high: high || null })
+        });
+        const data = await res.json();
+        showToast('Price updated');
+        // Update the header price display
+        const card = document.querySelector(`[data-option-id="${optionId}"]`);
+        if (card && low) {
+            const priceEl = card.querySelector('.option-price');
+            if (priceEl) priceEl.textContent = `$${parseInt(low)}–${parseInt(high || low)}/nt`;
+        }
+        // Reload to get recalculated totals
+        const totalEl = document.getElementById(`total-${optionId}`);
+        if (totalEl && low) {
+            const numNights = parseInt(card.closest('.accom-section')
+                .querySelector('.accom-dates').textContent.match(/(\d+) night/)?.[1] || 1);
+            const tLow = parseInt(low) * numNights;
+            const tHigh = parseInt(high || low) * numNights;
+            totalEl.textContent = `Total: $${tLow}–$${tHigh}`;
+        }
+    } catch (err) {
+        console.error('Update price failed:', err);
+    }
+}
+
 async function updateCheckinInfo(optionId, field, value) {
     try {
         await fetch(`/api/accommodations/${optionId}/status`, {

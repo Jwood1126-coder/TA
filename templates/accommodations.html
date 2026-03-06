@@ -88,10 +88,24 @@
                 {% endif %}
             </div>
 
+            <div class="price-edit-row">
+                <label>$/night:</label>
+                <input type="number" placeholder="Low"
+                       value="{{ option.price_low|int if option.price_low else '' }}"
+                       id="priceLow-{{ option.id }}"
+                       onchange="updatePrice({{ option.id }})">
+                <span>&ndash;</span>
+                <input type="number" placeholder="High"
+                       value="{{ option.price_high|int if option.price_high else '' }}"
+                       id="priceHigh-{{ option.id }}"
+                       onchange="updatePrice({{ option.id }})">
+            </div>
             {% if option.total_low and option.total_high %}
-            <p class="option-total">
+            <p class="option-total" id="total-{{ option.id }}">
                 Total: ${{ option.total_low|int }}&ndash;${{ option.total_high|int }}
             </p>
+            {% else %}
+            <p class="option-total" id="total-{{ option.id }}"></p>
             {% endif %}
 
             {% if option.maps_url %}

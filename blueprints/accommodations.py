@@ -291,6 +291,16 @@ def update_status(option_id):
         option.check_in_info = data['check_in_info'] or None
     if 'check_out_info' in data:
         option.check_out_info = data['check_out_info'] or None
+    if 'price_low' in data:
+        option.price_low = float(data['price_low']) if data['price_low'] else None
+    if 'price_high' in data:
+        option.price_high = float(data['price_high']) if data['price_high'] else None
+    # Recalculate totals when price changes
+    if ('price_low' in data or 'price_high' in data) and option.location_id:
+        loc = AccommodationLocation.query.get(option.location_id)
+        if loc and option.price_low:
+            option.total_low = option.price_low * loc.num_nights
+            option.total_high = (option.price_high or option.price_low) * loc.num_nights
 
     # Sync booking status to linked checklist item
     if new_status is not None:

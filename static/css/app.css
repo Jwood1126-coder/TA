@@ -2853,6 +2853,30 @@ h1 svg, h2 svg, h3 svg { vertical-align: -3px; margin-right: 4px; }
 [data-theme="dark"] .status-select { background: #1e1e1e; border-color: #4a2030; color: #fff; }
 [data-theme="dark"] .checkin-checkout-row input { background: #1e1e1e; border-color: #4a2030; color: #fff; }
 
+.price-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 0.4rem;
+}
+.price-edit-row label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.price-edit-row input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid var(--sakura);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    max-width: 90px;
+}
+.price-edit-row span {
+    font-size: 0.85rem;
+}
+[data-theme="dark"] .price-edit-row input { background: #1e1e1e; border-color: #4a2030; color: #fff; }
+
 .checkin-checkout-row {
     display: flex;
     gap: 8px;
