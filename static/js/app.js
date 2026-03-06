@@ -18,7 +18,7 @@ function hardRefresh() {
 
 // Register service worker for offline support
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js?v=41')
+    navigator.serviceWorker.register('/static/sw.js?v=42')
         .then(reg => {
             console.log('SW registered, scope:', reg.scope);
             reg.addEventListener('updatefound', () => {
@@ -246,9 +246,12 @@ socket.on('accommodation_updated', function(data) {
     if (window._accomEditActive) return;
     if (document.querySelector('.pika-celebrate')) return;
     // Refresh if on accommodations, checklists, or home page (another device made a change)
-    if (window.location.pathname === '/accommodations' ||
-        window.location.pathname === '/checklists' ||
-        window.location.pathname === '/') {
+    if (window.location.pathname === '/accommodations') {
+        // Use scroll-preserving reload if available (from accommodations.js)
+        if (typeof reloadKeepScroll === 'function') reloadKeepScroll();
+        else location.reload();
+    } else if (window.location.pathname === '/checklists' ||
+               window.location.pathname === '/') {
         location.reload();
     }
 });

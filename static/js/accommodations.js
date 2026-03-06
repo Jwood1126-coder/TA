@@ -1,5 +1,18 @@
 // Accommodations JS
 
+// Preserve scroll position across reloads
+function reloadKeepScroll() {
+    sessionStorage.setItem('accomScroll', window.scrollY);
+    location.reload();
+}
+(function() {
+    const saved = sessionStorage.getItem('accomScroll');
+    if (saved) {
+        sessionStorage.removeItem('accomScroll');
+        requestAnimationFrame(() => window.scrollTo(0, parseInt(saved)));
+    }
+})();
+
 // Suppress SocketIO self-reload during our own edits
 function accomFetch(url, opts) {
     window._accomEditActive = true;
@@ -95,7 +108,7 @@ async function selectOption(optionId) {
         });
         const data = await resp.json();
         if (data.ok) {
-            location.reload();
+            reloadKeepScroll();
         }
     } catch (err) {
         console.error('Select failed:', err);
@@ -154,7 +167,7 @@ async function updateOptionUrl(optionId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ booking_url: input.value })
         });
-        location.reload();
+        reloadKeepScroll();
     } catch (err) {
         console.error('Update URL failed:', err);
     }
@@ -383,7 +396,7 @@ async function saveNewOption(locationId) {
         });
         const result = await resp.json();
         if (result.ok) {
-            location.reload();
+            reloadKeepScroll();
         } else {
             showToast(result.error || 'Failed to add', 'error');
         }
@@ -425,7 +438,7 @@ async function deleteOption(optionId, name) {
             method: 'DELETE'
         });
         const data = await resp.json();
-        if (data.ok) location.reload();
+        if (data.ok) reloadKeepScroll();
     } catch (err) {
         console.error('Delete failed:', err);
     }
