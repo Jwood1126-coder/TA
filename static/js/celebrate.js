@@ -126,15 +126,29 @@ function showBookingCelebration(hotelName) {
     });
 
     // Auto dismiss after 3.5s
-    setTimeout(() => {
-        overlay.classList.add('leaving');
-        setTimeout(() => overlay.remove(), 600);
+    const dismissTimer = setTimeout(() => {
+        dismiss();
     }, 3500);
 
-    // Tap to dismiss early
-    overlay.addEventListener('click', () => {
+    // Tap to dismiss early (delay to prevent immediate dismissal from the triggering tap)
+    let canDismiss = false;
+    setTimeout(() => { canDismiss = true; }, 600);
+
+    function dismiss() {
+        if (overlay.classList.contains('leaving')) return;
+        clearTimeout(dismissTimer);
         overlay.classList.add('leaving');
         setTimeout(() => overlay.remove(), 600);
+    }
+
+    overlay.addEventListener('click', () => {
+        if (canDismiss) dismiss();
+    });
+    overlay.addEventListener('touchend', (e) => {
+        if (canDismiss) {
+            e.preventDefault();
+            dismiss();
+        }
     });
 }
 

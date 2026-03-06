@@ -50,6 +50,7 @@ def _run_migrations(app):
         ('activity', 'url', 'TEXT'),
         ('location', 'latitude', 'REAL'),
         ('location', 'longitude', 'REAL'),
+        ('accommodation_option', 'booking_image', 'TEXT'),
     ]
     for table, column, col_type in migrations:
         try:

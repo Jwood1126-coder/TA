@@ -1146,6 +1146,88 @@ body {
 .reorder-btn:hover { color: var(--accent); border-color: var(--accent); }
 .delete-btn:hover { color: #dc2626; border-color: #dc2626; }
 
+/* Editable address field */
+.editable-address {
+    margin-top: 6px;
+}
+.editable-address .field-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.editable-address input {
+    flex: 1;
+    font-size: 0.85rem;
+    padding: 8px 10px;
+    min-height: 40px;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+}
+
+/* Booking image attachment */
+.booking-image-section {
+    margin-top: 8px;
+}
+.booking-image-preview {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 6px;
+}
+.booking-image-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 10px;
+    border: 2px solid var(--sakura);
+    cursor: pointer;
+    object-fit: contain;
+}
+.booking-image-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.booking-image-upload {
+    display: block;
+    cursor: pointer;
+}
+.booking-image-upload input[type="file"] {
+    display: none;
+}
+.upload-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: var(--accent);
+    padding: 8px 14px;
+    min-height: 44px;
+    border: 1px dashed var(--sakura);
+    border-radius: 10px;
+    background: var(--sakura-light);
+    transition: border-color 0.15s;
+    width: 100%;
+    justify-content: center;
+}
+.upload-label:active {
+    border-color: var(--accent);
+}
+[data-theme="dark"] .booking-image-preview img { border-color: #4a2030; }
+[data-theme="dark"] .upload-label { border-color: #4a2030; }
+
 .editable-url {
     display: flex;
     gap: 4px;
@@ -2855,6 +2937,259 @@ h1 svg, h2 svg, h3 svg { vertical-align: -3px; margin-right: 4px; }
 @keyframes cheekGlow {
     0%   { opacity: 0.5; }
     100% { opacity: 0.85; }
+}
+
+/* ===== Touch Gestures ===== */
+
+/* Drag handle */
+.drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 44px;
+    color: var(--pico-muted-color);
+    cursor: grab;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.drag-handle:active {
+    opacity: 1;
+    cursor: grabbing;
+}
+
+/* Drag-in-progress states */
+.drag-original-hidden {
+    opacity: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    transition: none;
+}
+.drag-placeholder {
+    border: 2px dashed var(--sakura);
+    border-radius: 10px;
+    background: var(--sakura-light);
+    margin-bottom: 0.5rem;
+    transition: height 0.15s;
+}
+.drag-clone {
+    border-radius: 10px !important;
+}
+
+/* Swipe-to-reveal */
+.swipe-enabled {
+    position: relative;
+    overflow: hidden;
+}
+.swipe-content {
+    position: relative;
+    z-index: 1;
+    background: var(--pico-background-color, #fff);
+    transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+[data-theme="dark"] .swipe-content { background: var(--pico-background-color, #1e1e1e); }
+
+.swipe-actions {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 0;
+}
+.swipe-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    font-size: 1.1rem;
+    transition: transform 0.15s;
+}
+.swipe-action-btn:active { transform: scale(0.9); }
+.swipe-action-btn.swipe-delete {
+    background: #dc2626;
+}
+.swipe-action-btn.swipe-complete {
+    background: var(--jr-green);
+}
+.swipe-action-btn.swipe-edit {
+    background: var(--accent);
+}
+
+/* ===== Mobile Touch Target Optimization ===== */
+
+/* Ensure all interactive elements meet 44px minimum */
+.option-header {
+    min-height: 52px;
+    padding: 0.75rem 0.75rem 0.75rem 0;
+}
+.select-btn {
+    min-height: 48px;
+    font-size: 0.95rem;
+}
+.book-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+}
+.translate-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+}
+.maps-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Checklist touch targets */
+.checklist-item {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+}
+.checklist-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-height: 44px;
+}
+.check-label input[type="checkbox"] {
+    min-width: 24px;
+    min-height: 24px;
+}
+.decision-header {
+    min-height: 48px;
+}
+
+/* Activity card touch targets */
+.act-browse-card {
+    padding: 0.85rem;
+}
+.act-browse-links {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+.act-browse-links a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+}
+.navigate-link {
+    background: var(--sakura-light);
+    color: var(--sakura-text);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+.doc-link {
+    background: var(--sakura-light);
+    color: var(--sakura-text);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Location tabs - bigger touch targets */
+.location-tab {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+}
+
+/* More menu links */
+.more-link {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Status select bigger */
+.status-select, .confirmation-input {
+    min-height: 44px;
+    font-size: 0.9rem;
+}
+
+/* Editable URL - bigger */
+.editable-url input {
+    min-height: 40px;
+    font-size: 0.85rem;
+}
+.save-url-btn {
+    min-height: 40px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+}
+
+/* Option notes textarea bigger touch target */
+.option-notes {
+    min-height: 52px;
+    font-size: 0.9rem;
+    padding: 10px;
+}
+
+/* Prompt buttons */
+.prompt-btn {
+    min-height: 48px;
+    padding: 12px 18px;
+}
+
+/* Day overview cards */
+.day-overview-card, .itin-day-row {
+    min-height: 52px;
+}
+
+/* Active states for touch feedback */
+@media (hover: none) and (pointer: coarse) {
+    .option-card:active:not(.swipe-open) .swipe-content {
+        background: var(--sakura-light);
+    }
+    .checklist-item:active {
+        background: var(--sakura-light);
+    }
+    .act-browse-card:active {
+        background: var(--sakura-light);
+    }
+    .day-overview-card:active, .itin-day-row:active {
+        background: var(--sakura-light);
+    }
+    .more-link:active {
+        background: var(--sakura-light);
+    }
+}
+
+/* Hint text for touch */
+.touch-hint {
+    font-size: 0.7rem;
+    color: var(--pico-muted-color);
+    text-align: center;
+    padding: 4px 0;
+    opacity: 0.7;
 }
 
 /* Utilities */

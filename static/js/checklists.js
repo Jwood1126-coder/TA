@@ -288,3 +288,79 @@ async function submitNewOption(itemId, btn) {
         console.error('Add option failed:', err);
     }
 }
+
+// ---------- Touch gesture initialization ----------
+document.addEventListener('DOMContentLoaded', function() {
+    if (!window.TouchGestures) return;
+
+    // Swipe-to-complete on task items, swipe-to-delete on deletable items
+    document.querySelectorAll('.checklist-section').forEach(section => {
+        const sectionKey = (section.id || '').replace('cat-', '');
+        const isDeletable = ['preparation', 'packing'].includes(sectionKey);
+
+        section.querySelectorAll('.checklist-item').forEach(item => {
+            const isTask = !!item.querySelector('.check-label');
+            if (!isTask && !isDeletable) return;
+
+            // Wrap content for swipe
+            if (!item.querySelector('.swipe-content')) {
+                const content = document.createElement('div');
+                content.className = 'swipe-content';
+                while (item.firstChild) content.appendChild(item.firstChild);
+                item.appendChild(content);
+            }
+
+            // Add swipe actions
+            if (!item.querySelector('.swipe-actions')) {
+                const actions = document.createElement('div');
+                actions.className = 'swipe-actions';
+
+                if (isTask) {
+                    const btn = document.createElement('button');
+                    btn.className = 'swipe-action-btn swipe-complete';
+                    btn.innerHTML = '&#10003;';
+                    btn.title = 'Toggle complete';
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const id = item.dataset.id;
+                        if (id) toggleChecklist(parseInt(id));
+                        closeSwipeItem(item);
+                    });
+                    actions.appendChild(btn);
+                }
+
+                if (isDeletable) {
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'swipe-action-btn swipe-delete';
+                    delBtn.innerHTML = '&#x2717;';
+                    delBtn.title = 'Delete';
+                    delBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const id = item.dataset.id;
+                        if (id) deleteItem(parseInt(id));
+                        closeSwipeItem(item);
+                    });
+                    actions.appendChild(delBtn);
+                }
+
+                item.appendChild(actions);
+                item.classList.add('swipe-enabled');
+            }
+        });
+
+        // Init swipe on the section
+        TouchGestures.initSwipeActions(section, {
+            itemSelector: '.checklist-item.swipe-enabled',
+            actions: [] // Already added manually
+        });
+    });
+
+    function closeSwipeItem(item) {
+        const content = item.querySelector('.swipe-content');
+        if (content) {
+            content.style.transition = 'transform 0.25s ease';
+            content.style.transform = 'translateX(0)';
+        }
+        item.classList.remove('swipe-open');
+    }
+});

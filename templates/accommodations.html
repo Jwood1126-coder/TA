@@ -6,6 +6,7 @@
 <header>
     <h1>{{ icon_hotel(22) }} Accommodations</h1>
     <p>Pick one option per location. Track your bookings.</p>
+    <p class="touch-hint">Hold &amp; drag to reorder &middot; Swipe left to delete</p>
 </header>
 
 <!-- Location tabs -->
@@ -31,9 +32,13 @@
     {% endif %}
 
     {% for option in loc.options %}
-    <div class="option-card {% if option.is_selected %}selected{% endif %}"
-         data-option-id="{{ option.id }}">
+    <div class="option-card {% if option.is_selected %}selected{% endif %} swipe-enabled"
+         data-option-id="{{ option.id }}" data-location-id="{{ loc.id }}">
+        <div class="swipe-content">
         <div class="option-header" onclick="toggleOptionDetails(this)">
+            <div class="drag-handle" title="Hold to reorder">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>
+            </div>
             <div class="option-rank">#{{ option.rank }}</div>
             <div class="option-info">
                 <div class="option-name">{{ option.name }}</div>
@@ -95,10 +100,15 @@
                         onclick="selectOption({{ option.id }})">
                     {% if option.is_selected %}Selected{% else %}Select This{% endif %}
                 </button>
-                <div class="option-manage">
-                    <button class="reorder-btn" onclick="reorderOption({{ option.id }}, 'up')" title="Move up">{{ icon_chevron(14) }}</button>
-                    <button class="reorder-btn down" onclick="reorderOption({{ option.id }}, 'down')" title="Move down">{{ icon_chevron(14) }}</button>
-                    <button class="delete-btn" onclick="deleteOption({{ option.id }}, '{{ option.name | e }}')" title="Remove">{{ icon_delete(14) }}</button>
+            </div>
+
+            <div class="editable-address">
+                <div class="field-row">
+                    {{ icon_pin(14) }}
+                    <input type="text" placeholder="Property address"
+                           value="{{ option.address or '' }}"
+                           id="addr-{{ option.id }}"
+                           onchange="updateOptionAddress({{ option.id }})">
                 </div>
             </div>
 
@@ -114,8 +124,34 @@
                        onchange="updateConfirmation({{ option.id }}, this.value)">
             </div>
 
+            {# Booking image attachment #}
+            <div class="booking-image-section" id="bookingImg-{{ option.id }}">
+                {% if option.booking_image %}
+                <div class="booking-image-preview">
+                    <img src="/photos/originals/{{ option.booking_image }}"
+                         alt="Booking confirmation"
+                         onclick="viewBookingImage(this.src)">
+                    <button class="booking-image-remove"
+                            onclick="removeBookingImage({{ option.id }})"
+                            title="Remove image">&times;</button>
+                </div>
+                {% endif %}
+                <label class="booking-image-upload" for="imgUpload-{{ option.id }}">
+                    <input type="file" accept="image/*" capture="environment"
+                           id="imgUpload-{{ option.id }}"
+                           onchange="uploadBookingImage({{ option.id }}, this)">
+                    <span class="upload-label">+ Attach booking screenshot</span>
+                </label>
+            </div>
+
             <textarea class="option-notes" placeholder="Notes..."
                       onchange="updateOptionNotes({{ option.id }}, this.value)">{{ option.user_notes or '' }}</textarea>
+        </div>
+        </div>{# end swipe-content #}
+        <div class="swipe-actions">
+            <button class="swipe-action-btn swipe-delete" onclick="deleteOption({{ option.id }}, '{{ option.name | e }}')" title="Delete">
+                {{ icon_delete(18) }}
+            </button>
         </div>
     </div>
     {% endfor %}
@@ -130,6 +166,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/touch.js') }}"></script>
 <script src="{{ url_for('static', filename='js/celebrate.js') }}"></script>
 <script src="{{ url_for('static', filename='js/accommodations.js') }}"></script>
 {% endblock %}

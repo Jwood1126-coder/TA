@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, jsonify, request
+import os
+import uuid
+from flask import Blueprint, render_template, jsonify, request, current_app
 from models import db, AccommodationLocation, AccommodationOption, ChecklistItem
 
 accommodations_bp = Blueprint('accommodations', __name__)
@@ -87,6 +89,24 @@ def reorder_option(option_id):
     return jsonify({'ok': True})
 
 
+@accommodations_bp.route('/api/accommodations/reorder-batch', methods=['PUT'])
+def reorder_batch():
+    data = request.get_json()
+    location_id = data.get('location_id')
+    order = data.get('order', [])  # list of option IDs as strings
+    if not location_id or not order:
+        return jsonify({'ok': False}), 400
+    for rank, oid in enumerate(order, 1):
+        opt = AccommodationOption.query.get(int(oid))
+        if opt and opt.location_id == int(location_id):
+            opt.rank = rank
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('accommodation_updated', {'location_id': int(location_id)})
+    return jsonify({'ok': True})
+
+
 VALID_BOOKING_STATUSES = {'not_booked', 'researching', 'booked', 'confirmed', 'cancelled'}
 
 
@@ -121,6 +141,49 @@ def update_status(option_id):
         'booking_status': option.booking_status,
     })
 
+    return jsonify({'ok': True})
+
+
+@accommodations_bp.route('/api/accommodations/<int:option_id>/upload-image',
+                          methods=['POST'])
+def upload_booking_image(option_id):
+    option = AccommodationOption.query.get_or_404(option_id)
+    file = request.files.get('image')
+    if not file or not file.filename:
+        return jsonify({'ok': False, 'error': 'No file'}), 400
+
+    allowed = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'}
+    ext = file.filename.rsplit('.', 1)[-1].lower()
+    if ext not in allowed:
+        return jsonify({'ok': False, 'error': 'Invalid file type'}), 400
+
+    filename = f"booking_{option_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    upload_dir = current_app.config['UPLOAD_FOLDER']
+    os.makedirs(os.path.join(upload_dir, 'originals'), exist_ok=True)
+    file.save(os.path.join(upload_dir, 'originals', filename))
+
+    # Remove old image if exists
+    if option.booking_image:
+        old_path = os.path.join(upload_dir, 'originals', option.booking_image)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+    option.booking_image = filename
+    db.session.commit()
+    return jsonify({'ok': True, 'filename': filename})
+
+
+@accommodations_bp.route('/api/accommodations/<int:option_id>/delete-image',
+                          methods=['DELETE'])
+def delete_booking_image(option_id):
+    option = AccommodationOption.query.get_or_404(option_id)
+    if option.booking_image:
+        upload_dir = current_app.config['UPLOAD_FOLDER']
+        old_path = os.path.join(upload_dir, 'originals', option.booking_image)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+        option.booking_image = None
+        db.session.commit()
     return jsonify({'ok': True})
 
 
