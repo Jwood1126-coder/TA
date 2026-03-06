@@ -212,6 +212,8 @@ socket.on('checklist_option_updated', function(data) {
 });
 
 socket.on('accommodation_updated', function(data) {
+    // Skip reload if a celebration is showing (we triggered this update ourselves)
+    if (document.querySelector('.pika-celebrate')) return;
     // Refresh if on accommodations, checklists, or home page
     if (window.location.pathname === '/accommodations' ||
         window.location.pathname === '/checklists' ||
