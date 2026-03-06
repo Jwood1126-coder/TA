@@ -5,8 +5,12 @@ const chatInput = document.getElementById('chatInput');
 let selectedImage = null;
 let selectedModel = localStorage.getItem('chatModel') || 'balanced';
 
-// Session history — fresh per page load, sent to API for context
-let sessionHistory = [];
+// Session history — persists across page navigations, clears on New Chat or tab close
+let sessionHistory = JSON.parse(sessionStorage.getItem('chatHistory') || '[]');
+
+function saveSessionHistory() {
+    sessionStorage.setItem('chatHistory', JSON.stringify(sessionHistory));
+}
 
 // Model selector
 document.querySelectorAll('.model-pill').forEach(btn => {
@@ -154,6 +158,7 @@ async function sendMessage() {
 
         // Track user message in session
         sessionHistory.push({ role: 'user', content: text });
+        saveSessionHistory();
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -201,6 +206,7 @@ async function sendMessage() {
                             // Track assistant response in session history
                             if (responseBuffer) {
                                 sessionHistory.push({ role: 'assistant', content: responseBuffer });
+                                saveSessionHistory();
                             }
                         }
                     } catch (e) {
@@ -229,6 +235,7 @@ async function sendMessage() {
 
 function clearChat() {
     sessionHistory = [];
+    sessionStorage.removeItem('chatHistory');
     chatMessages.innerHTML = `
         <div class="chat-welcome">
             <p>Ask me anything about your Japan trip!</p>
@@ -240,6 +247,15 @@ function clearChat() {
                 <button class="prompt-btn" onclick="sendQuickPrompt(this)">What's our budget status?</button>
             </div>
         </div>`;
+}
+
+// Restore chat bubbles from session history on page load
+if (sessionHistory.length > 0) {
+    const welcome = document.querySelector('.chat-welcome');
+    if (welcome) welcome.remove();
+    for (const m of sessionHistory) {
+        addBubble(m.role, m.content);
+    }
 }
 
 // Scroll to bottom on load
