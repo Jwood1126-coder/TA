@@ -195,7 +195,7 @@ function showBookingCelebration(hotelName) {
     el.innerHTML = `
         <div class="pika-bubble">
             ${PIKACHU_SVG}
-            <div class="pika-title">PIKA PIKA!</div>
+            <div class="pika-title">ありがとう ありがとう!</div>
             <div class="pika-sub">${hotelName || 'Hotel'} is booked!</div>
             <button class="pika-x" aria-label="Close">&times;</button>
         </div>
