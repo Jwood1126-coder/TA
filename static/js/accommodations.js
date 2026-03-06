@@ -241,6 +241,43 @@ function viewBookingImage(src) {
     document.body.appendChild(viewer);
 }
 
+function toggleAddForm(locationId) {
+    const form = document.getElementById(`addForm-${locationId}`);
+    form.style.display = form.style.display === 'none' ? '' : 'none';
+}
+
+async function saveNewOption(locationId) {
+    const name = document.getElementById(`addName-${locationId}`).value.trim();
+    if (!name) {
+        showToast('Name is required', 'error');
+        return;
+    }
+    const data = {
+        name,
+        property_type: document.getElementById(`addType-${locationId}`).value.trim(),
+        price_low: document.getElementById(`addPriceLow-${locationId}`).value || null,
+        price_high: document.getElementById(`addPriceHigh-${locationId}`).value || null,
+        booking_url: document.getElementById(`addUrl-${locationId}`).value.trim() || null,
+        maps_url: document.getElementById(`addMaps-${locationId}`).value.trim() || null,
+    };
+    try {
+        const resp = await fetch(`/api/accommodations/${locationId}/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await resp.json();
+        if (result.ok) {
+            location.reload();
+        } else {
+            showToast(result.error || 'Failed to add', 'error');
+        }
+    } catch (err) {
+        console.error('Add option failed:', err);
+        showToast('Failed to add option', 'error');
+    }
+}
+
 async function deleteOption(optionId, name) {
     if (!confirm(`Remove "${name}" from options?`)) return;
     try {

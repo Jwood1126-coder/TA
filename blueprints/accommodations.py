@@ -118,6 +118,35 @@ def reorder_batch():
     return jsonify({'ok': True})
 
 
+@accommodations_bp.route('/api/accommodations/<int:location_id>/add', methods=['POST'])
+def add_option(location_id):
+    loc = AccommodationLocation.query.get_or_404(location_id)
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'Name is required'}), 400
+
+    max_rank = db.session.query(db.func.max(AccommodationOption.rank)).filter_by(
+        location_id=location_id).scalar() or 0
+
+    option = AccommodationOption(
+        location_id=location_id,
+        rank=max_rank + 1,
+        name=name,
+        property_type=data.get('property_type', ''),
+        price_low=float(data['price_low']) if data.get('price_low') else None,
+        price_high=float(data['price_high']) if data.get('price_high') else None,
+        booking_url=data.get('booking_url') or None,
+        maps_url=data.get('maps_url') or None,
+    )
+    db.session.add(option)
+    db.session.commit()
+
+    from app import socketio
+    socketio.emit('accommodation_updated', {'location_id': location_id})
+    return jsonify({'ok': True, 'id': option.id})
+
+
 VALID_BOOKING_STATUSES = {'not_booked', 'researching', 'booked', 'confirmed', 'cancelled'}
 
 

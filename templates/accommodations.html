@@ -179,6 +179,24 @@
         </div>
     </div>
     {% endfor %}
+
+    <div class="add-option-section">
+        <button class="add-option-btn" onclick="toggleAddForm({{ loc.id }})">+ Add Option</button>
+        <div class="add-option-form" id="addForm-{{ loc.id }}" style="display:none;">
+            <input type="text" placeholder="Hotel / property name *" id="addName-{{ loc.id }}">
+            <input type="text" placeholder="Type (e.g. Hotel, Ryokan, Airbnb)" id="addType-{{ loc.id }}">
+            <div class="add-price-row">
+                <input type="number" placeholder="$/night low" id="addPriceLow-{{ loc.id }}">
+                <input type="number" placeholder="$/night high" id="addPriceHigh-{{ loc.id }}">
+            </div>
+            <input type="url" placeholder="Booking URL" id="addUrl-{{ loc.id }}">
+            <input type="url" placeholder="Google Maps link" id="addMaps-{{ loc.id }}">
+            <div class="add-form-actions">
+                <button class="add-save-btn" onclick="saveNewOption({{ loc.id }})">Save</button>
+                <button class="add-cancel-btn" onclick="toggleAddForm({{ loc.id }})">Cancel</button>
+            </div>
+        </div>
+    </div>
 </section>
 {% endfor %}
 

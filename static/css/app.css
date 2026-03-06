@@ -2392,6 +2392,75 @@ body {
 [data-theme="dark"] .option-notes { background: #1e1e1e; border-color: #333; color: #ccc; }
 [data-theme="dark"] .status-select-sm { background: #1e1e1e; border-color: #333; color: #ccc; }
 
+.add-option-section {
+    margin-top: 0.75rem;
+}
+
+.add-option-btn {
+    width: 100%;
+    padding: 10px;
+    border: 2px dashed var(--pico-muted-border-color);
+    background: transparent;
+    color: var(--pico-muted-color);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.add-option-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 12px;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 8px;
+    background: var(--pico-card-background-color);
+}
+
+.add-option-form input {
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+    background: var(--pico-background-color);
+    color: var(--pico-color);
+}
+
+.add-price-row {
+    display: flex;
+    gap: 8px;
+}
+
+.add-price-row input { flex: 1; min-width: 0; }
+
+.add-form-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.add-save-btn {
+    flex: 1;
+    padding: 8px;
+    background: var(--jr-green);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.add-cancel-btn {
+    flex: 1;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--pico-muted-color);
+}
+
 /* Pull-to-refresh */
 .ptr {
     height: 0;
