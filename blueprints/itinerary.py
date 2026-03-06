@@ -320,6 +320,15 @@ def update_activity_notes(activity_id):
     return jsonify({'ok': True})
 
 
+@itinerary_bp.route('/api/activities/<int:activity_id>/maps-url', methods=['PUT'])
+def update_activity_maps_url(activity_id):
+    activity = Activity.query.get_or_404(activity_id)
+    data = request.get_json()
+    activity.maps_url = data.get('maps_url', '') or None
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @itinerary_bp.route('/api/days/<int:day_id>/notes', methods=['PUT'])
 def update_day_notes(day_id):
     day = Day.query.get_or_404(day_id)

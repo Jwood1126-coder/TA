@@ -105,10 +105,10 @@
             {{ loc.check_in_date.strftime('%b %d') }} &ndash; {{ loc.check_out_date.strftime('%b %d') }}
             ({{ loc.num_nights }} night{{ 's' if loc.num_nights != 1 }})
         </div>
-        {% if opt.address %}
+        {% if opt.maps_url or opt.address %}
         <div class="doc-card-address">
-            <a href="{{ opt.address | maps_link }}" target="_blank" rel="noopener" class="navigate-link">
-                {{ icon_pin(14) }} {{ opt.address }}
+            <a href="{{ opt.maps_url or (opt.address | maps_link) }}" target="_blank" rel="noopener" class="{% if opt.maps_url %}maps-navigate-btn{% else %}navigate-link{% endif %}">
+                {{ icon_pin(14) }} {% if opt.maps_url %}Navigate{% else %}{{ opt.address }}{% endif %}
             </a>
         </div>
         {% endif %}
@@ -191,9 +191,9 @@
                 <span>&yen;{{ a.cost_per_person|int }}/person</span>
             </div>
             {% endif %}
-            {% if a.address %}
+            {% if a.maps_url or a.address %}
             <div class="doc-detail-row">
-                <a href="{{ a.address | maps_link }}" target="_blank" rel="noopener" class="navigate-link">{{ icon_pin(14) }} {{ a.address }}</a>
+                <a href="{{ a.maps_url or (a.address | maps_link) }}" target="_blank" rel="noopener" class="{% if a.maps_url %}maps-navigate-btn{% else %}navigate-link{% endif %}">{{ icon_pin(14) }} {% if a.maps_url %}Navigate{% else %}{{ a.address }}{% endif %}</a>
             </div>
             {% endif %}
             {% if a.url %}

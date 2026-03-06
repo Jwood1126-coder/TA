@@ -37,7 +37,11 @@
         <div class="act-browse-cost">{{ a.cost_note }}</div>
         {% endif %}
         <div class="act-browse-links">
-            {% if a.address %}
+            {% if a.maps_url %}
+            <a href="{{ a.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
+                {{ icon_pin(14) }} Navigate
+            </a>
+            {% elif a.address %}
             <a href="{{ a.address | maps_link }}" target="_blank" rel="noopener" class="navigate-link">
                 {{ icon_pin(14) }} Navigate
             </a>

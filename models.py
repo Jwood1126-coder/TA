@@ -69,6 +69,7 @@ class Activity(db.Model):
     completed_at = db.Column(db.DateTime)
     jr_pass_covered = db.Column(db.Boolean, default=False)
     address = db.Column(db.String(500))
+    maps_url = db.Column(db.String(500))  # direct Google Maps link
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     notes = db.Column(db.Text)
     url = db.Column(db.String(500))
@@ -124,6 +125,7 @@ class AccommodationOption(db.Model):
     booking_status = db.Column(db.String(50), default='not_booked')
     confirmation_number = db.Column(db.String(100))
     address = db.Column(db.String(500))
+    maps_url = db.Column(db.String(500))  # direct Google Maps link
     booking_image = db.Column(db.String(255))  # filename of booking screenshot/confirmation
     user_notes = db.Column(db.Text)
 

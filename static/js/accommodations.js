@@ -159,6 +159,20 @@ async function updateOptionAddress(optionId) {
     }
 }
 
+async function updateOptionMapsUrl(optionId) {
+    const input = document.getElementById(`maps-${optionId}`);
+    try {
+        await fetch(`/api/accommodations/${optionId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ maps_url: input.value })
+        });
+        showToast('Maps link saved');
+    } catch (err) {
+        console.error('Update maps URL failed:', err);
+    }
+}
+
 async function uploadBookingImage(optionId, input) {
     const file = input.files[0];
     if (!file) return;

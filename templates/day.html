@@ -243,7 +243,11 @@
                     <span class="jr-badge" title="Covered by JR Pass">JR</span>
                     {% endif %}
                 </div>
-                {% if activity.address %}
+                {% if activity.maps_url %}
+                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
+                    {{ icon_pin(14) }} Navigate
+                </a>
+                {% elif activity.address %}
                 <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
                     {{ icon_pin(14) }}{{ activity.address }}
                 </a>
@@ -266,6 +270,9 @@
                 {% if activity.notes %}
                 <div class="activity-user-note">{{ activity.notes }}</div>
                 {% endif %}
+                <input type="url" class="maps-url-input" placeholder="Paste Google Maps link"
+                       value="{{ activity.maps_url or '' }}"
+                       onchange="saveActivityMapsUrl({{ activity.id }}, this.value)">
             </div>
         </div>
         <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
@@ -298,7 +305,11 @@
                         <span class="optional-badge">optional</span>
                         {% endif %}
                     </div>
-                    {% if activity.address %}
+                    {% if activity.maps_url %}
+                    <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
+                        {{ icon_pin(14) }} Navigate
+                    </a>
+                    {% elif activity.address %}
                     <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
                         {{ icon_pin(14) }}{{ activity.address }}
                     </a>
@@ -347,7 +358,11 @@
             </label>
             <div class="activity-content">
                 <span class="activity-title">{{ activity.title }}</span>
-                {% if activity.address %}
+                {% if activity.maps_url %}
+                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
+                    {{ icon_pin(14) }} Navigate
+                </a>
+                {% elif activity.address %}
                 <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
                     {{ icon_pin(14) }}{{ activity.address }}
                 </a>

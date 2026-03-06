@@ -75,6 +75,19 @@ async function saveActivityNote(activityId, btn) {
     }
 }
 
+async function saveActivityMapsUrl(activityId, url) {
+    try {
+        const resp = await fetch(`/api/activities/${activityId}/maps-url`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ maps_url: url })
+        });
+        if (resp.ok) showToast('Maps link saved');
+    } catch (err) {
+        console.error('Save maps URL failed:', err);
+    }
+}
+
 async function saveDayNotes(dayId, text) {
     try {
         const resp = await fetch(`/api/days/${dayId}/notes`, {

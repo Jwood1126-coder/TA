@@ -10,7 +10,18 @@ accommodations_bp = Blueprint('accommodations', __name__)
 def accommodations_view():
     locations = AccommodationLocation.query.order_by(
         AccommodationLocation.check_in_date).all()
-    return render_template('accommodations.html', locations=locations)
+    # Build booking status summary per location for tab badges
+    loc_status = {}
+    for loc in locations:
+        booked = [o for o in loc.options
+                  if o.booking_status in ('booked', 'confirmed')]
+        loc_status[loc.id] = {
+            'booked_count': len(booked),
+            'booked_name': booked[0].name if len(booked) == 1 else None,
+            'double_booked': len(booked) > 1,
+        }
+    return render_template('accommodations.html',
+                           locations=locations, loc_status=loc_status)
 
 
 @accommodations_bp.route('/api/accommodations/<int:option_id>/select',
@@ -127,6 +138,8 @@ def update_status(option_id):
         option.booking_url = data['booking_url'] or None
     if 'address' in data:
         option.address = data['address'] or None
+    if 'maps_url' in data:
+        option.maps_url = data['maps_url'] or None
 
     # Sync booking status to linked checklist item
     if new_status is not None:

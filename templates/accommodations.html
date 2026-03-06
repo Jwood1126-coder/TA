@@ -2,7 +2,7 @@
 {% block title %}Accommodations{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_hotel, icon_pin, icon_budget, icon_translate, icon_delete, icon_chevron %}
+{% from "icons.html" import icon_hotel, icon_pin, icon_budget, icon_translate, icon_delete, icon_chevron, icon_check %}
 <header>
     <h1>{{ icon_hotel(22) }} Accommodations</h1>
     <p>Pick one option per location. Track your bookings.</p>
@@ -12,9 +12,12 @@
 <!-- Location tabs -->
 <div class="location-tabs" id="locationTabs">
     {% for loc in locations %}
-    <a href="#loc-{{ loc.id }}" class="location-tab"
+    {% set status = loc_status.get(loc.id, {}) %}
+    <a href="#loc-{{ loc.id }}" class="location-tab {% if status.get('booked_count') %}booked{% endif %} {% if status.get('double_booked') %}double-booked{% endif %}"
        onclick="scrollToLocation(event, 'loc-{{ loc.id }}')">
         {{ loc.location_name.split('(')[0].split('|')[0].strip()[:12] }}
+        {% if status.get('booked_count') %}<span class="tab-check">{{ icon_check(10) }}</span>{% endif %}
+        {% if status.get('double_booked') %}<span class="tab-warn">!</span>{% endif %}
     </a>
     {% endfor %}
 </div>
@@ -31,8 +34,19 @@
     <p class="accom-notes">{{ loc.quick_notes }}</p>
     {% endif %}
 
+    {% set status = loc_status.get(loc.id, {}) %}
+    {% if status.get('double_booked') %}
+    <div class="double-book-warning">
+        Multiple options are marked as booked for this location. Please keep only one.
+    </div>
+    {% elif status.get('booked_count') == 1 %}
+    <div class="booking-confirmed-banner">
+        {{ icon_check(14) }} Booked: {{ status.get('booked_name') }}
+    </div>
+    {% endif %}
+
     {% for option in loc.options %}
-    <div class="option-card {% if option.is_selected %}selected{% endif %} swipe-enabled"
+    <div class="option-card {% if option.is_selected %}selected{% endif %} {% if option.booking_status in ('booked', 'confirmed') %}status-booked{% endif %} swipe-enabled"
          data-option-id="{{ option.id }}" data-location-id="{{ loc.id }}">
         <div class="swipe-content">
         <div class="option-header" onclick="toggleOptionDetails(this)">
@@ -47,6 +61,9 @@
             <div class="option-price">
                 ${{ option.price_low|int }}&ndash;{{ option.price_high|int }}/nt
             </div>
+            {% if option.booking_status in ('booked', 'confirmed') %}
+            <span class="option-booked-badge">{{ icon_check(12) }}</span>
+            {% endif %}
         </div>
 
         <div class="option-details" style="display:none;">
@@ -69,7 +86,11 @@
             </p>
             {% endif %}
 
-            {% if option.address %}
+            {% if option.maps_url %}
+            <a href="{{ option.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
+                {{ icon_pin(14) }} Navigate
+            </a>
+            {% elif option.address %}
             <a href="{{ option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
                 {{ icon_pin(14) }} {{ option.address }}
             </a>
@@ -109,6 +130,13 @@
                            value="{{ option.address or '' }}"
                            id="addr-{{ option.id }}"
                            onchange="updateOptionAddress({{ option.id }})">
+                </div>
+                <div class="field-row">
+                    {{ icon_pin(14) }}
+                    <input type="url" placeholder="Paste Google Maps link"
+                           value="{{ option.maps_url or '' }}"
+                           id="maps-{{ option.id }}"
+                           onchange="updateOptionMapsUrl({{ option.id }})">
                 </div>
             </div>
 
