@@ -19,9 +19,9 @@ if volume:
         shutil.copy2(db_src, db_dest)
 
     # One-time migration: replace volume DB with repo DB if marker absent
-    migration_marker = os.path.join(volume, 'data', '.migrated_v31')
+    migration_marker = os.path.join(volume, 'data', '.migrated_v32')
     if os.path.exists(db_dest) and not os.path.exists(migration_marker):
-        print("Migration v31: replacing database with updated version...")
+        print("Migration v32: replacing database with updated version...")
         shutil.copy2(db_src, db_dest)
         with open(migration_marker, 'w') as f:
             f.write('done')
