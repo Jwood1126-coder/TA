@@ -73,6 +73,7 @@ class Activity(db.Model):
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     notes = db.Column(db.Text)
     url = db.Column(db.String(500))
+    is_eliminated = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
         return {

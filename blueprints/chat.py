@@ -91,6 +91,7 @@ TOOLS AVAILABLE:
 - eliminate_accommodation: Rule out a bad option
 - delete_accommodation: Remove an option entirely
 - update_activity: Modify existing activity OR add new one (create_new=true)
+- eliminate_activity: Rule out an activity (toggle)
 - toggle_activity: Mark activity done/not done
 - delete_activity: Remove activity from a day
 - update_day_notes: Set notes for a day
@@ -295,6 +296,18 @@ TOOLS = [
                 "name": {"type": "string", "description": "Hotel name (partial match ok)"},
             },
             "required": ["name"]
+        }
+    },
+    {
+        "name": "eliminate_activity",
+        "description": "Rule out (or restore) an activity. Toggles eliminated status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "title": {"type": "string", "description": "Activity title (partial match ok)"},
+            },
+            "required": ["day_number", "title"]
         }
     },
     {
@@ -579,6 +592,21 @@ def _execute_tool(tool_name, tool_input):
                 opt.rank = i
             db.session.commit()
             return {"success": True, "message": f"Deleted '{opt_name}' from {loc.location_name}"}
+
+        elif tool_name == "eliminate_activity":
+            day = Day.query.filter_by(day_number=tool_input['day_number']).first()
+            if not day:
+                return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
+            activity = Activity.query.filter(
+                Activity.day_id == day.id,
+                Activity.title.ilike(f"%{tool_input['title']}%")
+            ).first()
+            if not activity:
+                return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
+            activity.is_eliminated = not activity.is_eliminated
+            db.session.commit()
+            status = "ruled out" if activity.is_eliminated else "restored"
+            return {"success": True, "message": f"Activity '{activity.title}' {status} on Day {day.day_number}"}
 
         elif tool_name == "delete_activity":
             day = Day.query.filter_by(day_number=tool_input['day_number']).first()
@@ -873,7 +901,7 @@ def _build_context():
         for a in current_day.activities:
             if a.is_substitute:
                 continue
-            status = '[DONE]' if a.is_completed else '[ ]'
+            status = '[DONE]' if a.is_completed else '[RULED OUT]' if a.is_eliminated else '[ ]'
             time_info = f" @ {a.start_time}" if a.start_time else f" ({a.time_slot})" if a.time_slot else ""
             parts.append(f"  {status} {a.title}{time_info}")
 

@@ -1643,10 +1643,12 @@ body {
 .chat-container {
     display: flex;
     flex-direction: column;
-    /* Full viewport minus bottom nav; body padding zeroed via .chat-page */
-    height: calc(100vh - 56px - env(safe-area-inset-bottom, 0px));
-    height: calc(100dvh - 56px - env(safe-area-inset-bottom, 0px));
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    /* Bottom edge sits just above the bottom nav */
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
     will-change: height, transform;
 }
@@ -1654,6 +1656,7 @@ body {
 /* Chat page: remove body/main padding so chat container fills the space precisely */
 body.chat-page {
     padding-bottom: 0;
+    overflow: hidden;
 }
 body.chat-page .app-main {
     padding: 0;
@@ -1736,7 +1739,6 @@ body.chat-page .app-main {
     display: flex;
     gap: 8px;
     padding: 8px 1rem;
-    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--pico-muted-border-color);
     background: var(--glass-bg);
     backdrop-filter: blur(16px);
@@ -3020,10 +3022,89 @@ h1 svg, h2 svg, h3 svg { vertical-align: -3px; margin-right: 4px; }
     margin-top: 0.35rem;
 }
 
+.add-activity-toggle {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--accent);
+    background: none;
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.add-activity-form {
+    background: var(--sakura-light);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.add-activity-form input,
+.add-activity-form select {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+}
+.add-activity-save {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.add-activity-cancel {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--pico-muted-border-color);
+    background: none;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.act-delete-btn {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: auto;
+}
+.act-delete-btn:hover { color: #e53e3e; }
+.act-notes {
+    width: 100%;
+    margin: 4px 0;
+    padding: 6px 8px;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 32px;
+    max-height: 80px;
+    background: transparent;
+}
+.act-browse-card.eliminated {
+    opacity: 0.5;
+}
+.ruled-out-badge {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #e53e3e;
+    color: #fff;
+    font-weight: 600;
+}
+
 /* Dark mode */
 [data-theme="dark"] .act-location-group { border-color: #333; }
 [data-theme="dark"] .act-location-title { background: #2a1a2a; }
 [data-theme="dark"] .act-browse-card { border-bottom-color: rgba(255,255,255,0.06); }
+[data-theme="dark"] .add-activity-form { background: #2d1f24; }
 
 /* ===== Fun Japanese Touches ===== */
 

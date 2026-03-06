@@ -55,6 +55,7 @@ def _run_migrations(app):
         ('activity', 'maps_url', 'TEXT'),
         ('accommodation_option', 'check_in_info', 'TEXT'),
         ('accommodation_option', 'check_out_info', 'TEXT'),
+        ('activity', 'is_eliminated', 'BOOLEAN DEFAULT 0'),
     ]
     for table, column, col_type in migrations:
         try:
