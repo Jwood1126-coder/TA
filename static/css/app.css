@@ -1648,6 +1648,7 @@ body {
     margin: -1rem;
     position: relative;
     overflow: hidden;
+    will-change: height, transform;
 }
 
 .chat-header {
@@ -1667,9 +1668,11 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 1rem;
+    padding-bottom: 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .chat-welcome {
@@ -1702,6 +1705,9 @@ body {
     font-size: 0.9rem;
     line-height: 1.4;
     word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    flex-shrink: 0;
 }
 
 .chat-bubble.user {

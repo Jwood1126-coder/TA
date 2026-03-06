@@ -285,15 +285,31 @@ if (sessionHistory.length > 0) {
 // Scroll to bottom on load
 scrollToBottom();
 
-// Handle mobile keyboard resize — keep input bar docked
+// Handle mobile keyboard resize — keep input bar visible and layout stable
 if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-        document.querySelector('.chat-container').style.height =
-            window.visualViewport.height + 'px';
+    const chatContainer = document.querySelector('.chat-container');
+    const inputBar = document.querySelector('.chat-input-bar');
+
+    function adjustForKeyboard() {
+        const vh = window.visualViewport.height;
+        const offset = window.visualViewport.offsetTop;
+        // Resize container to visible area
+        chatContainer.style.height = vh + 'px';
+        // Counteract any iOS scroll offset so input stays at bottom
+        chatContainer.style.transform = `translateY(${offset}px)`;
         scrollToBottom();
-    });
-    window.visualViewport.addEventListener('scroll', () => {
-        document.querySelector('.chat-input-bar').style.transform =
-            `translateY(${window.visualViewport.offsetTop}px)`;
+    }
+
+    window.visualViewport.addEventListener('resize', adjustForKeyboard);
+    window.visualViewport.addEventListener('scroll', adjustForKeyboard);
+
+    // Reset when keyboard fully dismissed (input blurred)
+    chatInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            chatContainer.style.height = '';
+            chatContainer.style.transform = '';
+            inputBar.style.transform = '';
+            scrollToBottom();
+        }, 100);
     });
 }
