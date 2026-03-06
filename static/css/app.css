@@ -1639,28 +1639,38 @@ body {
     margin: 4px;
 }
 
-/* Chat */
+/* Chat — full-viewport flex layout, no pixel guessing */
+body.chat-page {
+    padding-bottom: 0 !important;
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+body.chat-page .app-main {
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    max-width: 100%;
+    width: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+/* On chat page, take nav out of fixed positioning and into the flex flow
+   so it sits at its natural height — no guessing required */
+body.chat-page .bottom-nav {
+    position: relative;
+    flex-shrink: 0;
+}
 .chat-container {
     display: flex;
     flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    /* Bottom edge sits just above the bottom nav */
-    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
-    will-change: height, transform;
-}
-
-/* Chat page: remove body/main padding so chat container fills the space precisely */
-body.chat-page {
-    padding-bottom: 0;
-    overflow: hidden;
-}
-body.chat-page .app-main {
-    padding: 0;
-    max-width: none;
 }
 
 .chat-header {

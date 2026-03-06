@@ -295,30 +295,21 @@ if (sessionHistory.length > 0) {
 // Scroll to bottom on load
 scrollToBottom();
 
-// Handle mobile keyboard resize — keep input bar visible and layout stable
+// Handle mobile keyboard resize — shrink body to visible viewport
 if (window.visualViewport) {
-    const chatContainer = document.querySelector('.chat-container');
-    const inputBar = document.querySelector('.chat-input-bar');
-
     function adjustForKeyboard() {
-        const vh = window.visualViewport.height;
-        const offset = window.visualViewport.offsetTop;
-        // Resize container to visible area
-        chatContainer.style.height = vh + 'px';
-        // Counteract any iOS scroll offset so input stays at bottom
-        chatContainer.style.transform = `translateY(${offset}px)`;
+        // Resize body to match visible area so flex layout reflows naturally
+        document.body.style.height = window.visualViewport.height + 'px';
         scrollToBottom();
     }
 
     window.visualViewport.addEventListener('resize', adjustForKeyboard);
     window.visualViewport.addEventListener('scroll', adjustForKeyboard);
 
-    // Reset when keyboard fully dismissed (input blurred)
+    // Reset when keyboard dismissed
     chatInput.addEventListener('blur', () => {
         setTimeout(() => {
-            chatContainer.style.height = '';
-            chatContainer.style.transform = '';
-            inputBar.style.transform = '';
+            document.body.style.height = '';
             scrollToBottom();
         }, 100);
     });
