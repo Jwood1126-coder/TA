@@ -1,9 +1,36 @@
 // Japan Travel Assistant - Core JS
 
+// Hard refresh: clear SW caches and reload
+function hardRefresh() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(r => r.unregister());
+        });
+        caches.keys().then(keys => {
+            Promise.all(keys.map(k => caches.delete(k))).then(() => {
+                location.reload();
+            });
+        });
+    } else {
+        location.reload();
+    }
+}
+
 // Register service worker for offline support
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js')
-        .then(reg => console.log('SW registered, scope:', reg.scope))
+    navigator.serviceWorker.register('/static/sw.js?v=31')
+        .then(reg => {
+            console.log('SW registered, scope:', reg.scope);
+            reg.addEventListener('updatefound', () => {
+                const newSW = reg.installing;
+                newSW.addEventListener('statechange', () => {
+                    if (newSW.state === 'activated') {
+                        console.log('New SW activated, reloading...');
+                        location.reload();
+                    }
+                });
+            });
+        })
         .catch(err => console.warn('SW registration failed:', err));
 }
 
