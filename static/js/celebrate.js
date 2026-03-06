@@ -85,6 +85,8 @@ function playBookingTune() {
 }
 
 function showBookingCelebration(hotelName) {
+    console.log('[PIKA] showBookingCelebration called for:', hotelName);
+
     // Remove any existing celebration
     document.querySelectorAll('.pika-celebrate').forEach(el => el.remove());
 
@@ -166,10 +168,12 @@ function showBookingCelebration(hotelName) {
     });
 
     document.body.appendChild(el);
+    console.log('[PIKA] Element appended to body, classes:', el.className);
 
     // Animate in (double rAF ensures browser paints offscreen state first)
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+            console.log('[PIKA] Adding visible class now');
             el.classList.add('visible');
             playBookingTune();
         });
@@ -179,6 +183,7 @@ function showBookingCelebration(hotelName) {
     const timer = setTimeout(dismiss, 4500);
 
     function dismiss() {
+        console.log('[PIKA] dismiss() called, stack:', new Error().stack);
         if (el.classList.contains('bye')) return;
         clearTimeout(timer);
         el.classList.remove('visible');

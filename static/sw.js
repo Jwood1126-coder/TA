@@ -1,5 +1,5 @@
 // Service Worker for offline support
-const CACHE_NAME = 'japan-trip-v19';
+const CACHE_NAME = 'japan-trip-v20';
 const STATIC_ASSETS = [
     '/static/css/app.css',
     '/static/js/app.js',
@@ -42,17 +42,14 @@ self.addEventListener('fetch', event => {
     if (url.pathname.startsWith('/api/')) return;
     if (url.pathname.startsWith('/chat')) return; // Chat needs live connection
 
-    // Static assets: cache-first
+    // Static assets: network-first (ensures fresh files after deploys)
     if (url.pathname.startsWith('/static/') || url.hostname !== location.hostname) {
         event.respondWith(
-            caches.match(event.request).then(cached => {
-                if (cached) return cached;
-                return fetch(event.request).then(response => {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-                    return response;
-                });
-            })
+            fetch(event.request).then(response => {
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                return response;
+            }).catch(() => caches.match(event.request))
         );
         return;
     }
