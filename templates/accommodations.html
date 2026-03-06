@@ -46,10 +46,10 @@
     {% endif %}
 
     {% for option in loc.options %}
-    <div class="option-card {% if option.is_selected %}selected{% endif %} {% if option.booking_status in ('booked', 'confirmed') %}status-booked{% endif %} swipe-enabled"
+    <div class="option-card {% if option.is_selected %}selected{% endif %} {% if option.booking_status in ('booked', 'confirmed') %}status-booked{% endif %} {% if option.is_eliminated %}eliminated{% endif %} swipe-enabled"
          data-option-id="{{ option.id }}" data-location-id="{{ loc.id }}">
         <div class="swipe-content">
-        <div class="option-header" onclick="toggleOptionDetails(this)">
+        <div class="option-header" onclick="toggleOptionDetails(this, event)">
             <div class="drag-handle" title="Hold to reorder">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg>
             </div>
@@ -195,6 +195,17 @@
 
             <textarea class="option-notes" placeholder="Notes..."
                       onchange="updateOptionNotes({{ option.id }}, this.value)">{{ option.user_notes or '' }}</textarea>
+
+            <div class="option-detail-actions">
+                <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
+                        onclick="eliminateOption({{ option.id }})">
+                    {% if option.is_eliminated %}✓ Ruled Out{% else %}✕ Rule Out{% endif %}
+                </button>
+                <button class="delete-option-btn"
+                        onclick="deleteOption({{ option.id }}, '{{ option.name | e }}')">
+                    {{ icon_delete(14) }} Delete
+                </button>
+            </div>
         </div>
         </div>{# end swipe-content #}
         <div class="swipe-actions">

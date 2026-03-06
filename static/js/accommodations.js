@@ -1,8 +1,10 @@
 // Accommodations JS
 
-function toggleOptionDetails(header) {
+function toggleOptionDetails(header, e) {
     // Don't toggle if we just did a drag
     if (header.closest('.drag-clone')) return;
+    // Don't toggle if user clicked an interactive element inside the header
+    if (e && e.target.closest('input, select, button, textarea, a, .drag-handle')) return;
     const details = header.parentElement.querySelector('.option-details');
     if (!details) return;
     details.style.display = details.style.display === 'none' ? '' : 'none';
@@ -23,6 +25,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+    });
+
+    // Prevent clicks inside option-details from bubbling up to toggle header
+    document.querySelectorAll('.option-details').forEach(details => {
+        details.addEventListener('click', e => e.stopPropagation());
     });
 
     // Close swipes when tapping elsewhere
@@ -362,6 +369,31 @@ async function saveNewOption(locationId) {
     } catch (err) {
         console.error('Add option failed:', err);
         showToast('Failed to add option', 'error');
+    }
+}
+
+async function eliminateOption(optionId) {
+    try {
+        const resp = await fetch(`/api/accommodations/${optionId}/eliminate`, {
+            method: 'POST'
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            const card = document.querySelector(`[data-option-id="${optionId}"]`);
+            const btn = card.querySelector('.eliminate-btn');
+            if (data.is_eliminated) {
+                card.classList.add('eliminated');
+                btn.classList.add('active');
+                btn.textContent = '✓ Ruled Out';
+            } else {
+                card.classList.remove('eliminated');
+                btn.classList.remove('active');
+                btn.textContent = '✕ Rule Out';
+            }
+            showToast(data.is_eliminated ? 'Ruled out' : 'Restored');
+        }
+    } catch (err) {
+        console.error('Eliminate failed:', err);
     }
 }
 
