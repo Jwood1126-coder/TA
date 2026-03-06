@@ -66,15 +66,15 @@
             {% endif %}
         </div>
 
-        <div class="booking-tracker compact-tracker">
-            <select class="status-select" onchange="updateBookingStatus({{ option.id }}, this.value)">
-                <option value="not_booked" {% if option.booking_status == 'not_booked' %}selected{% endif %}>Not Booked</option>
-                <option value="booked" {% if option.booking_status == 'booked' %}selected{% endif %}>Booked</option>
-                <option value="confirmed" {% if option.booking_status == 'confirmed' %}selected{% endif %}>Confirmed</option>
-            </select>
-        </div>
-
         <div class="option-details" style="display:none;">
+            <div class="booking-tracker compact-tracker">
+                <select class="status-select" onchange="updateBookingStatus({{ option.id }}, this.value)">
+                    <option value="not_booked" {% if option.booking_status == 'not_booked' %}selected{% endif %}>Not Booked</option>
+                    <option value="booked" {% if option.booking_status == 'booked' %}selected{% endif %}>Booked</option>
+                    <option value="confirmed" {% if option.booking_status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                </select>
+            </div>
+
             {% if option.standout %}
             <p class="option-standout">{{ option.standout }}</p>
             {% endif %}
