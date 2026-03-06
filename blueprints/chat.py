@@ -682,8 +682,14 @@ def send_message():
     user_content.append({"type": "text", "text": user_message})
     messages.append({"role": "user", "content": user_content})
 
-    max_tokens = 2048 if images else 1024
     model_id = MODEL_MAP.get(model_choice, 'claude-sonnet-4-5-20250929')
+    # Token budgets per tier
+    if model_choice == 'deep':
+        max_tokens = 16384
+    elif model_choice == 'balanced':
+        max_tokens = 8192
+    else:
+        max_tokens = 2048
     app = current_app._get_current_object()
 
     def generate():
@@ -693,14 +699,25 @@ def send_message():
             system = SYSTEM_PROMPT + '\n\n' + context
             full_response = ''
 
+            # Configure thinking for balanced/deep modes
+            use_thinking = model_choice in ('balanced', 'deep')
+            thinking_budget = 10000 if model_choice == 'deep' else 5000
+
             # First call: non-streaming to detect tool use
-            response = client.messages.create(
+            api_kwargs = dict(
                 model=model_id,
                 max_tokens=max_tokens,
                 system=system,
                 messages=messages,
                 tools=TOOLS,
             )
+            if use_thinking:
+                api_kwargs['thinking'] = {
+                    "type": "enabled",
+                    "budget_tokens": thinking_budget,
+                }
+
+            response = client.messages.create(**api_kwargs)
 
             # Process response blocks — extract text and execute tools
             tool_results = []
@@ -717,6 +734,9 @@ def send_message():
                     })
                 elif block.type == 'text':
                     text_parts.append(block.text)
+                elif block.type == 'thinking':
+                    # Extended thinking block — skip (internal reasoning)
+                    yield f"data: {json.dumps({'processing': 'Thinking...'})}\n\n"
 
             if tool_results:
                 # Follow-up call: stream the final response after tool execution
@@ -732,14 +752,25 @@ def send_message():
                             "name": block.name,
                             "input": block.input,
                         })
+                    elif block.type == 'thinking':
+                        assistant_content.append({
+                            "type": "thinking",
+                            "thinking": block.thinking,
+                        })
                 messages.append({"role": "assistant", "content": assistant_content})
                 messages.append({"role": "user", "content": tool_results})
-                with client.messages.stream(
+                followup_kwargs = dict(
                     model=model_id,
-                    max_tokens=1024,
+                    max_tokens=max_tokens,
                     system=system,
                     messages=messages,
-                ) as stream:
+                )
+                if use_thinking:
+                    followup_kwargs['thinking'] = {
+                        "type": "enabled",
+                        "budget_tokens": thinking_budget,
+                    }
+                with client.messages.stream(**followup_kwargs) as stream:
                     for text in stream.text_stream:
                         full_response += text
                         yield f"data: {json.dumps({'text': text})}\n\n"
