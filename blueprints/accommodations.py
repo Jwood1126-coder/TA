@@ -9,7 +9,7 @@ accommodations_bp = Blueprint('accommodations', __name__)
 @accommodations_bp.route('/accommodations')
 def accommodations_view():
     locations = AccommodationLocation.query.order_by(
-        AccommodationLocation.sort_order).all()
+        AccommodationLocation.check_in_date).all()
     return render_template('accommodations.html', locations=locations)
 
 

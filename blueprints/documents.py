@@ -12,7 +12,7 @@ def documents_view():
     flights = Flight.query.order_by(Flight.direction, Flight.leg_number).all()
 
     accom_locations = AccommodationLocation.query.order_by(
-        AccommodationLocation.sort_order).all()
+        AccommodationLocation.check_in_date).all()
     accommodations = []
     for loc in accom_locations:
         selected = next((o for o in loc.options if o.is_selected), None)
