@@ -5,6 +5,9 @@ const chatInput = document.getElementById('chatInput');
 let selectedImage = null;
 let selectedModel = localStorage.getItem('chatModel') || 'balanced';
 
+// Session history — fresh per page load, sent to API for context
+let sessionHistory = [];
+
 // Model selector
 document.querySelectorAll('.model-pill').forEach(btn => {
     if (btn.dataset.model === selectedModel) btn.classList.add('active');
@@ -129,6 +132,7 @@ async function sendMessage() {
             formData.append('message', text);
             formData.append('image', selectedImage);
             formData.append('model', selectedModel);
+            formData.append('session_history', JSON.stringify(sessionHistory));
             selectedImage = null;
             document.getElementById('chatImageInput').value = '';
 
@@ -140,9 +144,16 @@ async function sendMessage() {
             response = await fetch('/api/chat/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, model: selectedModel }),
+                body: JSON.stringify({
+                    message: text,
+                    model: selectedModel,
+                    session_history: sessionHistory,
+                }),
             });
         }
+
+        // Track user message in session
+        sessionHistory.push({ role: 'user', content: text });
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -187,6 +198,10 @@ async function sendMessage() {
                         }
                         if (data.done) {
                             document.querySelectorAll('.processing-indicator').forEach(el => el.remove());
+                            // Track assistant response in session history
+                            if (responseBuffer) {
+                                sessionHistory.push({ role: 'assistant', content: responseBuffer });
+                            }
                         }
                     } catch (e) {
                         // Ignore parse errors on partial chunks
@@ -210,6 +225,21 @@ async function sendMessage() {
     chatInput.disabled = false;
     document.getElementById('sendBtn').disabled = false;
     chatInput.focus();
+}
+
+function clearChat() {
+    sessionHistory = [];
+    chatMessages.innerHTML = `
+        <div class="chat-welcome">
+            <p>Ask me anything about your Japan trip!</p>
+            <p class="chat-welcome-sub">Upload screenshots of confirmations, bookings, or tickets and I'll update your itinerary automatically.</p>
+            <div class="quick-prompts">
+                <button class="prompt-btn" onclick="sendQuickPrompt(this)">What should we eat tonight?</button>
+                <button class="prompt-btn" onclick="sendQuickPrompt(this)">Translate something for me</button>
+                <button class="prompt-btn" onclick="sendQuickPrompt(this)">Suggest a modification to tomorrow</button>
+                <button class="prompt-btn" onclick="sendQuickPrompt(this)">What's our budget status?</button>
+            </div>
+        </div>`;
 }
 
 // Scroll to bottom on load

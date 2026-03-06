@@ -41,6 +41,12 @@ hidden gems. Be concise — they're reading this on a phone. \
 Give specific, actionable answers. When suggesting schedule changes, \
 explain clearly what to add, remove, or move.
 
+IMPORTANT: If a request is ambiguous or you're unsure what the user means, \
+ASK a clarifying question before acting. For example, if they say "book that hotel" \
+but multiple options exist, ask which one. If they mention a day but it's unclear which, \
+confirm. Never guess when you can ask — wrong actions are worse than a quick question. \
+Keep clarifying questions short and specific.
+
 You can add items to the trip checklist (pre_trip, packing, on_trip categories). \
 If someone asks you to add a task, booking reminder, or checklist item, use the \
 add_checklist_item tool. You can also toggle checklist items complete/incomplete \
@@ -539,8 +545,7 @@ def _execute_tool(tool_name, tool_input):
 
 @chat_bp.route('/chat')
 def chat_view():
-    messages = ChatMessage.query.order_by(ChatMessage.created_at).all()
-    return render_template('chat.html', messages=messages)
+    return render_template('chat.html')
 
 
 @chat_bp.route('/api/chat/send', methods=['POST'])
@@ -615,17 +620,23 @@ def send_message():
     # Build context
     context = _build_context()
 
-    # Get recent chat history
-    history = ChatMessage.query.order_by(
-        ChatMessage.created_at.desc()).limit(20).all()
-    history.reverse()
+    # Build messages from client-sent session history (fresh per page load)
+    # Falls back to empty if not provided — each page visit starts a new conversation
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        session_history_raw = request.form.get('session_history', '[]')
+    else:
+        session_history_raw = (data if 'data' in dir() else {}).get('session_history', [])
 
-    # Build messages for API
     messages = []
-    for m in history:
-        if m.id == user_msg.id:
-            continue  # Will add current message with image below
-        messages.append({'role': m.role, 'content': m.content})
+    if isinstance(session_history_raw, str):
+        try:
+            session_history_raw = json.loads(session_history_raw)
+        except (json.JSONDecodeError, TypeError):
+            session_history_raw = []
+
+    for m in (session_history_raw or []):
+        if isinstance(m, dict) and m.get('role') and m.get('content'):
+            messages.append({'role': m['role'], 'content': m['content']})
 
     # Build current user message with optional image
     user_content = []

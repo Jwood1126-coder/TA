@@ -1855,6 +1855,17 @@ body {
     justify-content: space-between;
     gap: 8px;
 }
+.new-chat-btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pico-muted-color);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
 .model-selector {
     display: flex;
     gap: 4px;

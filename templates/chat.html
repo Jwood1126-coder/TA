@@ -6,6 +6,7 @@
     <header class="chat-header">
         <div class="chat-header-row">
             <h1>Trip Assistant</h1>
+            <button class="new-chat-btn" onclick="clearChat()" title="New conversation">New Chat</button>
             <div class="model-selector">
                 <button class="model-pill" data-model="fast" title="Haiku — fastest responses">Fast</button>
                 <button class="model-pill" data-model="balanced" title="Sonnet — balanced speed and quality">Balanced</button>
@@ -15,7 +16,6 @@
     </header>
 
     <div class="chat-messages" id="chatMessages">
-        {% if not messages %}
         <div class="chat-welcome">
             <p>Ask me anything about your Japan trip!</p>
             <p class="chat-welcome-sub">Upload screenshots of confirmations, bookings, or tickets and I'll update your itinerary automatically.</p>
@@ -26,18 +26,6 @@
                 <button class="prompt-btn" onclick="sendQuickPrompt(this)">What's our budget status?</button>
             </div>
         </div>
-        {% else %}
-        {% for msg in messages %}
-        <div class="chat-bubble {{ msg.role }}">
-            {% if msg.image_filename %}
-            <img src="/photos/thumbnails/thumb_{{ msg.image_filename.rsplit('.', 1)[0] }}.jpg"
-                 class="chat-image" alt="Uploaded image"
-                 onclick="window.open('/photos/originals/{{ msg.image_filename }}')">
-            {% endif %}
-            <div class="bubble-content">{{ msg.content }}</div>
-        </div>
-        {% endfor %}
-        {% endif %}
     </div>
 
     <div id="imagePreview" class="image-preview" style="display:none">
