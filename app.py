@@ -18,6 +18,10 @@ def _is_rate_limited(ip):
     # Prune old attempts outside window
     _login_attempts[ip] = [t for t in _login_attempts[ip]
                            if now - t < LOGIN_WINDOW_SECONDS]
+    # Clean up stale IPs periodically (every check, remove empty entries)
+    stale = [k for k, v in _login_attempts.items() if not v]
+    for k in stale:
+        del _login_attempts[k]
     return len(_login_attempts[ip]) >= LOGIN_MAX_ATTEMPTS
 
 
@@ -1626,6 +1630,21 @@ def _migrate_data_cleanup(app):
     if c.fetchone()[0] == 0:
         c.execute("DELETE FROM location WHERE name='Kanazawa'")
 
+    # Link transport routes to their days
+    route_day_map = {
+        ('Tokyo', 'Odawara'): 4, ('Tokyo', 'Nagoya'): 5,
+        ('Nagoya', 'Takayama'): 5, ('Takayama', 'Kanazawa/Kyoto'): 8,
+        ('Kyoto', 'Hiroshima'): 11, ('Hiroshima', 'Miyajima'): 11,
+        ('Kyoto', 'Osaka'): 12, ('Osaka', 'Shinagawa'): 14,
+        ('Shinagawa', 'Haneda Airport'): 14,
+    }
+    for (rf, rt), day_num in route_day_map.items():
+        c.execute("SELECT id FROM day WHERE day_number=?", (day_num,))
+        day_row = c.fetchone()
+        if day_row:
+            c.execute("UPDATE transport_route SET day_id=? WHERE route_from=? AND route_to=? AND day_id IS NULL",
+                      (day_row[0], rf, rt))
+
     # Fix activity descriptions mentioning Kanazawa
     c.execute("SELECT id, title, description FROM activity WHERE title LIKE '%Kanazawa%' OR description LIKE '%Kanazawa%'")
     for aid, title, desc in c.fetchall():
@@ -1695,6 +1714,7 @@ def create_app():
                 error = 'Too many attempts. Please wait a few minutes.'
             elif request.form.get('password') == app.config['TRIP_PASSWORD']:
                 session['authenticated'] = True
+                session.permanent = True
                 return redirect(url_for('itinerary.index'))
             else:
                 _record_attempt(ip)

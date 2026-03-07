@@ -1,5 +1,7 @@
 import os
 import shutil
+import sqlite3
+import tempfile
 from datetime import datetime
 from flask import Blueprint, send_file, request, jsonify, current_app, session, redirect, url_for
 
@@ -28,8 +30,15 @@ def download_backup():
     db = _db_path()
     if not os.path.exists(db):
         return jsonify({'ok': False, 'error': 'No database found'}), 404
+    # Use SQLite backup API for a consistent snapshot
     ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-    return send_file(db, as_attachment=True,
+    tmp = os.path.join(tempfile.gettempdir(), f'japan_trip_backup_{ts}.db')
+    src = sqlite3.connect(db)
+    dst = sqlite3.connect(tmp)
+    src.backup(dst)
+    src.close()
+    dst.close()
+    return send_file(tmp, as_attachment=True,
                      download_name=f'japan_trip_backup_{ts}.db')
 
 
@@ -45,13 +54,34 @@ def restore_backup():
 
     db = _db_path()
 
-    # Backup current DB before overwriting
+    # Backup current DB before overwriting (using SQLite backup API for consistency)
     if os.path.exists(db):
         ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
         backup_path = os.path.join(_backup_dir(), f'pre_restore_{ts}.db')
-        shutil.copy2(db, backup_path)
+        src = sqlite3.connect(db)
+        bak = sqlite3.connect(backup_path)
+        src.backup(bak)
+        src.close()
+        bak.close()
 
-    file.save(db)
+    # Save uploaded file to temp, validate it's a valid SQLite DB, then restore
+    tmp = os.path.join(tempfile.gettempdir(), 'restore_upload.db')
+    file.save(tmp)
+    try:
+        check = sqlite3.connect(tmp)
+        check.execute('SELECT count(*) FROM trip')
+        check.close()
+    except Exception:
+        os.remove(tmp)
+        return jsonify({'ok': False, 'error': 'Invalid database file'}), 400
+
+    # Use SQLite backup API to safely overwrite live DB
+    src = sqlite3.connect(tmp)
+    dst = sqlite3.connect(db)
+    src.backup(dst)
+    src.close()
+    dst.close()
+    os.remove(tmp)
     return jsonify({'ok': True, 'message': 'Database restored. Reloading...'})
 
 
@@ -82,10 +112,19 @@ def restore_server_backup(name):
         return jsonify({'ok': False, 'error': 'Backup not found'}), 404
 
     db = _db_path()
-    # Save current before restoring
+    # Save current before restoring (SQLite backup API for consistency)
     if os.path.exists(db):
         ts = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        shutil.copy2(db, os.path.join(d, f'pre_restore_{ts}.db'))
+        src = sqlite3.connect(db)
+        bak = sqlite3.connect(os.path.join(d, f'pre_restore_{ts}.db'))
+        src.backup(bak)
+        src.close()
+        bak.close()
 
-    shutil.copy2(backup_path, db)
+    # Use SQLite backup API to safely overwrite live DB
+    src = sqlite3.connect(backup_path)
+    dst = sqlite3.connect(db)
+    src.backup(dst)
+    src.close()
+    dst.close()
     return jsonify({'ok': True, 'message': f'Restored from {name}. Reloading...'})
