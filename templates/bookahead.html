@@ -40,7 +40,7 @@
     {% endif %}
     {% if a.getting_there %}
     <div class="book-ahead-transit">
-        &#x1F686; {{ a.getting_there }}
+        &#x1F686; {{ a.getting_there | linkify_stations }}
     </div>
     {% endif %}
     <div class="book-ahead-links">

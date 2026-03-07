@@ -7,6 +7,35 @@
     <h1>{{ icon_clipboard(22) }} Travel Documents</h1>
 </header>
 
+<!-- Uploaded Documents (PDFs, confirmations) -->
+<details class="doc-section" open>
+    <summary class="doc-section-title">&#x1F4C4; Documents &amp; Confirmations</summary>
+    {% if saved_docs %}
+    <div class="doc-file-list">
+        {% for doc in saved_docs %}
+        <div class="doc-file-row" data-filename="{{ doc.filename }}">
+            <span class="doc-file-icon">{% if doc.is_pdf %}&#x1F4D1;{% else %}&#x1F5BC;{% endif %}</span>
+            <a href="{{ url_for('documents.serve_document', filename=doc.filename) }}"
+               target="_blank" rel="noopener" class="doc-file-link">{{ doc.display_name }}</a>
+            <a href="{{ url_for('documents.serve_document', filename=doc.filename) }}"
+               download="{{ doc.display_name }}" class="doc-download-btn" title="Download">&#x2B07;</a>
+            <button class="doc-delete-btn" onclick="deleteDocument('{{ doc.filename }}')" title="Delete">&#x2715;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="doc-empty-hint">No documents uploaded yet.</p>
+    {% endif %}
+    <div class="doc-upload-area">
+        <label class="doc-upload-btn">
+            &#x2B06; Upload Document
+            <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" id="docUploadInput"
+                   onchange="uploadDocument(this)" style="display:none;">
+        </label>
+        <span class="doc-upload-hint">PDF, PNG, JPG accepted</span>
+    </div>
+</details>
+
 <!-- Flights -->
 {% if flights %}
 <details class="doc-section" open>
@@ -85,7 +114,7 @@
 </details>
 {% endif %}
 
-<!-- Accommodations -->
+<!-- Accommodations (booked/confirmed only) -->
 {% if accommodations %}
 <details class="doc-section" open>
     <summary class="doc-section-title">{{ icon_hotel(18) }} Accommodations</summary>
@@ -96,15 +125,20 @@
         <div class="doc-card-header">
             <strong>{{ opt.name }}</strong>
             {% if opt.property_type %}<span class="doc-card-type">{{ opt.property_type }}</span>{% endif %}
-            {% if opt.booking_status and opt.booking_status != 'not_booked' %}
             <span class="booking-badge {{ opt.booking_status }}">{{ opt.booking_status | replace('_', ' ') | title }}</span>
-            {% endif %}
         </div>
         <div class="doc-card-meta">
             {{ loc.location_name }} &middot;
             {{ loc.check_in_date.strftime('%b %d') }} &ndash; {{ loc.check_out_date.strftime('%b %d') }}
             ({{ loc.num_nights }} night{{ 's' if loc.num_nights != 1 }})
         </div>
+        {% if opt.check_in_info or opt.check_out_info %}
+        <div class="doc-card-meta">
+            {% if opt.check_in_info %}Check-in: {{ opt.check_in_info }}{% endif %}
+            {% if opt.check_in_info and opt.check_out_info %} &middot; {% endif %}
+            {% if opt.check_out_info %}Check-out: {{ opt.check_out_info }}{% endif %}
+        </div>
+        {% endif %}
         {% if opt.maps_url or opt.address %}
         <div class="doc-card-address">
             <a href="{{ opt.maps_url or (opt.address | maps_link) }}" target="_blank" rel="noopener" class="{% if opt.maps_url %}maps-navigate-btn{% else %}navigate-link{% endif %}">
@@ -208,8 +242,8 @@
 </details>
 {% endif %}
 
-{% if not flights and not accommodations and not transport and not ticketed_activities %}
-<p class="empty-state">No travel documents yet. Import your travel plan to get started.</p>
+{% if not flights and not accommodations and not transport and not ticketed_activities and not saved_docs %}
+<p class="empty-state">No travel documents yet. Upload your booking confirmations to get started.</p>
 {% endif %}
 {% endblock %}
 

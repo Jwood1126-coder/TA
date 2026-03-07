@@ -205,7 +205,8 @@
 {% set slot_macros = {'morning': icon_sun, 'afternoon': icon_cloud_sun, 'evening': icon_moon, 'night': icon_stars} %}
 
 {% for slot in slots %}
-{% set slot_activities = day.activities | selectattr('time_slot', 'equalto', slot) | rejectattr('is_substitute') | list %}
+{% set _raw = day.activities | selectattr('time_slot', 'equalto', slot) | rejectattr('is_substitute') | list %}
+{% set slot_activities = [] %}{% for _a in _raw %}{% if _a.id not in hidden_activity_ids %}{% if slot_activities.append(_a) %}{% endif %}{% endif %}{% endfor %}
 {% if slot_activities %}
 <section class="time-slot-section">
     <h3 class="slot-heading">{{ slot_macros[slot](18) }} {{ slot_labels[slot] }}</h3>
@@ -264,20 +265,22 @@
                 {% if activity.cost_note %}
                 <div class="activity-cost">{{ activity.cost_note }}</div>
                 {% endif %}
-                {% if activity.description %}
+                {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
                 <details class="activity-details">
                     <summary>Details</summary>
+                    {% if activity.description %}
                     <p>{{ activity.description }}</p>
+                    {% endif %}
+                    {% if activity.getting_there %}
+                    <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
+                    {% endif %}
+                    {% if activity.book_ahead_note %}
+                    <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
+                    {% endif %}
+                    {% if activity.why %}
+                    <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
+                    {% endif %}
                 </details>
-                {% endif %}
-                {% if activity.getting_there %}
-                <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there }}</div>
-                {% endif %}
-                {% if activity.book_ahead_note %}
-                <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
-                {% endif %}
-                {% if activity.why %}
-                <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
                 {% endif %}
                 {% if activity.notes %}
                 <div class="activity-user-note">{{ activity.notes }}</div>
@@ -331,14 +334,22 @@
                         {{ icon_ticket(14) }} Tickets / Info
                     </a>
                     {% endif %}
-                    {% if activity.description %}
+                    {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
                     <details class="activity-details">
                         <summary>Details</summary>
+                        {% if activity.description %}
                         <p>{{ activity.description }}</p>
+                        {% endif %}
+                        {% if activity.getting_there %}
+                        <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
+                        {% endif %}
+                        {% if activity.book_ahead_note %}
+                        <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
+                        {% endif %}
+                        {% if activity.why %}
+                        <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
+                        {% endif %}
                     </details>
-                    {% endif %}
-                    {% if activity.getting_there %}
-                    <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there }}</div>
                     {% endif %}
                     {% if activity.notes %}
                     <div class="activity-user-note">{{ activity.notes }}</div>
@@ -358,7 +369,8 @@
 {% endfor %}
 
 <!-- Activities without a time slot -->
-{% set unslotted = day.activities | rejectattr('time_slot') | rejectattr('is_substitute') | list %}
+{% set _unslotted_raw = day.activities | rejectattr('time_slot') | rejectattr('is_substitute') | list %}
+{% set unslotted = [] %}{% for _a in _unslotted_raw %}{% if _a.id not in hidden_activity_ids %}{% if unslotted.append(_a) %}{% endif %}{% endif %}{% endfor %}
 {% if unslotted %}
 <section class="time-slot-section">
     <h3 class="slot-heading">{{ icon_pushpin(18) }} Activities</h3>

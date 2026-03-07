@@ -2280,6 +2280,42 @@ def create_app():
         from urllib.parse import quote
         return f"https://translate.google.com/translate?sl=ja&tl=en&u={quote(url, safe='')}"
 
+    # Auto-link station/hub names in transit text to Google Maps
+    @app.template_filter('linkify_stations')
+    def linkify_stations_filter(text):
+        import re
+        from urllib.parse import quote
+        from markupsafe import Markup, escape
+
+        if not text:
+            return text
+
+        # Match proper station names: "Name Station", "Name Bus Center", etc.
+        # 1-3 capitalized words before the suffix keyword
+        station_pattern = re.compile(
+            r'\b((?:[A-Z][\w\-]*(?:\s+[A-Z][\w\-]*){0,2})'
+            r'\s+(?:Station|Sta\.|Terminal|Port|Bus Center|Bus Stop))\b',
+        )
+
+        escaped = str(escape(text))
+        parts = []
+        last_end = 0
+        for m in station_pattern.finditer(escaped):
+            name = m.group(1).strip()
+            if len(name) < 6:
+                continue
+            maps_url = f"https://www.google.com/maps/search/?api=1&query={quote(name + ' Japan')}"
+            parts.append(escaped[last_end:m.start()])
+            parts.append(
+                f'<a href="{maps_url}" target="_blank" rel="noopener" '
+                f'class="station-link">{name}</a>'
+            )
+            last_end = m.end()
+        if parts:
+            parts.append(escaped[last_end:])
+            return Markup(''.join(parts))
+        return text
+
     # Auth routes
     @app.route('/login', methods=['GET', 'POST'])
     def login():
@@ -2314,6 +2350,20 @@ def create_app():
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'originals'), exist_ok=True)
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'thumbnails'), exist_ok=True)
     os.makedirs(os.path.join(os.path.dirname(__file__), 'data'), exist_ok=True)
+
+    # Copy bundled flight PDFs to uploads/documents if not already there
+    docs_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'documents')
+    os.makedirs(docs_dir, exist_ok=True)
+    bundled_docs = os.path.join(os.path.dirname(__file__), 'Documentation', 'flights')
+    if os.path.isdir(bundled_docs):
+        import shutil
+        existing = set(os.listdir(docs_dir))
+        for fname in os.listdir(bundled_docs):
+            # Check if any file ending with this name already exists
+            if not any(f.endswith('__' + fname) or f == fname for f in existing):
+                src = os.path.join(bundled_docs, fname)
+                dst = os.path.join(docs_dir, fname)
+                shutil.copy2(src, dst)
 
     with app.app_context():
         db.create_all()

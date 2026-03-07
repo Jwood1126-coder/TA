@@ -276,6 +276,57 @@ def day_view(day_number):
                 location_id=day_checkout.id, is_eliminated=False
             ).order_by(AccommodationOption.rank).all()
 
+    # Build set of booked hotel name keywords for filtering
+    booked_keywords = set()
+    booked_options = AccommodationOption.query.filter(
+        AccommodationOption.is_selected == True,
+        AccommodationOption.booking_status.in_(['booked', 'confirmed'])
+    ).all()
+    for opt in booked_options:
+        # Extract keywords from hotel name (e.g. "Dormy Inn Asakusa" -> {"dormy", "inn"})
+        for word in opt.name.lower().split():
+            if len(word) > 2:
+                booked_keywords.add(word)
+
+    # Hotel-specific patterns that indicate an amenity activity
+    _HOTEL_PATTERNS = [
+        'ramen at', 'onsen at', 'onsen bath at', 'breakfast at',
+        'dinner at', 'check into', 'check out of', 'check in at',
+        'kaiseki dinner at', 'bath at',
+    ]
+    # Specific hotel/property name keywords
+    _HOTEL_NAMES = [
+        'dormy', 'ryokan', 'hostel', 'toyoko', "k's house", 'kaname',
+        'piece hostel', 'machiya', 'shinagawa',
+    ]
+
+    def _is_hotel_activity(activity):
+        """Return True if activity references a specific hotel."""
+        title = activity.title.lower()
+        # Check if title contains hotel-specific patterns
+        for pattern in _HOTEL_PATTERNS:
+            if pattern in title:
+                return True
+        for name in _HOTEL_NAMES:
+            if name in title:
+                return True
+        return False
+
+    def _hotel_is_booked(activity):
+        """Check if the hotel referenced in the activity title is booked."""
+        title = activity.title.lower()
+        # Check if any booked hotel keyword appears in the activity title
+        for kw in booked_keywords:
+            if kw in title:
+                return True
+        return False
+
+    # Filter activities: hide hotel-specific ones unless hotel is booked
+    hidden_ids = set()
+    for a in day.activities:
+        if _is_hotel_activity(a) and not _hotel_is_booked(a):
+            hidden_ids.add(a.id)
+
     return render_template('day.html', day=day, prev_day=prev_day,
                            next_day=next_day, total_days=total_days,
                            transport_routes=transport_routes,
@@ -283,7 +334,8 @@ def day_view(day_number):
                            day_checkin=day_checkin, checkin_option=checkin_option,
                            day_checkout=day_checkout, checkout_option=checkout_option,
                            checkin_options_pending=checkin_options_pending,
-                           checkout_options_pending=checkout_options_pending)
+                           checkout_options_pending=checkout_options_pending,
+                           hidden_activity_ids=hidden_ids)
 
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/toggle', methods=['POST'])

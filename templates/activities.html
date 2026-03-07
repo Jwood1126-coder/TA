@@ -84,20 +84,25 @@
             {% if a.cost_note %}&middot; {{ a.cost_note }}{% endif %}
             {% if a.cost_per_person and not a.cost_note %}&middot; &yen;{{ a.cost_per_person | int }}/person{% endif %}
         </div>
-        {% if a.description %}
-        <div class="act-browse-desc">{{ a.description }}</div>
-        {% endif %}
-        {% if a.why %}
-        <div class="act-why-card">
-            {{ icon_lightbulb(14) }}
-            <span>{{ a.why }}</span>
-        </div>
-        {% endif %}
-        {% if a.getting_there %}
-        <div class="act-transit-tip">&#x1F686; {{ a.getting_there }}</div>
-        {% endif %}
-        {% if a.book_ahead_note %}
-        <div class="act-book-tip">&#x1F3AB; {{ a.book_ahead_note }}</div>
+        {% if a.description or a.why or a.getting_there or a.book_ahead_note %}
+        <details class="activity-details">
+            <summary>Details</summary>
+            {% if a.description %}
+            <div class="act-browse-desc">{{ a.description }}</div>
+            {% endif %}
+            {% if a.getting_there %}
+            <div class="act-transit-tip">&#x1F686; {{ a.getting_there | linkify_stations }}</div>
+            {% endif %}
+            {% if a.book_ahead_note %}
+            <div class="act-book-tip">&#x1F3AB; {{ a.book_ahead_note }}</div>
+            {% endif %}
+            {% if a.why %}
+            <div class="act-why-card">
+                {{ icon_lightbulb(14) }}
+                <span>{{ a.why }}</span>
+            </div>
+            {% endif %}
+        </details>
         {% endif %}
         <div class="act-browse-links">
             {% if a.maps_url %}
