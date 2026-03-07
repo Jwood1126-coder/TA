@@ -69,6 +69,30 @@
     .flight-leg .route { font-weight: 700; min-width: 90px; }
     .flight-leg .detail { color: var(--muted); }
     .flight-leg .confirm { color: var(--accent); font-weight: 700; }
+    .flight-link {
+        font-size: 8pt;
+        color: white;
+        background: var(--accent);
+        padding: 2px 8px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 600;
+    }
+    .export-link {
+        font-size: 8pt;
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+        margin-right: 6px;
+    }
+    .export-link:hover { text-decoration: underline; }
+    .export-link.maps { color: #2d8a4e; }
+    .not-booked { font-size: 9pt; color: var(--muted); }
+    .option-chip {
+        display: inline;
+        font-size: 9pt;
+    }
+    .option-chip a { text-decoration: none; margin: 0 2px; }
 
     /* Accommodation table */
     .accom-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 8px; }
@@ -154,6 +178,8 @@
         h2 { font-size: 12pt; margin-top: 12px; }
         .day-section { page-break-inside: avoid; }
         .flight-leg, .accom-table td, .activity-list li { font-size: 9pt; }
+        .flight-link { display: none; }
+        a[href]::after { content: none !important; }
         @page { margin: 15mm; }
     }
 </style>
@@ -182,6 +208,8 @@
     <span>{{ f.depart_date.strftime('%b %d') if f.depart_date else '' }}</span>
     <span>{{ f.depart_time or '' }}{% if f.arrive_time %} &rarr; {{ f.arrive_time }}{% endif %}</span>
     {% if f.confirmation_number %}<span class="confirm">{{ f.confirmation_number }}</span>{% endif %}
+    {% if 'Delta' in f.airline %}<a href="https://www.delta.com/mytrips/" target="_blank" rel="noopener" class="flight-link">Manage</a>{% endif %}
+    {% if 'United' in f.airline %}<a href="https://www.united.com/en/us/managereservation/mytrips" target="_blank" rel="noopener" class="flight-link">Manage</a>{% endif %}
 </div>
 {% if f.notes %}<div style="font-size:9pt;color:#888;margin:-2px 0 6px 12px;">{{ f.notes }}</div>{% endif %}
 {% endfor %}
@@ -190,26 +218,38 @@
 <h2>Accommodations</h2>
 <table class="accom-table">
 <thead>
-    <tr><th>Location</th><th>Dates</th><th>Hotel</th><th>Confirmation</th></tr>
+    <tr><th>Location</th><th>Dates</th><th>Hotel</th><th>Links</th></tr>
 </thead>
 <tbody>
 {% for a in accommodations %}
 <tr>
     <td class="loc-name">{{ a.location.location_name }}</td>
     <td>{{ a.location.check_in_date.strftime('%b %d') }} &ndash; {{ a.location.check_out_date.strftime('%b %d') }} ({{ a.location.num_nights }}N)</td>
-    <td class="hotel-name">{{ a.selected.name if a.selected else 'Not booked' }}</td>
-    <td>
-        {% if a.selected and a.selected.confirmation_number %}
-            <strong>{{ a.selected.confirmation_number }}</strong>
-        {% elif a.selected and a.selected.booking_status == 'booked' %}
-            Booked
-        {% else %}
-            &mdash;
-        {% endif %}
+    {% if a.selected %}
+    <td class="hotel-name">{{ a.selected.name }}</td>
+    <td class="accom-links">
+        {% if a.selected.confirmation_number %}<strong>{{ a.selected.confirmation_number }}</strong><br>{% endif %}
+        {% if a.selected.booking_url %}<a href="{{ a.selected.booking_url }}" target="_blank" rel="noopener" class="export-link">Booking</a>{% endif %}
+        {% if a.selected.address %}<a href="https://www.google.com/maps/search/?api=1&query={{ a.selected.address | urlencode }}" target="_blank" rel="noopener" class="export-link maps">Map</a>{% endif %}
+    </td>
+    </tr>
+    {% if a.selected.address %}
+    <tr><td colspan="4" style="font-size:9pt;color:#888;padding-top:0;">&#x1f4cd; {{ a.selected.address }}</td></tr>
+    {% endif %}
+    {% else %}
+    <td colspan="2" class="not-booked">
+        Not booked &mdash; Options:
+        {% for opt in a.options %}
+            {% if not opt.is_eliminated %}
+            <span class="option-chip">
+                {{ opt.name }}
+                {% if opt.booking_url %}<a href="{{ opt.booking_url }}" target="_blank" rel="noopener" title="Book">&#x1f517;</a>{% endif %}
+                {% if opt.address %}<a href="https://www.google.com/maps/search/?api=1&query={{ opt.address | urlencode }}" target="_blank" rel="noopener" title="Map">&#x1f4cd;</a>{% endif %}
+            </span>{{ "," if not loop.last }}
+            {% endif %}
+        {% endfor %}
     </td>
 </tr>
-{% if a.selected and a.selected.address %}
-<tr><td colspan="4" style="font-size:9pt;color:#888;padding-top:0;">&#x1f4cd; {{ a.selected.address }}</td></tr>
 {% endif %}
 {% endfor %}
 </tbody>

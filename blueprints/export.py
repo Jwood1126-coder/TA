@@ -18,7 +18,8 @@ def export_view():
     accommodations = []
     for loc in accom_locations:
         selected = next((o for o in loc.options if o.is_selected), None)
-        accommodations.append({'location': loc, 'selected': selected})
+        accommodations.append({'location': loc, 'selected': selected,
+                               'options': loc.options})
 
     # Build day data with activities
     day_data = []

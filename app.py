@@ -1514,6 +1514,86 @@ def _migrate_consolidate_kyoto(app):
     print("Migration complete: Kyoto consolidated to 4 nights.")
 
 
+def _migrate_add_addresses_and_cleanup_transport(app):
+    """Add verified addresses to all accommodation options, clean up outdated transport routes. Idempotent."""
+    import sqlite3
+    from models import AccommodationOption
+
+    # Idempotent check: if first Tokyo hotel already has address, skip
+    opt = AccommodationOption.query.filter_by(name='Onyado Nono Asakusa Natural Hot Springs').first()
+    if opt and opt.address:
+        return
+
+    print("Running data migration: adding hotel addresses and cleaning transport routes...")
+    db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+
+    # === Hotel addresses (all verified via official sites / booking platforms) ===
+    addresses = {
+        'Onyado Nono Asakusa Natural Hot Springs': '2-7-20 Asakusa, Taito-ku, Tokyo 111-0032, Japan',
+        'THE GATE HOTEL Kaminarimon by Hulic': '2-16-11 Kaminarimon, Taito-ku, Tokyo 111-0034, Japan',
+        'Richmond Hotel Premier Asakusa International': '2-6-7 Asakusa, Taito-ku, Tokyo 111-0032, Japan',
+        'Dormy Inn Express Asakusa': '1-3-4 Hanakawado, Taito-ku, Tokyo 111-0033, Japan',
+        'Nui. Hostel & Bar Lounge': '2-14-13 Kuramae, Taito-ku, Tokyo, Japan',
+        'Tanabe Ryokan': '58 Aioi-machi, Takayama-shi, Gifu 506-0014, Japan',
+        'Sumiyoshi Ryokan': '4-21 Honmachi, Takayama-shi, Gifu 506-0011, Japan',
+        'Oyado Koto no Yume': '6-11 Hanasato-machi, Takayama-shi, Gifu 506-0026, Japan',
+        'Rickshaw Inn': '54 Suehiro-cho, Takayama-shi, Gifu 506-0016, Japan',
+        'J-Hoppers Takayama': '5-52 Nada-cho, Takayama-shi, Gifu 506-0021, Japan',
+        'Piece Hostel Sanjo': '531 Asakura-cho, Tominokoji Sanjo-kudaru, Nakagyo-ku, Kyoto 604-8074, Japan',
+        'Hotel Grand Bach Kyoto Select': '363 Naramonocho, Shijodori Teramachi Nishi-iru, Shimogyo-ku, Kyoto 600-8004, Japan',
+        'The Celestine Kyoto Gion': '572 Komatsu-cho, Yasaka-dori Higashioji Nishi-iru, Higashiyama-ku, Kyoto 605-0933, Japan',
+        'Hotel Ethnography Gion Shinmonzen': '219-2 Nishino-cho, Shinmonzen-dori, Higashiyama-ku, Kyoto 605-0088, Japan',
+        'Len Kyoto Kawaramachi': '709-3 Uematsu-cho, Kawaramachi-dori Matsubara-sagaru, Shimogyo-ku, Kyoto 600-8028, Japan',
+        'Cross Hotel Osaka': '2-5-15 Shinsaibashi-suji, Chuo-ku, Osaka-shi, Osaka 542-0085, Japan',
+        'Dormy Inn Premium Namba': '2-14-23 Shimanouchi, Chuo-ku, Osaka-shi, Osaka 542-0082, Japan',
+        'Dotonbori Hotel': '2-3-25 Dotonbori, Chuo-ku, Osaka-shi, Osaka 542-0071, Japan',
+        'Holiday Inn Osaka Namba': '5-15 Soemon-cho, Chuo-ku, Osaka-shi, Osaka 542-0084, Japan',
+        'MIMARU Osaka Namba Station': '3-6-24 Nipponbashi, Naniwa-ku, Osaka-shi, Osaka 556-0005, Japan',
+    }
+
+    for name, addr in addresses.items():
+        c.execute("UPDATE accommodation_option SET address=? WHERE name=?", (addr, name))
+
+    # === Clean up outdated transport routes ===
+    # Remove Kanazawa-related routes (no longer on itinerary)
+    c.execute("DELETE FROM transport_route WHERE route_from='Shirakawa-go' AND route_to='Kanazawa'")
+    c.execute("DELETE FROM transport_route WHERE route_from='Kanazawa' AND route_to='Tsuruga'")
+    c.execute("DELETE FROM transport_route WHERE route_from='Tsuruga' AND route_to='Kyoto'")
+
+    # Remove old Kyoto->Tokyo and Osaka->Tokyo routes (we go Osaka->Shinagawa now)
+    c.execute("DELETE FROM transport_route WHERE route_from='Kyoto' AND route_to='Tokyo'")
+    c.execute("DELETE FROM transport_route WHERE route_from='Osaka' AND route_to='Tokyo'")
+
+    # Remove Shinagawa->Narita (we fly from Haneda now)
+    c.execute("DELETE FROM transport_route WHERE route_from='Shinagawa' AND route_to='Narita Airport'")
+
+    # Update Shirakawa-go route: goes to Kyoto via bus+train now
+    c.execute("""UPDATE transport_route SET route_to='Kanazawa/Kyoto',
+                 notes='Bus to Kanazawa (~1h15), then Thunderbird/Shinkansen to Kyoto (~2h30)'
+                 WHERE route_from='Takayama' AND route_to='Shirakawa-go'""")
+
+    # Add Shinagawa->Haneda route if not exists
+    c.execute("SELECT id FROM transport_route WHERE route_from='Shinagawa' AND route_to='Haneda Airport'")
+    if not c.fetchone():
+        c.execute("""INSERT INTO transport_route (route_from, route_to, transport_type, train_name,
+                     duration, jr_pass_covered, cost_if_not_covered, sort_order)
+                     VALUES ('Shinagawa', 'Haneda Airport', 'Keikyu Line', NULL, '~15 min', 0, '~500 yen', 20)""")
+
+    # Add Osaka->Shinagawa shinkansen if not exists (departure day route)
+    c.execute("SELECT id FROM transport_route WHERE route_from='Osaka' AND route_to='Shinagawa'")
+    if not c.fetchone():
+        c.execute("""INSERT INTO transport_route (route_from, route_to, transport_type, train_name,
+                     duration, jr_pass_covered, cost_if_not_covered, sort_order)
+                     VALUES ('Osaka', 'Shinagawa', 'Shinkansen', 'Hikari', '~2h 30min', 1, '¥13,870', 19)""")
+
+    conn.commit()
+    conn.close()
+    db.session.expire_all()
+    print("Migration complete: hotel addresses added, transport routes cleaned up.")
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -1606,6 +1686,7 @@ def create_app():
         _fix_checklist_consistency(app)
         _migrate_14day_restructure(app)
         _migrate_consolidate_kyoto(app)
+        _migrate_add_addresses_and_cleanup_transport(app)
 
     return app
 
