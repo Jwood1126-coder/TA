@@ -1477,6 +1477,43 @@ def _migrate_14day_restructure(app):
     print("Migration complete: trip restructured to 14 days (Apr 5-18).")
 
 
+def _migrate_consolidate_kyoto(app):
+    """Merge Kyoto Machiya into Kyoto (3 nights) -> Kyoto (4 nights). Idempotent."""
+    import sqlite3
+    from models import db, AccommodationLocation
+
+    machiya = AccommodationLocation.query.filter_by(location_name='Kyoto Machiya').first()
+    if not machiya:
+        return
+
+    print("Running data migration: consolidate Kyoto accommodations...")
+    db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+
+    c.execute("""UPDATE accommodation_location SET
+        location_name='Kyoto (4 nights)', num_nights=4, check_out_date='2026-04-16',
+        quick_notes='Kyoto April = hardest booking in Japan. Private rooms sell out months ahead. 4 nights covers all Kyoto days + Hiroshima day trip.'
+        WHERE location_name='Kyoto (3 nights)'""")
+
+    machiya_id = machiya.id
+    c.execute("DELETE FROM accommodation_option WHERE location_id=?", (machiya_id,))
+    c.execute("SELECT id FROM checklist_item WHERE accommodation_location_id=?", (machiya_id,))
+    for ci in c.fetchall():
+        c.execute("DELETE FROM checklist_option WHERE checklist_item_id=?", (ci[0],))
+        c.execute("DELETE FROM checklist_item WHERE id=?", (ci[0],))
+    c.execute("SELECT id FROM checklist_item WHERE title LIKE '%machiya%'")
+    for ci in c.fetchall():
+        c.execute("DELETE FROM checklist_option WHERE checklist_item_id=?", (ci[0],))
+        c.execute("DELETE FROM checklist_item WHERE id=?", (ci[0],))
+    c.execute("DELETE FROM accommodation_location WHERE id=?", (machiya_id,))
+
+    conn.commit()
+    conn.close()
+    db.session.expire_all()
+    print("Migration complete: Kyoto consolidated to 4 nights.")
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -1566,6 +1603,7 @@ def create_app():
         _migrate_remove_kanazawa(app)
         _fix_checklist_consistency(app)
         _migrate_14day_restructure(app)
+        _migrate_consolidate_kyoto(app)
 
     return app
 
