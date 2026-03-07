@@ -17,12 +17,12 @@
     {% if days_until is not none and days_until > 0 %}
         <p class="countdown">{{ days_until }} days to go!</p>
     {% elif trip_started and current_day %}
-        <p class="countdown current">Day {{ current_day.day_number }} of 15</p>
+        <p class="countdown current">Day {{ current_day.day_number }} of 14</p>
         <p class="location-badge">{{ current_day.title }}</p>
     {% elif trip_ended %}
         <p class="countdown ended">Trip complete!</p>
     {% else %}
-        <p class="countdown">April 4 &ndash; 18, 2026</p>
+        <p class="countdown">April 5 &ndash; 18, 2026</p>
     {% endif %}
 </header>
 
