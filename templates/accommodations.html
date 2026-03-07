@@ -55,7 +55,9 @@
             </div>
             <div class="option-rank">#{{ option.rank }}</div>
             <div class="option-info">
-                <div class="option-name">{{ option.name }}</div>
+                <div class="option-name">{{ option.name }}
+                    <button class="copy-name-btn" onclick="event.stopPropagation(); copyHotelName('{{ option.name | e }}')" title="Copy hotel name">&#x1f4cb;</button>
+                </div>
                 <div class="option-type">{{ option.property_type or '' }}</div>
             </div>
             <div class="option-price">
@@ -254,5 +256,14 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/touch.js') }}"></script>
 <script src="{{ url_for('static', filename='js/celebrate.js') }}"></script>
+<script>
+function copyHotelName(name) {
+    navigator.clipboard.writeText(name).then(function() {
+        var btn = event.target;
+        btn.textContent = '\u2705';
+        setTimeout(function() { btn.textContent = '\uD83D\uDCCB'; }, 1200);
+    });
+}
+</script>
 <script src="{{ url_for('static', filename='js/accommodations.js') }}"></script>
 {% endblock %}

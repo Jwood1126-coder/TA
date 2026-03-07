@@ -1197,6 +1197,18 @@ body {
     font-weight: 600;
     font-size: 0.9rem;
 }
+.copy-name-btn {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 1px 4px;
+    margin-left: 4px;
+    vertical-align: middle;
+    opacity: 0.6;
+}
+.copy-name-btn:active { opacity: 1; }
 
 .option-type {
     font-size: 0.75rem;
