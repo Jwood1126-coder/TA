@@ -15,7 +15,7 @@
     </div>
     <h1>Japan 2026 {{ icon_sakura(22) }}</h1>
     {% if days_until is not none and days_until > 0 %}
-        <p class="countdown">{{ days_until }} days to go!</p>
+        <div id="countdown" class="countdown" data-target="{{ trip.start_date.isoformat() }}"></div>
     {% elif trip_started and current_day %}
         <p class="countdown current">Day {{ current_day.day_number }} of 14</p>
         <p class="location-badge">{{ current_day.title }}</p>
@@ -140,4 +140,35 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/itinerary.js') }}"></script>
+<script>
+(function() {
+    const el = document.getElementById('countdown');
+    if (!el) return;
+    const target = new Date(el.dataset.target + 'T00:00:00');
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function render() {
+        const now = new Date();
+        const diff = target - now;
+        if (diff <= 0) { el.textContent = "It's go time!"; return; }
+
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+
+        el.innerHTML =
+            '<div class="countdown-units">' +
+            '<div class="countdown-unit"><span class="cd-val">' + d + '</span><span class="cd-label">days</span></div>' +
+            '<div class="countdown-unit"><span class="cd-val">' + pad(h) + '</span><span class="cd-label">hours</span></div>' +
+            '<div class="countdown-unit"><span class="cd-val">' + pad(m) + '</span><span class="cd-label">min</span></div>' +
+            '<div class="countdown-unit"><span class="cd-val">' + pad(s) + '</span><span class="cd-label">sec</span></div>' +
+            '</div>';
+    }
+
+    render();
+    setInterval(render, 1000);
+})();
+</script>
 {% endblock %}

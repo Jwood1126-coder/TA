@@ -222,6 +222,43 @@ body {
     color: var(--accent);
 }
 
+.countdown-units {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.countdown-unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 48px;
+}
+
+.countdown-unit .cd-val {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--accent);
+}
+
+.countdown-unit .cd-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+.countdown-unit .cd-sep {
+    font-size: 1.4rem;
+    font-weight: 300;
+    opacity: 0.4;
+    align-self: flex-start;
+    padding-top: 2px;
+}
+
 .countdown.current {
     color: var(--jr-green);
 }
