@@ -2410,6 +2410,33 @@ def _migrate_add_booking_resources(app):
     print("  Migration complete: HotelTonight added to reference, Google Hotels links added.")
 
 
+def _migrate_swap_tokyo_hotel_links(app):
+    """Swap booking_url <-> alt_booking_url for the 5 Shinjuku hotels so Google Hotels
+    is the primary 'Website' button and Booking.com becomes the 'Link' button.
+    Idempotent — skips if primary URL already points to Google."""
+    from models import AccommodationOption
+
+    hotels = [
+        'Anshin Oyado Tokyo Man Shinjuku',
+        "La'gent Hotel Shinjuku Kabukicho",
+        'DOMO HOTEL',
+        'Mitsui Garden Hotel Jingugaien PREMIER',
+        'HOTEL GROOVE SHINJUKU (PARKROYAL)',
+    ]
+    changed = False
+    for name in hotels:
+        opt = AccommodationOption.query.filter_by(name=name).first()
+        if opt and opt.booking_url and 'google.com' not in opt.booking_url:
+            opt.booking_url, opt.alt_booking_url = opt.alt_booking_url, opt.booking_url
+            changed = True
+
+    if not changed:
+        return
+
+    db.session.commit()
+    print("  Migration complete: Google Hotels is now primary link for Shinjuku hotels.")
+
+
 def create_app(run_data_migrations=True):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -2563,6 +2590,7 @@ def create_app(run_data_migrations=True):
             _migrate_sumo_bookahead_transit(app)
             _migrate_add_shinjuku_hotels(app)
             _migrate_add_booking_resources(app)
+            _migrate_swap_tokyo_hotel_links(app)
 
     return app
 
