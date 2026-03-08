@@ -2771,6 +2771,7 @@ def create_app(run_data_migrations=True):
     from blueprints.backup import backup_bp
     from blueprints.export import export_bp
     from blueprints.bookahead import bookahead_bp
+    from blueprints.calendar import calendar_bp
 
     app.register_blueprint(itinerary_bp)
     app.register_blueprint(accommodations_bp)
@@ -2783,6 +2784,7 @@ def create_app(run_data_migrations=True):
     app.register_blueprint(backup_bp)
     app.register_blueprint(export_bp)
     app.register_blueprint(bookahead_bp)
+    app.register_blueprint(calendar_bp)
 
     # Google Maps link filter
     @app.template_filter('maps_link')
