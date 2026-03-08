@@ -487,28 +487,33 @@ def import_accommodation_options():
              'price_low': 76, 'price_high': 76,
              'standout': 'STEAL: 41% below normal price. Onsen + sauna included. 4.2★ · 2,100+ reviews. Best value in Shinjuku.',
              'url': 'https://www.booking.com/searchresults.html?ss=Anshin+Oyado+Tokyo+Man+Shinjuku&checkin=2026-04-06&checkout=2026-04-09&group_adults=2',
+             'alt_url': 'https://www.google.com/travel/hotels?q=Anshin+Oyado+Tokyo+Man+Shinjuku&checkin=2026-04-06&checkout=2026-04-09&adults=2',
              'has_onsen': True},
             {'rank': 7, 'name': "La'gent Hotel Shinjuku Kabukicho",
              'type': '3-star Hotel · Shinjuku / Kabukicho',
              'price_low': 175, 'price_high': 175,
              'standout': 'Right in Kabukicho entertainment district. Walk to Golden Gai + Omoide Yokocho at night. 4.3★ · 501 reviews.',
-             'url': 'https://www.booking.com/searchresults.html?ss=Lagent+Hotel+Shinjuku+Kabukicho&checkin=2026-04-06&checkout=2026-04-09&group_adults=2'},
+             'url': 'https://www.booking.com/searchresults.html?ss=Lagent+Hotel+Shinjuku+Kabukicho&checkin=2026-04-06&checkout=2026-04-09&group_adults=2',
+             'alt_url': 'https://www.google.com/travel/hotels?q=Lagent+Hotel+Shinjuku+Kabukicho&checkin=2026-04-06&checkout=2026-04-09&adults=2'},
             {'rank': 8, 'name': 'DOMO HOTEL',
              'type': 'Boutique Hotel · Shinjuku',
              'price_low': 152, 'price_high': 152,
              'standout': 'Hidden gem: flagged "GREAT PRICE with excellent reviews". 4.5★ · newer property with very high guest satisfaction.',
-             'url': 'https://www.booking.com/searchresults.html?ss=DOMO+HOTEL+Shinjuku+Tokyo&checkin=2026-04-06&checkout=2026-04-09&group_adults=2'},
+             'url': 'https://www.booking.com/searchresults.html?ss=DOMO+HOTEL+Shinjuku+Tokyo&checkin=2026-04-06&checkout=2026-04-09&group_adults=2',
+             'alt_url': 'https://www.google.com/travel/hotels?q=DOMO+HOTEL+Shinjuku+Tokyo&checkin=2026-04-06&checkout=2026-04-09&adults=2'},
             {'rank': 9, 'name': 'Mitsui Garden Hotel Jingugaien PREMIER',
              'type': '5-star Hotel · Jingugaien / Harajuku',
              'price_low': 291, 'price_high': 291,
              'standout': 'GREAT PRICE for a 5-star. Public bath, fitness center. Upscale Jingugaien neighborhood near Yoyogi Park. 4.3★ · 1,700+ reviews.',
              'url': 'https://www.booking.com/searchresults.html?ss=Mitsui+Garden+Hotel+Jingugaien+Tokyo+Premier&checkin=2026-04-06&checkout=2026-04-09&group_adults=2',
+             'alt_url': 'https://www.google.com/travel/hotels?q=Mitsui+Garden+Hotel+Jingugaien+Tokyo+Premier&checkin=2026-04-06&checkout=2026-04-09&adults=2',
              'has_onsen': True},
             {'rank': 10, 'name': 'HOTEL GROOVE SHINJUKU (PARKROYAL)',
              'type': 'Luxury Hotel · Shinjuku / Kabukicho Tower',
              'price_low': 434, 'price_high': 434,
              'standout': 'Inside the Tokyu Kabukicho Tower (2023). Best cyberpunk Tokyo view at night. Bar + restaurant. 4.5★ · "Excellent location".',
-             'url': 'https://www.booking.com/searchresults.html?ss=Hotel+Groove+Shinjuku+Parkroyal&checkin=2026-04-06&checkout=2026-04-09&group_adults=2'},
+             'url': 'https://www.booking.com/searchresults.html?ss=Hotel+Groove+Shinjuku+Parkroyal&checkin=2026-04-06&checkout=2026-04-09&group_adults=2',
+             'alt_url': 'https://www.google.com/travel/hotels?q=Hotel+Groove+Shinjuku+Parkroyal&checkin=2026-04-06&checkout=2026-04-09&adults=2'},
         ],
         'Takayama Ryokan': [
             {'rank': 1, 'name': 'Tanabe Ryokan',
@@ -1011,6 +1016,13 @@ def import_reference(master):
          'Cost: ~¥2,000/bag (~$13-14).\n'
          'Ask front desk for "takkyubin" — they handle everything.\n'
          'Use on Day 5: send bags from Tokyo to Kyoto, travel light through Alps.'),
+        ('accommodation', 'HotelTonight',
+         'Same-day luxury hotel deals — rooms drop 30-50% after ~6pm if unsold.\n'
+         'Use on the day you want to upgrade for a spontaneous nice night.\n'
+         'Filter: "Luxe" tier for 4-5 star deals in Shinjuku/Tokyo.\n'
+         'App: hoteltonight.com or iOS/Android app.\n'
+         'Strategy: book 2 nights at a mid-range hotel, check HotelTonight on '
+         'night 3 morning for a last-minute luxury upgrade.'),
     ]
 
     for i, (section, title, content) in enumerate(refs, 1):

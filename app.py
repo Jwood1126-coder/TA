@@ -2362,6 +2362,54 @@ def _migrate_add_shinjuku_hotels(app):
     print("  Migration complete: 5 Shinjuku hotels added, neighborhood tags applied to all options.")
 
 
+def _migrate_add_booking_resources(app):
+    """Add HotelTonight reference entry and Google Hotels alt links to Shinjuku hotels.
+    Idempotent — skips if HotelTonight reference already exists."""
+    from models import ReferenceContent, AccommodationOption
+
+    if ReferenceContent.query.filter_by(title='HotelTonight').first():
+        return
+
+    print("Running migration: add HotelTonight reference + Google Hotels links...")
+
+    # Add HotelTonight to reference page under 'accommodation' section
+    max_sort = db.session.query(db.func.max(ReferenceContent.sort_order)).scalar() or 0
+    db.session.add(ReferenceContent(
+        section='accommodation',
+        title='HotelTonight',
+        content=(
+            'Same-day luxury hotel deals — rooms drop 30-50% after ~6pm if unsold.\n'
+            'Use on the day you want to upgrade for a spontaneous nice night.\n'
+            'Filter: "Luxe" tier for 4-5 star deals in Shinjuku/Tokyo.\n'
+            'App: hoteltonight.com or iOS/Android app.\n'
+            'Strategy: book 2 nights at a mid-range hotel, check HotelTonight on '
+            'night 3 morning for a last-minute luxury upgrade.'
+        ),
+        sort_order=max_sort + 1,
+    ))
+
+    # Add Google Hotels as alt_booking_url for the 5 new Shinjuku hotels
+    google_links = {
+        'Anshin Oyado Tokyo Man Shinjuku':
+            'https://www.google.com/travel/hotels?q=Anshin+Oyado+Tokyo+Man+Shinjuku&checkin=2026-04-06&checkout=2026-04-09&adults=2',
+        "La'gent Hotel Shinjuku Kabukicho":
+            'https://www.google.com/travel/hotels?q=Lagent+Hotel+Shinjuku+Kabukicho&checkin=2026-04-06&checkout=2026-04-09&adults=2',
+        'DOMO HOTEL':
+            'https://www.google.com/travel/hotels?q=DOMO+HOTEL+Shinjuku+Tokyo&checkin=2026-04-06&checkout=2026-04-09&adults=2',
+        'Mitsui Garden Hotel Jingugaien PREMIER':
+            'https://www.google.com/travel/hotels?q=Mitsui+Garden+Hotel+Jingugaien+Tokyo+Premier&checkin=2026-04-06&checkout=2026-04-09&adults=2',
+        'HOTEL GROOVE SHINJUKU (PARKROYAL)':
+            'https://www.google.com/travel/hotels?q=Hotel+Groove+Shinjuku+Parkroyal&checkin=2026-04-06&checkout=2026-04-09&adults=2',
+    }
+    for name, url in google_links.items():
+        opt = AccommodationOption.query.filter_by(name=name).first()
+        if opt and not opt.alt_booking_url:
+            opt.alt_booking_url = url
+
+    db.session.commit()
+    print("  Migration complete: HotelTonight added to reference, Google Hotels links added.")
+
+
 def create_app(run_data_migrations=True):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -2514,6 +2562,7 @@ def create_app(run_data_migrations=True):
             _migrate_enrich_activities(app)
             _migrate_sumo_bookahead_transit(app)
             _migrate_add_shinjuku_hotels(app)
+            _migrate_add_booking_resources(app)
 
     return app
 
