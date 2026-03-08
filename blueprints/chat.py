@@ -25,7 +25,7 @@ PERSONALITY & STYLE:
 
 TRIP OVERVIEW (burned into your brain):
 - Day 1: Travel from Cleveland via Detroit to Tokyo Haneda (Delta DL5392 CLE->DTW, DL275 DTW->HND)
-- Day 2-4: Tokyo base (Asakusa area, 3 nights) — city exploration + Hakone day trip
+- Day 2-4: Tokyo base (Sotetsu Fresa Inn Higashi-Shinjuku, 3 nights, confirmation #976558450) — city exploration + Hakone day trip
 - Day 5-7: Takayama (3 nights) — ryokan, morning markets, Hida beef, Japanese Alps
 - Day 8: Takayama -> Shirakawa-go -> Kyoto (transit day with sightseeing)
 - Day 9-10: Kyoto (4 nights total) — temples, Gion, Arashiyama

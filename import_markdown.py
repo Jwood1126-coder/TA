@@ -523,6 +523,13 @@ def import_accommodation_options():
              'url': 'https://www.google.com/travel/hotels?q=Hotel+Groove+Shinjuku+Parkroyal&checkin=2026-04-06&checkout=2026-04-09&adults=2',
              'alt_url': 'https://www.booking.com/searchresults.html?ss=Hotel+Groove+Shinjuku+Parkroyal&checkin=2026-04-06&checkout=2026-04-09&group_adults=2',
              'maps_url': 'https://www.google.com/maps/search/?api=1&query=Hotel+Groove+Shinjuku+Parkroyal+Kabukicho+Tower+Tokyo+Japan'},
+            {'rank': 11, 'name': 'Sotetsu Fresa Inn Higashi-Shinjuku',
+             'type': 'Business Hotel · Higashi-Shinjuku / Kabukicho',
+             'price_low': 192, 'price_high': 192,
+             'standout': 'BOOKED via Priceline/Agoda. Twin non-smoking, 227 sq ft, fridge, free WiFi. Sotetsu chain (premium business). Right at Higashi-Shinjuku Station — 5 min walk to Kabukicho/Golden Gai. Free cancel before Apr 5.',
+             'url': 'https://www.agoda.com/sotetsu-fresa-inn-higashi-shinjuku/hotel/tokyo-jp.html',
+             'alt_url': 'https://www.google.com/travel/hotels?q=Sotetsu+Fresa+Inn+Higashi+Shinjuku&checkin=2026-04-06&checkout=2026-04-09&adults=2',
+             'maps_url': 'https://www.google.com/maps/search/?api=1&query=Sotetsu+Fresa+Inn+Higashi+Shinjuku+7-27-9+Shinjuku+Tokyo+Japan'},
         ],
         'Takayama Ryokan': [
             {'rank': 1, 'name': 'Tanabe Ryokan',
