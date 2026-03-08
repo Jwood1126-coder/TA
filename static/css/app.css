@@ -1215,6 +1215,28 @@ body {
     color: var(--pico-muted-color);
 }
 
+.option-type-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.neighborhood-tag {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #e0f2fe;
+    color: #0369a1;
+    white-space: nowrap;
+}
+
+[data-theme="dark"] .neighborhood-tag {
+    background: #0c2d48;
+    color: #7dd3fc;
+}
+
 .option-price {
     font-weight: 600;
     font-size: 0.85rem;

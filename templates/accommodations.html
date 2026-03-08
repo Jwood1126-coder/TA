@@ -58,7 +58,15 @@
                 <div class="option-name">{{ option.name }}
                     <button class="copy-name-btn" onclick="event.stopPropagation(); copyHotelName('{{ option.name | e }}')" title="Copy hotel name">&#x1f4cb;</button>
                 </div>
-                <div class="option-type">{{ option.property_type or '' }}</div>
+                {% set pt = option.property_type or '' %}
+                {% if '·' in pt %}
+                <div class="option-type-row">
+                    <span class="option-type">{{ pt.split('·')[0].strip() }}</span>
+                    <span class="neighborhood-tag">{{ pt.split('·')[1].strip() }}</span>
+                </div>
+                {% else %}
+                <div class="option-type">{{ pt }}</div>
+                {% endif %}
             </div>
             <div class="option-price">
                 {% if option.price_low and option.price_high and option.price_low|int != option.price_high|int %}
