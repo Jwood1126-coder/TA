@@ -23,7 +23,7 @@
 {% set ns.prev_location = cd.location_name %}
 {% endif %}
 
-<a href="/day/{{ cd.day.day_number }}" class="cal-day-card {% if cd.day.is_buffer_day %}buffer{% endif %}">
+<a href="/day/{{ cd.day.day_number }}" class="cal-day-card {% if cd.day.is_buffer_day %}buffer{% endif %} {% if today_day_num and cd.day.day_number == today_day_num %}cal-today{% endif %}" {% if today_day_num and cd.day.day_number == today_day_num %}id="calToday"{% endif %}>
     {# Date sidebar #}
     <div class="cal-date-col">
         <span class="cal-weekday">{{ cd.day.date.strftime('%a') }}</span>
@@ -99,4 +99,15 @@
 </a>
 {% endfor %}
 </div>
+
+{% if today_day_num %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var el = document.getElementById('calToday');
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

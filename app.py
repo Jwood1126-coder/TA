@@ -3073,6 +3073,29 @@ def _migrate_audit_data_fixes(app):
     print("  Migration complete: audit data fixes applied.")
 
 
+def _migrate_hiroshima_time_warning(app):
+    """Add time estimate note to Hiroshima day trip (Day 11).
+    Idempotent — skips if notes already contain the estimate."""
+    from models import Day
+
+    day11 = Day.query.filter_by(day_number=11).first()
+    if not day11:
+        return
+    if day11.notes and 'hours transit' in day11.notes:
+        return
+
+    print("Running migration: Hiroshima time warning...")
+    day11.notes = (
+        (day11.notes + '\n\n' if day11.notes else '') +
+        'Tight schedule: ~10-11 hours total including ~3.5 hours transit. '
+        'Leave Kyoto by 7:30 AM, return ~7-8 PM. If the Peace Museum runs long, '
+        'see Miyajima torii from the ferry only and skip the shrine interior to save 45 min. '
+        'The Himeji + Nara alternative is less rushed if you prefer a slower day.'
+    )
+    db.session.commit()
+    print("  Migration complete: Hiroshima time warning added.")
+
+
 def create_app(run_data_migrations=True):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -3237,6 +3260,7 @@ def create_app(run_data_migrations=True):
             _migrate_book_takanoyu(app)
             _migrate_update_itinerary_for_takanoyu(app)
             _migrate_audit_data_fixes(app)
+            _migrate_hiroshima_time_warning(app)
 
     return app
 

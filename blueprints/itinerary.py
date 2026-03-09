@@ -54,7 +54,7 @@ def _build_location_groups(days):
                 group['end_date'] = accom_loc.check_out_date
                 group['show_checkout'] = True
 
-    # Build brief activity summaries per day
+    # Build brief activity summaries + day type icons per day
     for group in location_groups:
         for day in group['days']:
             titles = [a.title for a in day.activities if not a.is_substitute][:3]
@@ -62,6 +62,28 @@ def _build_location_groups(days):
             if len(summary) > 80:
                 summary = summary[:77] + '...'
             day.activity_summary = summary
+
+            # Confirmed activity count for mini progress
+            non_sub = [a for a in day.activities if not a.is_substitute]
+            day.confirmed_count = sum(1 for a in non_sub if a.is_confirmed)
+            day.total_browseable = len(non_sub)
+
+            # Day type icon based on title keywords
+            t = (day.title or '').lower()
+            if 'travel' in t or 'departure' in t or 'arrive' in t:
+                day.type_icon = 'travel'
+            elif 'buffer' in t or 'flex' in t:
+                day.type_icon = 'rest'
+            elif 'day trip' in t or 'hiroshima' in t:
+                day.type_icon = 'daytrip'
+            elif 'hakone' in t or 'alps' in t or 'shirakawa' in t:
+                day.type_icon = 'nature'
+            elif 'temple' in t or 'gion' in t or 'arashiyama' in t:
+                day.type_icon = 'temple'
+            elif 'osaka' in t or 'neon' in t or 'street food' in t:
+                day.type_icon = 'food'
+            else:
+                day.type_icon = 'explore'
 
     return location_groups
 

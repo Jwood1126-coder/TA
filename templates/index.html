@@ -82,7 +82,10 @@
         {% for day in group.days %}
         <a href="{{ url_for('itinerary.day_view', day_number=day.day_number) }}"
            class="itin-day-row {% if current_day and day.id == current_day.id %}today{% endif %}">
-            <span class="itin-day-num">{{ day.day_number }}</span>
+            <span class="itin-day-num">
+                <span class="day-type-icon">{% if day.type_icon == 'travel' %}&#9992;{% elif day.type_icon == 'rest' %}&#127919;{% elif day.type_icon == 'daytrip' %}&#128644;{% elif day.type_icon == 'nature' %}&#9968;{% elif day.type_icon == 'temple' %}&#9961;{% elif day.type_icon == 'food' %}&#127836;{% else %}&#128204;{% endif %}</span>
+                {{ day.day_number }}
+            </span>
             <div class="itin-day-info">
                 <div class="itin-day-info-text">
                     <span class="itin-day-title">{{ day.title }}</span>
@@ -95,11 +98,15 @@
                 </div>
             </div>
             <div class="itin-day-progress">
+                {% if day.total_browseable > 0 %}
+                <div class="confirmed-mini">{{ day.confirmed_count }}/{{ day.total_browseable }}</div>
                 <div class="progress-bar" role="progressbar"
                      aria-valuenow="{{ day.completion_pct() }}" aria-valuemin="0" aria-valuemax="100"
                      aria-label="Day {{ day.day_number }} progress">
-                    <div class="progress-fill" style="width: {{ day.completion_pct() }}%"></div>
+                    {% set conf_pct = (day.confirmed_count / day.total_browseable * 100) | int if day.total_browseable else 0 %}
+                    <div class="progress-fill confirmed-fill" style="width: {{ conf_pct }}%"></div>
                 </div>
+                {% endif %}
             </div>
             <span class="itin-day-arrow">&rsaquo;</span>
         </a>

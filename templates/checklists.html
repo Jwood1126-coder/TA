@@ -225,6 +225,16 @@
 </div>
 
 {% if tab == 'pre_trip' and sections %}
+<!-- Section progress overview -->
+<div class="checklist-overview">
+{% for section in sections %}
+    <a href="#cat-{{ section.key }}" class="checklist-overview-item">
+        <span class="co-label">{{ section.label }}</span>
+        <span class="co-progress {% if section.progress.done == section.progress.total %}co-done{% endif %}">{{ section.progress.done }}/{{ section.progress.total }}</span>
+    </a>
+{% endfor %}
+</div>
+
 {% for section in sections %}
 <section class="checklist-section" id="cat-{{ section.key }}">
     <h2>{{ icon(section.icon, 18) }} {{ section.label }}</h2>

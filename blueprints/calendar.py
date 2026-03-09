@@ -91,6 +91,15 @@ def calendar_view():
             'location_name': day.location.name if day.location else 'Travel',
         })
 
+    from datetime import date as dt_date
+    today = dt_date.today()
+    today_day_num = None
+    if trip and trip.start_date <= today <= trip.end_date:
+        today_day = Day.query.filter(Day.date == today).first()
+        if today_day:
+            today_day_num = today_day.day_number
+
     return render_template('calendar.html',
                            trip=trip,
-                           calendar_days=calendar_days)
+                           calendar_days=calendar_days,
+                           today_day_num=today_day_num)

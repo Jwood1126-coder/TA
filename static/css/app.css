@@ -4450,6 +4450,95 @@ h1 svg, h2 svg, h3 svg { vertical-align: -3px; margin-right: 4px; }
     font-size: 0.65rem;
 }
 
+/* ===== Calendar today highlight ===== */
+.cal-today {
+    border-left: 3px solid var(--sakura);
+    background: rgba(242,181,196,0.06);
+}
+[data-theme="dark"] .cal-today {
+    background: rgba(242,181,196,0.08);
+    box-shadow: 0 0 12px rgba(242,181,196,0.1);
+}
+.cal-today .cal-datenum {
+    color: var(--sakura);
+    font-weight: 700;
+}
+
+/* ===== Calendar progress color-coding ===== */
+.cal-progress-row .progress-fill {
+    transition: width 0.3s;
+}
+
+/* ===== Checklist overview bar ===== */
+.checklist-overview {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 0;
+}
+.checklist-overview-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(128,128,128,0.08);
+    text-decoration: none;
+    color: var(--pico-color);
+    min-width: 70px;
+    flex-shrink: 0;
+    min-height: 44px;
+    justify-content: center;
+}
+.checklist-overview-item:hover {
+    background: rgba(128,128,128,0.15);
+}
+.co-label {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+.co-progress {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.co-done {
+    color: #4CAF50;
+}
+[data-theme="dark"] .co-done {
+    color: #81C784;
+    text-shadow: 0 0 8px rgba(76,175,80,0.4);
+}
+
+/* ===== Dashboard day type icons ===== */
+.day-type-icon {
+    display: block;
+    font-size: 0.75rem;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+.itin-day-num {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Confirmed count mini badge */
+.confirmed-mini {
+    font-size: 0.65rem;
+    opacity: 0.6;
+    text-align: right;
+    margin-bottom: 2px;
+}
+.confirmed-fill {
+    background: var(--sakura) !important;
+}
+[data-theme="dark"] .confirmed-fill {
+    box-shadow: 0 0 6px rgba(242,181,196,0.3);
+}
+
 /* Utilities */
 @media (max-width: 480px) {
     .app-main {
