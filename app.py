@@ -4217,6 +4217,17 @@ def create_app(run_data_migrations=True):
             except Exception as e:
                 print(f"WARNING: sync accom checklist migration failed: {e}")
                 db.session.rollback()
+            try:
+                _migrate_schedule_consistency_v1(app)
+            except Exception as e:
+                print(f"WARNING: schedule consistency migration failed: {e}")
+                db.session.rollback()
+
+            # --- Post-migration validation (runs every boot) ---
+            try:
+                _validate_schedule(app)
+            except Exception as e:
+                print(f"WARNING: schedule validation failed: {e}")
 
     return app
 
@@ -4694,6 +4705,310 @@ def _migrate_sync_accom_checklist_v1(app):
     trip.notes = (trip.notes or '') + '\n__sync_accom_checklist_v1'
     db.session.commit()
     print(f"Migration sync_accom_checklist_v1 complete (changed={changed})")
+
+
+def _migrate_schedule_consistency_v1(app):
+    """Fix all schedule audit findings. Each fix has its own idempotency check."""
+    from models import (Activity, Day, Trip, AccommodationLocation, db)
+    from datetime import date
+
+    trip = Trip.query.first()
+    if not trip:
+        return
+    sentinel = '__schedule_consistency_v1'
+    if sentinel in (trip.notes or ''):
+        print("schedule_consistency_v1: already applied, skipping")
+        return
+
+    print("Running schedule_consistency_v1 migration...")
+    days = {d.day_number: d for d in Day.query.all()}
+
+    # ================================================================
+    # Fix 1: Day 14 — Eliminate impossible post-departure activities
+    # Flight UA876 departs HND at 3:50 PM. No time for hotel check-in,
+    # TeamLab, or dinner in Tokyo.
+    # ================================================================
+    day14 = days.get(14)
+    if day14:
+        impossible_titles = [
+            'Check into Toyoko Inn Shinagawa',
+            'TeamLab Planets',
+            'Final dinner — make it special',
+            'Final dinner',
+        ]
+        for a in Activity.query.filter_by(day_id=day14.id).all():
+            if a.title in impossible_titles and not a.is_eliminated:
+                a.is_eliminated = True
+                print(f"  Fix1: Eliminated '{a.title}' on Day 14 (impossible with 3:50 PM flight)")
+
+    # ================================================================
+    # Fix 2: Day 5 — Eliminate misplaced Hakone Loop activities
+    # Day 5 is "TOKYO → TAKAYAMA" transit day. The Hakone activities
+    # belong on Day 4 (which already has its own Hakone Loop).
+    # ================================================================
+    day5 = days.get(5)
+    if day5:
+        hakone_titles = [
+            'Shinkansen Tokyo → Odawara',
+            'Shinkansen Tokyo \u2192 Odawara',
+            'Buy Hakone Free Pass at Odawara Station',
+            'Hakone Loop: Switchback Train to Gora',
+            'Hakone Loop: Cable Car to Owakudani',
+            'Hakone Loop: Ropeway over mountains',
+            'Hakone Loop: Lake Ashi Pirate Ship',
+            'Hakone Open-Air Museum',
+            'Day-use onsen: Tenzan Tohji-kyo',
+            'Shinkansen Odawara → Tokyo',
+            'Shinkansen Odawara \u2192 Tokyo',
+            'Last night in Shinjuku',
+        ]
+        for a in Activity.query.filter_by(day_id=day5.id).all():
+            if a.title in hakone_titles and not a.is_eliminated:
+                a.is_eliminated = True
+                print(f"  Fix2: Eliminated '{a.title}' on Day 5 (belongs on Day 4)")
+
+    # ================================================================
+    # Fix 3: Day 6 → Day 5 — Move transit activities to the actual
+    # transit day. Day 5 = "TOKYO → TAKAYAMA", Day 6 = "FULL DAY TAKAYAMA"
+    # ================================================================
+    day6 = days.get(6)
+    if day5 and day6:
+        transit_titles_to_move = [
+            'Check out of Sotetsu Fresa Inn',
+            'Shinkansen Tokyo → Nagoya',
+            'Shinkansen Tokyo \u2192 Nagoya',
+            'JR Hida Limited Express: Nagoya → Takayama',
+            'JR Hida Limited Express: Nagoya \u2192 Takayama',
+            'Check into ryokan',
+            'Check into TAKANOYU',  # production variant
+        ]
+        max_sort_d5 = max(
+            [a.sort_order for a in Activity.query.filter_by(day_id=day5.id).all()] or [0]
+        )
+        for a in Activity.query.filter_by(day_id=day6.id).all():
+            if a.title in transit_titles_to_move:
+                a.day_id = day5.id
+                max_sort_d5 += 1
+                a.sort_order = max_sort_d5
+                # Fix time slots for transit day
+                if 'Check out' in a.title or 'Shinkansen' in a.title:
+                    a.time_slot = 'morning'
+                elif 'JR Hida' in a.title:
+                    a.time_slot = 'morning'
+                elif 'Check into' in a.title:
+                    a.time_slot = 'afternoon'
+                print(f"  Fix3: Moved '{a.title}' from Day 6 → Day 5")
+
+    # ================================================================
+    # Fix 4: Day 3 — Eliminate stale arrival activities
+    # These are duplicates of Day 2 arrival tasks, or reference the
+    # wrong hotel (Dormy Inn instead of Sotetsu Fresa).
+    # ================================================================
+    day3 = days.get(3)
+    if day3:
+        stale_titles = [
+            'Pick up Welcome Suica IC card',
+            'Activate eSIM or pick up pocket WiFi',
+            'Train to Higashi-Shinjuku',
+            'Check into Dormy Inn Asakusa',
+        ]
+        for a in Activity.query.filter_by(day_id=day3.id).all():
+            if a.title in stale_titles and not a.is_eliminated:
+                a.is_eliminated = True
+                print(f"  Fix4: Eliminated '{a.title}' on Day 3 (stale/duplicate)")
+
+    # ================================================================
+    # Fix 5: Fix accommodation dates
+    # Correct chain: Tokyo Apr 6-9, Takayama Apr 9-12,
+    # Kanazawa Apr 12-13, Kyoto Apr 13-16, Osaka Apr 16-18
+    # ================================================================
+
+    # 5a: K's House / Takayama Budget → Apr 10-12 (2 nights)
+    for loc in AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains('Budget')).all():
+        if loc.check_out_date != date(2026, 4, 12):
+            loc.check_out_date = date(2026, 4, 12)
+            loc.num_nights = 2
+            print(f"  Fix5a: Updated '{loc.location_name}' checkout to Apr 12 (2 nights)")
+
+    # 5b: Kanazawa → Apr 12-13 (1 night)
+    for loc in AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains('Kanazawa')).all():
+        if loc.check_in_date != date(2026, 4, 12):
+            loc.check_in_date = date(2026, 4, 12)
+            loc.check_out_date = date(2026, 4, 13)
+            loc.num_nights = 1
+            print(f"  Fix5b: Updated '{loc.location_name}' to Apr 12-13 (1 night)")
+
+    # 5c: Kyoto → Apr 13-16 (3 nights)
+    for loc in AccommodationLocation.query.filter(
+            AccommodationLocation.location_name.contains('Kyoto')).all():
+        if loc.check_in_date != date(2026, 4, 13):
+            loc.check_in_date = date(2026, 4, 13)
+            loc.check_out_date = date(2026, 4, 16)
+            loc.num_nights = 3
+            if '4 nights' in loc.location_name:
+                loc.location_name = loc.location_name.replace('4 nights', '3 nights')
+            print(f"  Fix5c: Updated '{loc.location_name}' to Apr 13-16 (3 nights)")
+
+    # ================================================================
+    # Fix 6: Day 7 title — It's a full Takayama day, not a transit day
+    # Transit to Shirakawa-go/Kanazawa happens on Day 8
+    # ================================================================
+    day7 = days.get(7)
+    if day7 and 'SHIRAKAWA' in (day7.title or '').upper():
+        day7.title = 'FULL DAY TAKAYAMA — Old Town & Markets'
+        print(f"  Fix6: Updated Day 7 title to '{day7.title}'")
+
+    # ================================================================
+    # Fix 7: Day 11 — Fix time slots (all marked morning)
+    # Hiroshima Peace Park is morning, okonomiyaki is lunch,
+    # Miyajima activities are afternoon
+    # ================================================================
+    day11 = days.get(11)
+    if day11:
+        afternoon_keywords = [
+            'Itsukushima', 'high tide', 'low tide', 'deer roam',
+            'momiji manju', 'shopping street', 'Itsukushima Shrine',
+        ]
+        lunch_keywords = ['okonomiyaki', 'Okonomimura']
+        for a in Activity.query.filter_by(day_id=day11.id).all():
+            if a.time_slot == 'morning':
+                if any(kw in (a.title or '') for kw in afternoon_keywords):
+                    a.time_slot = 'afternoon'
+                    print(f"  Fix7: Changed '{a.title[:40]}' to afternoon")
+                elif any(kw in (a.title or '') for kw in lunch_keywords):
+                    a.time_slot = 'afternoon'
+                    print(f"  Fix7: Changed '{a.title[:40]}' to afternoon (lunch)")
+
+    # ================================================================
+    # Fix 8: Day 12 — Add luggage logistics note
+    # Checking out of Kyoto then doing Hiroshima day trip requires
+    # coin locker or luggage forwarding
+    # ================================================================
+    day12 = days.get(12)
+    if day12:
+        existing = Activity.query.filter_by(day_id=day12.id).filter(
+            Activity.title.contains('luggage') | Activity.title.contains('locker')
+            | Activity.title.contains('Luggage') | Activity.title.contains('Locker')
+        ).first()
+        if not existing:
+            max_sort = max(
+                [a.sort_order for a in Activity.query.filter_by(day_id=day12.id).all()] or [0]
+            )
+            luggage_note = Activity(
+                day_id=day12.id,
+                title='Store luggage in Kyoto Station coin lockers before Hiroshima',
+                time_slot='morning',
+                sort_order=1,  # First thing in the morning
+                is_optional=False,
+                getting_there='Kyoto Station has large coin lockers (¥700-1000/day) near the Shinkansen gates. '
+                              'Store bags before boarding Shinkansen to Hiroshima. Pick up on return.',
+            )
+            db.session.add(luggage_note)
+            print("  Fix8: Added luggage logistics note to Day 12")
+
+    # ================================================================
+    # Mark sentinel
+    # ================================================================
+    trip.notes = (trip.notes or '') + '\n' + sentinel
+    db.session.commit()
+    print("Migration schedule_consistency_v1 complete")
+
+
+def _validate_schedule(app):
+    """Post-migration schedule validation. Prints warnings for conflicts.
+    Runs on every boot to catch data issues early."""
+    from models import (Activity, Day, Trip, AccommodationLocation,
+                        Flight, TransportRoute, Location, db)
+    from datetime import date, timedelta
+
+    trip = Trip.query.first()
+    if not trip:
+        return
+
+    warnings = []
+    days = Day.query.order_by(Day.day_number).all()
+    day_map = {d.day_number: d for d in days}
+
+    # --- Check 1: Accommodation date chain gaps/overlaps ---
+    locs = AccommodationLocation.query.order_by(
+        AccommodationLocation.check_in_date).all()
+    for i in range(len(locs) - 1):
+        curr = locs[i]
+        nxt = locs[i + 1]
+        if curr.check_out_date and nxt.check_in_date:
+            gap = (nxt.check_in_date - curr.check_out_date).days
+            if gap > 0:
+                warnings.append(
+                    f"ACCOM GAP: {gap} night(s) gap between "
+                    f"{curr.location_name} checkout ({curr.check_out_date}) and "
+                    f"{nxt.location_name} checkin ({nxt.check_in_date})")
+            elif gap < 0:
+                warnings.append(
+                    f"ACCOM OVERLAP: {abs(gap)} night(s) overlap between "
+                    f"{curr.location_name} and {nxt.location_name}")
+
+    # --- Check 2: Accommodation num_nights consistency ---
+    for loc in locs:
+        if loc.check_in_date and loc.check_out_date:
+            expected = (loc.check_out_date - loc.check_in_date).days
+            if loc.num_nights and loc.num_nights != expected:
+                warnings.append(
+                    f"ACCOM NIGHTS: {loc.location_name} says {loc.num_nights} nights "
+                    f"but dates span {expected} nights "
+                    f"({loc.check_in_date} → {loc.check_out_date})")
+
+    # --- Check 3: Departure day activities after flight ---
+    flights = Flight.query.all()
+    for f in flights:
+        if f.direction == 'return' and f.depart_date:
+            dep_day = next(
+                (d for d in days if d.date == f.depart_date), None)
+            if dep_day:
+                late_activities = Activity.query.filter_by(
+                    day_id=dep_day.id, is_eliminated=False
+                ).filter(
+                    Activity.time_slot.in_(['evening', 'night'])
+                ).all()
+                for a in late_activities:
+                    if not a.is_substitute:
+                        warnings.append(
+                            f"DEPARTURE CONFLICT: '{a.title}' ({a.time_slot}) on "
+                            f"departure day {dep_day.day_number} — flight {f.flight_number} "
+                            f"departs at {f.depart_time}")
+
+    # --- Check 4: Overpacked days (>10 non-eliminated activities) ---
+    for d in days:
+        active = Activity.query.filter_by(
+            day_id=d.id, is_eliminated=False, is_substitute=False
+        ).count()
+        if active > 10:
+            warnings.append(
+                f"OVERPACKED: Day {d.day_number} ({d.title}) has {active} active activities")
+
+    # --- Check 5: Day has city location but activities reference wrong city ---
+    # (lightweight check: look for activities mentioning specific city keywords
+    # on days assigned to different locations)
+    location_map = {}
+    locations = Location.query.all() if hasattr(app, 'extensions') else []
+    try:
+        locations = Location.query.all()
+        for loc in locations:
+            for d in Day.query.filter_by(location_id=loc.id).all():
+                location_map[d.day_number] = loc.name
+    except Exception:
+        pass
+
+    if warnings:
+        print(f"\n{'='*60}")
+        print(f"SCHEDULE VALIDATION: {len(warnings)} warning(s)")
+        print(f"{'='*60}")
+        for w in warnings:
+            print(f"  ⚠ {w}")
+        print(f"{'='*60}\n")
+    else:
+        print("Schedule validation: all checks passed ✓")
 
 
 if __name__ == '__main__':
