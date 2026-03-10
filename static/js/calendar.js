@@ -145,6 +145,11 @@
 
         overlay.innerHTML = '';
 
+        // Track per-cell occupancy so overlapping bars stack vertically
+        var barH = 14;
+        var barGap = 2;
+        var cellLanes = {}; // cellIdx → number of bars already placed
+
         D.accomSpans.forEach(function(span) {
             var cinDay = parseInt(span.check_in.split('-')[2]);
             var coutDay = parseInt(span.check_out.split('-')[2]);
@@ -171,6 +176,16 @@
                     continue;
                 }
 
+                // Find the highest lane already used by any cell in this segment
+                var lane = 0;
+                for (var ci = curIdx; ci <= endIdx; ci++) {
+                    lane = Math.max(lane, cellLanes[ci] || 0);
+                }
+                // Mark these cells as occupied at lane+1
+                for (var ci = curIdx; ci <= endIdx; ci++) {
+                    cellLanes[ci] = lane + 1;
+                }
+
                 var firstRect = firstCell.getBoundingClientRect();
                 var lastRect = lastCell.getBoundingClientRect();
 
@@ -179,7 +194,8 @@
 
                 var left = firstRect.left - wrapperRect.left;
                 var width = (lastRect.left + lastRect.width) - firstRect.left;
-                var top = (firstRect.top + firstRect.height) - wrapperRect.top - 14;
+                // Stack bars bottom-up: lane 0 at bottom, higher lanes above
+                var top = (firstRect.top + firstRect.height) - wrapperRect.top - barH - lane * (barH + barGap);
 
                 bar.style.cssText =
                     'left:' + left + 'px;' +
