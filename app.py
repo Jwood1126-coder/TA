@@ -3297,6 +3297,24 @@ def _migrate_transport_checklist_and_data_fixes(app):
     print("  Migration complete: transport checklist + data fixes applied.")
 
 
+def _migrate_remove_kanazawa_hotel(app):
+    """Remove orphaned 'Book Kanazawa hotel' checklist item — no Kanazawa overnight
+    exists in the 14-day itinerary. Idempotent — no-op if item doesn't exist."""
+    from models import ChecklistItem, ChecklistOption
+
+    kanazawa_hotel = ChecklistItem.query.filter(
+        ChecklistItem.title.ilike('%kanazawa hotel%')).first()
+    if not kanazawa_hotel:
+        return
+
+    print("Running migration: removing orphaned Kanazawa hotel checklist...")
+    ChecklistOption.query.filter_by(
+        checklist_item_id=kanazawa_hotel.id).delete()
+    db.session.delete(kanazawa_hotel)
+    db.session.commit()
+    print("  Migration complete: Kanazawa hotel item removed.")
+
+
 def create_app(run_data_migrations=True):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -3463,6 +3481,7 @@ def create_app(run_data_migrations=True):
             _migrate_audit_data_fixes(app)
             _migrate_hiroshima_time_warning(app)
             _migrate_transport_checklist_and_data_fixes(app)
+            _migrate_remove_kanazawa_hotel(app)
 
     return app
 
