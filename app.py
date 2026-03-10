@@ -3096,6 +3096,207 @@ def _migrate_hiroshima_time_warning(app):
     print("  Migration complete: Hiroshima time warning added.")
 
 
+def _migrate_transport_checklist_and_data_fixes(app):
+    """Phase 1-2-4: Add missing transport checklist items, fix remaining data issues.
+    Idempotent — checks for sentinel (Hakone Free Pass checklist item)."""
+    from models import (ChecklistItem, ChecklistOption, TransportRoute,
+                        Day, ReferenceContent, AccommodationLocation,
+                        AccommodationOption)
+
+    # Sentinel: skip if Hakone Free Pass checklist already exists
+    if ChecklistItem.query.filter(
+            ChecklistItem.title.ilike('%Hakone Free Pass%')).first():
+        return
+
+    print("Running migration: transport checklist items + data fixes...")
+
+    # --- PHASE 1.2: Hakone Free Pass ---
+    hakone_item = ChecklistItem(
+        title="Buy Hakone Free Pass at Odawara Station",
+        category="pre_departure_today",
+        item_type="task",
+        status="pending",
+        is_completed=False,
+        sort_order=5,
+    )
+    db.session.add(hakone_item)
+    db.session.flush()
+    db.session.add(ChecklistOption(
+        checklist_item_id=hakone_item.id,
+        name="Hakone Free Pass (2-day)",
+        price_note="~¥6,000/person",
+        description="Covers Hakone Loop: switchback train, cable car, ropeway, "
+                    "pirate ship, some buses. Buy at Odawara Station on Day 4.",
+        url="https://www.hakonenavi.jp/international/en/tickets/freepass/",
+        sort_order=1,
+    ))
+
+    # --- PHASE 1.3: Welcome Suica IC Card ---
+    suica_item = ChecklistItem(
+        title="Pick up Welcome Suica IC card at Haneda",
+        category="pre_departure_today",
+        item_type="task",
+        status="pending",
+        is_completed=False,
+        sort_order=6,
+    )
+    db.session.add(suica_item)
+    db.session.flush()
+    db.session.add(ChecklistOption(
+        checklist_item_id=suica_item.id,
+        name="Welcome Suica (physical card)",
+        price_note="¥1,000 deposit + ¥3,000 initial load",
+        description="Pick up at Haneda Airport JR counter on arrival (Day 2). "
+                    "Works on all subways, buses, convenience stores, vending machines. "
+                    "Valid 28 days.",
+        sort_order=1,
+    ))
+    db.session.add(ChecklistOption(
+        checklist_item_id=suica_item.id,
+        name="Mobile Suica (Apple Wallet)",
+        price_note="Free app + ¥3,000 initial load",
+        description="Add to Apple Wallet before departure. Load yen via credit card. "
+                    "No physical card needed.",
+        url="https://support.apple.com/en-us/HT207154",
+        sort_order=2,
+    ))
+
+    # --- PHASE 1.4: Shirakawa-go → Kyoto second leg ---
+    shira_item = ChecklistItem(
+        title="Book Shirakawa-go → Kanazawa bus + JR Kanazawa → Kyoto",
+        category="pre_departure_today",
+        item_type="task",
+        status="pending",
+        is_completed=False,
+        sort_order=5,
+    )
+    db.session.add(shira_item)
+    db.session.flush()
+    db.session.add(ChecklistOption(
+        checklist_item_id=shira_item.id,
+        name="Nohi Bus Shirakawa-go → Kanazawa + JR Thunderbird Kanazawa → Kyoto",
+        price_note="~¥2,800 bus + JR Pass covers train",
+        description="Bus ~1hr15min to Kanazawa, then JR Thunderbird ~2hr15min to Kyoto. "
+                    "Reserve bus in advance.",
+        url="https://www.nouhibus.co.jp/english/",
+        sort_order=1,
+    ))
+    db.session.add(ChecklistOption(
+        checklist_item_id=shira_item.id,
+        name="Direct bus Shirakawa-go → Kyoto (if available)",
+        price_note="Check availability",
+        description="Some seasonal direct buses exist. Check Nohi Bus or Hokutetsu schedules.",
+        sort_order=2,
+    ))
+
+    # --- PHASE 1.5: Haneda → Shinjuku arrival transfer ---
+    haneda_item = ChecklistItem(
+        title="Plan Haneda → Shinjuku arrival transfer",
+        category="pre_departure_month",
+        item_type="task",
+        status="pending",
+        is_completed=False,
+        sort_order=22,
+    )
+    db.session.add(haneda_item)
+    db.session.flush()
+    db.session.add(ChecklistOption(
+        checklist_item_id=haneda_item.id,
+        name="Keikyu Line + subway",
+        price_note="~¥600-800",
+        description="Keikyu Airport Express to Shinagawa, transfer to JR Yamanote "
+                    "or subway to Shinjuku. ~60-75 min total.",
+        sort_order=1,
+    ))
+    db.session.add(ChecklistOption(
+        checklist_item_id=haneda_item.id,
+        name="Airport Limousine Bus",
+        price_note="~¥1,300",
+        description="Direct bus Haneda → Shinjuku Expressway Bus Terminal. "
+                    "~60-85 min depending on traffic. No transfers.",
+        url="https://www.limousinebus.co.jp/en/",
+        sort_order=2,
+    ))
+    db.session.add(ChecklistOption(
+        checklist_item_id=haneda_item.id,
+        name="Taxi / private transfer",
+        price_note="~¥8,000-12,000",
+        description="Direct door-to-door. Expensive but zero navigation needed "
+                    "after a 14-hour flight.",
+        sort_order=3,
+    ))
+
+    # --- PHASE 2.1: Fix JR Pass station purchase price ---
+    opt6 = ChecklistOption.query.filter(
+        ChecklistOption.name.ilike('%Buy at JR Station%')).first()
+    if opt6 and '80,000' in (opt6.price_note or ''):
+        opt6.price_note = "~¥88,000/pp (station markup)"
+
+    # --- PHASE 2.2: Fix Piece Hostel stale checklist ---
+    piece = ChecklistItem.query.filter(
+        ChecklistItem.title.ilike('%Piece Hostel%')).first()
+    if piece and not piece.is_completed:
+        # Check if Kyoto accommodation is actually booked
+        kyoto_booked = AccommodationOption.query.join(AccommodationLocation).filter(
+            AccommodationLocation.location_name.ilike('%Kyoto%'),
+            AccommodationOption.is_selected == True,
+            AccommodationOption.booking_status.in_(['booked', 'confirmed'])
+        ).first()
+        if kyoto_booked:
+            piece.title = f'Kyoto: {kyoto_booked.name} booked'
+            piece.status = 'completed'
+            piece.is_completed = True
+        else:
+            # On local DB where nothing is booked, just mark the name as generic
+            piece.title = 'Book Kyoto accommodation (4 nights, Apr 12-16)'
+
+    # --- PHASE 2.8: Fix luggage forwarding reference day ---
+    ref23 = ReferenceContent.query.filter(
+        ReferenceContent.title.ilike('%Luggage%Takkyubin%')).first()
+    if ref23 and 'Day 5' in ref23.content:
+        ref23.content = ref23.content.replace(
+            'Use on Day 5: send bags from Tokyo to Kyoto, travel light through Alps.',
+            'Use on Day 4 evening or Day 5 morning: ask Sotetsu Fresa Inn front desk '
+            'to ship bags to your Kyoto accommodation via takkyubin. Bags arrive next '
+            'day. Travel light through the Alps.')
+
+    # --- PHASE 2.10: Add Hakone return TransportRoute ---
+    day4 = Day.query.filter_by(day_number=4).first()
+    if day4:
+        existing = TransportRoute.query.filter_by(day_id=day4.id).filter(
+            TransportRoute.route_to.ilike('%Tokyo%') |
+            TransportRoute.route_to.ilike('%Shinjuku%')).first()
+        if not existing:
+            max_sort = db.session.query(
+                db.func.max(TransportRoute.sort_order)
+            ).filter_by(day_id=day4.id).scalar() or 0
+            db.session.add(TransportRoute(
+                route_from="Hakone-Yumoto",
+                route_to="Tokyo (Shinjuku)",
+                transport_type="train",
+                train_name="Hakone Tozan → Odawara, then Shinkansen",
+                duration="~1 hour total",
+                jr_pass_covered=True,
+                cost_if_not_covered="Hakone Free Pass covers Hakone→Odawara",
+                day_id=day4.id,
+                sort_order=max_sort + 1,
+            ))
+
+    # --- PHASE 4.2: Day 1 and Day 14 flight carrier notes ---
+    day1 = Day.query.filter_by(day_number=1).first()
+    if day1 and not day1.notes:
+        day1.notes = ("Outbound flights are Delta (separate cash booking). "
+                      "Check in via Delta app.")
+
+    day14 = Day.query.filter_by(day_number=14).first()
+    if day14 and not day14.notes:
+        day14.notes = ("Return flights are United (MileagePlus award). "
+                       "Check in via United app. Confirmation: I91ZHJ")
+
+    db.session.commit()
+    print("  Migration complete: transport checklist + data fixes applied.")
+
+
 def create_app(run_data_migrations=True):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -3261,6 +3462,7 @@ def create_app(run_data_migrations=True):
             _migrate_update_itinerary_for_takanoyu(app)
             _migrate_audit_data_fixes(app)
             _migrate_hiroshima_time_warning(app)
+            _migrate_transport_checklist_and_data_fixes(app)
 
     return app
 

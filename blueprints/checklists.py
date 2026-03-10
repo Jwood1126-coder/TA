@@ -16,7 +16,8 @@ CATEGORY_MAP = {
 }
 
 # Keywords for flight/transport items
-TRANSPORT_KEYWORDS = ['delta', 'united', 'jr pass', 'nohi bus']
+TRANSPORT_KEYWORDS = ['delta', 'united', 'jr pass', 'nohi bus', 'hakone',
+                      'suica', 'shirakawa', 'kanazawa', 'haneda']
 
 
 def _is_transport_item(item):
