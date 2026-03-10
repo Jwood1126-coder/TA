@@ -4207,8 +4207,394 @@ def create_app(run_data_migrations=True):
             except Exception as e:
                 print(f"WARNING: calendar warnings v2 migration failed: {e}")
                 db.session.rollback()
+            try:
+                _migrate_transport_hardening_v1(app)
+            except Exception as e:
+                print(f"WARNING: transport hardening v1 migration failed: {e}")
+                db.session.rollback()
 
     return app
+
+
+def _migrate_transport_hardening_v1(app):
+    """Comprehensive transport hardening: add missing routes, fix route assignments,
+    fix activity titles, add getting_there/URLs/addresses. See docs/transport-audit.md."""
+    from models import Activity, Day, Trip, TransportRoute
+
+    trip = Trip.query.first()
+    if trip and trip.notes and '__transport_hardening_v1' in (trip.notes or ''):
+        return
+
+    print("Running migration: transport hardening v1...")
+    changed = False
+
+    # ---- HELPERS ----
+    def find_day(day_number):
+        return Day.query.filter_by(day_number=day_number).first()
+
+    def find_activity(title_pattern, day_number=None):
+        q = Activity.query.filter(Activity.title.ilike(title_pattern))
+        if day_number:
+            day = find_day(day_number)
+            if day:
+                q = q.filter_by(day_id=day.id)
+        return q.first()
+
+    def find_route(from_pattern, to_pattern, day_number=None):
+        q = TransportRoute.query.filter(
+            TransportRoute.route_from.ilike(from_pattern),
+            TransportRoute.route_to.ilike(to_pattern))
+        if day_number:
+            day = find_day(day_number)
+            if day:
+                q = q.filter_by(day_id=day.id)
+        return q.first()
+
+    def add_route(day_number, route_from, route_to, transport_type, duration,
+                  jr_pass, notes=None, sort_order=None):
+        nonlocal changed
+        day = find_day(day_number)
+        if not day:
+            return
+        existing = find_route(f'%{route_from}%', f'%{route_to}%', day_number)
+        if existing:
+            return
+        max_sort = db.session.query(db.func.max(TransportRoute.sort_order)).filter_by(
+            day_id=day.id).scalar() or 0
+        r = TransportRoute(
+            route_from=route_from, route_to=route_to,
+            transport_type=transport_type, duration=duration,
+            jr_pass_covered=jr_pass, notes=notes,
+            day_id=day.id, sort_order=sort_order or (max_sort + 1))
+        db.session.add(r)
+        changed = True
+        print(f"  + Route: {route_from} → {route_to} (Day {day_number})")
+
+    def set_activity_field(title_pattern, day_number, field, value, overwrite=False):
+        nonlocal changed
+        act = find_activity(title_pattern, day_number)
+        if not act:
+            return
+        current = getattr(act, field, None)
+        if current and not overwrite:
+            return
+        setattr(act, field, value)
+        changed = True
+        print(f"  ~ Activity '{act.title}' Day {day_number}: {field} set")
+
+    def rename_activity(title_pattern, new_title, day_number=None):
+        nonlocal changed
+        act = find_activity(title_pattern, day_number)
+        if not act:
+            return
+        if act.title == new_title:
+            return
+        old = act.title
+        act.title = new_title
+        changed = True
+        print(f"  ~ Renamed: '{old}' → '{new_title}'")
+
+    # ================================================================
+    # PART 1: Add Missing Transport Routes (6 new routes)
+    # ================================================================
+
+    # Day 3 — Tokyo internal transit (sumo morning)
+    add_route(3, 'Higashi-Shinjuku', 'Hamacho (Arashio Stable)',
+              'Toei Oedo Line', '~20 min', False,
+              'Leave by 6:15 AM for 6:45 AM sumo practice. Oedo Line from '
+              'Higashi-Shinjuku Station direct to Hamacho. ¥220.')
+
+    # Day 5 — First mile to station
+    add_route(5, 'Higashi-Shinjuku', 'Tokyo Station',
+              'Subway (Fukutoshin → Marunouchi)', '~20 min', False,
+              'Transfer at Ikebukuro or take Oedo to Tochomae then walk to '
+              'Shinjuku JR. Alternative: taxi ~¥2,000.')
+
+    # Day 6 — Takayama internal (Hida Folk Village)
+    add_route(6, 'Takayama Station', 'Hida Folk Village (Hida no Sato)',
+              'Sarubobo Bus', '~10 min', False,
+              'Runs every 20-30 min from platform #3 at Takayama Bus Center '
+              '(next to JR station). ¥210. Or 30 min walk uphill.')
+
+    # Day 12 — Hiroshima day trip (4 routes)
+    add_route(12, 'Kyoto Station', 'Hiroshima Station',
+              'Shinkansen Sakura/Hikari', '~1h 45min', True,
+              'Board by 7:30 AM to maximize time. Nozomi is faster but NOT '
+              'covered by JR Pass — take Sakura or Hikari.', sort_order=1)
+
+    add_route(12, 'Hiroshima Station', 'Peace Park (Genbaku-Dome mae)',
+              'Hiroshima streetcar (tram)', '~15 min', False,
+              'Line 2 or 6 to Genbaku-Dome mae stop. ¥220 flat fare. IC card accepted.',
+              sort_order=2)
+
+    add_route(12, 'Hiroshima Station', 'Miyajimaguchi',
+              'JR Sanyo Line', '~30 min', True,
+              'Walk to JR Ferry terminal (2 min). Ferry ~10 min, JR Pass covered.',
+              sort_order=3)
+
+    add_route(12, 'Hiroshima Station', 'Kyoto Station',
+              'Shinkansen Sakura/Hikari (return)', '~1h 45min', True,
+              'DEADLINE: Last useful Shinkansen ~9 PM. Aim for 6:30-7 PM departure.',
+              sort_order=4)
+
+    # Day 14 — First mile to station
+    add_route(14, 'Hotel Leben (Shinsaibashi)', 'Shin-Osaka Station',
+              'Osaka Metro Midosuji Line', '~15 min', False,
+              'Shinsaibashi → Shin-Osaka direct (7 stops). ¥280. Leave hotel by '
+              '9:15 AM for recommended buffer.', sort_order=1)
+
+    # ================================================================
+    # PART 2: Fix Existing Route Assignments
+    # ================================================================
+
+    # Move Kanazawa→Kyoto route from Day 8 to Day 9
+    route_kz_ky = find_route('%Kanazawa%', '%Kyoto%', 8)
+    day9 = find_day(9)
+    if route_kz_ky and day9:
+        route_kz_ky.day_id = day9.id
+        changed = True
+        print("  ~ Moved Kanazawa→Kyoto route from Day 8 to Day 9")
+
+    # Delete old generic Hiroshima routes from Day 11 (replaced by detailed Day 12 routes above)
+    day11 = find_day(11)
+    if day11:
+        hiro_routes = TransportRoute.query.filter_by(day_id=day11.id).all()
+        for r in hiro_routes:
+            if 'hiroshima' in (r.route_from or '').lower() or \
+               'hiroshima' in (r.route_to or '').lower() or \
+               'miyajima' in (r.route_to or '').lower():
+                db.session.delete(r)
+                changed = True
+                print(f"  - Deleted old route {r.route_from}→{r.route_to} from Day 11 (replaced by detailed Day 12 routes)")
+
+    # Delete Osaka→Nara route from Day 13
+    nara_route = find_route('%Osaka%', '%Nara%', 13)
+    if nara_route:
+        db.session.delete(nara_route)
+        changed = True
+        print("  - Deleted Osaka→Nara route from Day 13")
+
+    # Fix Day 4 return JR flag and notes
+    hakone_return = find_route('%Hakone%', '%Tokyo%', 4)
+    if not hakone_return:
+        hakone_return = find_route('%Hakone-Yumoto%', '%Tokyo%', 4)
+    if hakone_return:
+        hakone_return.notes = ('Hakone Tozan to Odawara (NOT JR, Hakone Free Pass), '
+                               'then Shinkansen Odawara→Tokyo (JR Pass covered)')
+        changed = True
+        print("  ~ Updated Day 4 return route notes (JR clarification)")
+
+    # ================================================================
+    # PART 3: Fix Activity Titles (6 renames)
+    # ================================================================
+
+    rename_activity('%Nohi Bus%Shirakawa-go%Kyoto%',
+                    'Nohi Bus: Shirakawa-go → Kanazawa')
+
+    rename_activity('%Shinkansen Kyoto%Tokyo%',
+                    'Shinkansen Shin-Osaka → Shinagawa', day_number=14)
+
+    rename_activity('%Check out of Kyoto%',
+                    'Early checkout from Hotel Leben Osaka', day_number=14)
+
+    rename_activity('%Last Kyoto exploration%',
+                    'Last Osaka morning — konbini breakfast & walk', day_number=14)
+
+    rename_activity('%Kyoto Castle Park%',
+                    'Kanazawa Castle Park', day_number=8)
+
+    rename_activity('%Hokuriku Shinkansen%Kyoto%Tsuruga%',
+                    'Hokuriku Shinkansen: Kanazawa → Tsuruga', day_number=9)
+
+    # ================================================================
+    # PART 4: Add Missing getting_there (14 activities)
+    # ================================================================
+
+    getting_there_updates = [
+        ('%Explore Sanmachi Suji%', 6,
+         'Walk from K\'s House — 10 min south along the river to the old town.'),
+        ('%Takayama Jinya%', 6,
+         '5 min walk south from Sanmachi Suji, across the Miyagawa River.'),
+        ('%Miyagawa Morning Market%', 7,
+         '5 min walk east from K\'s House along the river. Open 6 AM–noon.'),
+        ('%Hida Folk Village%', 7,
+         'Sarubobo Bus from Takayama Bus Center (~10 min, ¥210). Or 30 min walk uphill from station.'),
+        ('%Kenrokuen%', 8,
+         '15 min walk or bus from Kanazawa Station (east exit). Bus #6 to Kenrokuen-shita.'),
+        ('%Higashi Chaya%', 8,
+         '10 min walk east from Kenrokuen across Asanogawa bridge.'),
+        ('%21st Century Museum%', 9,
+         '15 min walk south from Kanazawa Station. Or bus from east exit, Hirosaka stop.'),
+        ('%Hiroshima Peace%Park%', 12,
+         'Streetcar from Hiroshima Station, Line 2 or 6 to Genbaku-Dome mae (15 min, ¥220).'),
+        ('%A-Bomb Dome%', 12,
+         'Across the river from Peace Park, 3 min walk.'),
+        ('%JR train to Miyajimaguchi%', 12,
+         'JR Sanyo Line from Hiroshima Station (~30 min). Walk to JR Ferry terminal (2 min).'),
+        ('%Osaka Castle Park%', 13,
+         'JR Loop Line from Osaka Station to Osakajo-Koen (2 stops, ~10 min). Walk through park to castle ~15 min.'),
+        ('%Kuromon Market%', 13,
+         'Subway from Tanimachi-Yonchome to Nipponbashi (~10 min). Or 20 min walk south from Osaka Castle.'),
+        ('%Shinsekai%Tsutenkaku%', 13,
+         'Walk south from Kuromon (~10 min) or subway to Ebisucho Station (1 stop).'),
+        ('%TeamLab Planets%', 14,
+         'Yurikamome Line from Shinbashi to Shin-Toyosu (~15 min). Or walk 10 min from Toyosu Station (Yurakucho Line).'),
+    ]
+
+    for pattern, day_num, gt_text in getting_there_updates:
+        set_activity_field(pattern, day_num, 'getting_there', gt_text)
+
+    # ================================================================
+    # PART 5: Add Missing URLs, Addresses, Fix Broken URLs
+    # ================================================================
+
+    # --- URLs ---
+    url_updates = [
+        ('%Welcome Suica%', None, 'https://www.japan-guide.com/e/e2359_003.html'),
+        ('%Nohi Bus%Shirakawa-go%Kanazawa%', None, 'https://www.nouhibus.co.jp/english/'),
+        ('%Miyagawa Morning Market%', 7, 'https://www.japan-guide.com/e/e5907.html'),
+        ('%Takayama Festival Floats%', 7, 'https://www.japan-guide.com/e/e5905.html'),
+        ('%Wada House%', 8, 'https://www.japan-guide.com/e/e5951.html'),
+        ('%Higashi Chaya%', 8, 'https://visitkanazawa.jp/en/attractions/detail_10212.html'),
+        ('%D.T. Suzuki%', 9, 'https://www.japan-guide.com/e/e4211.html'),
+        ('%Nagamachi Samurai%', 9, 'https://www.japan-guide.com/e/e4204.html'),
+        ('%Gold leaf ice cream%Hakuichi%', 9, 'https://www.hakuichi.co.jp/'),
+        ('%Itsukushima Torii%', 11, 'https://www.itsukushimajinja.jp/en/'),
+        ('%A-Bomb Dome%', 12, 'https://hpmmuseum.jp/?lang=eng'),
+        ('%Itsukushima Shrine%shopping%', 12, 'https://www.itsukushimajinja.jp/en/'),
+        ('%Dotonbori Night Walk%', 13, 'https://www.japan-guide.com/e/e4001.html'),
+        ('%Hozenji Yokocho%', 13, 'https://www.osaka-info.jp/en/spot/hozenji-yokocho/'),
+    ]
+
+    for pattern, day_num, url in url_updates:
+        set_activity_field(pattern, day_num, 'url', url)
+
+    # Fix broken URL on Nohi Bus Shirakawa→Kyoto (now renamed to →Kanazawa)
+    nohi_act = find_activity('%Nohi Bus%Shirakawa-go%')
+    if nohi_act and nohi_act.url and 'shirakawa-go.org' in nohi_act.url:
+        nohi_act.url = 'https://www.nouhibus.co.jp/english/'
+        changed = True
+        print("  ~ Fixed broken URL on Nohi Bus activity")
+
+    # --- Addresses ---
+    address_updates = [
+        ('%Tenzan Tohji-kyo%', 4, '208 Yumoto-chaya, Hakone-machi, Kanagawa'),
+        ('%Cable Car%Owakudani%', 5, 'Gora, Hakone-machi, Ashigarashimo-gun, Kanagawa'),
+        ('%Ropeway%', 5, 'Sounzan, Hakone-machi, Kanagawa'),
+        ('%Lake Ashi Pirate Ship%', 5, 'Togendai Port, Hakone-machi, Kanagawa'),
+        ('%Sake brewery%', 6, 'Sanmachi, Takayama-shi, Gifu'),
+        ('%observation deck%', 8, 'Shiroyama Observation Deck, Ogimachi, Shirakawa-mura, Gifu'),
+        ('%Higashi Chaya%', 8, 'Higashiyama, Kanazawa, Ishikawa'),
+        ('%Kanazawa Castle Park%', 8, '1-1 Marunouchi, Kanazawa, Ishikawa'),
+        ('%21st Century Museum%', 9, '1-2-1 Hirosaka, Kanazawa, Ishikawa'),
+        ('%D.T. Suzuki%', 9, '3-4-20 Honda-machi, Kanazawa, Ishikawa'),
+        ('%Nagamachi Samurai%', 9, 'Nagamachi, Kanazawa, Ishikawa'),
+        ('%Gold leaf ice cream%Hakuichi%', 9, 'Higashiyama 1-15-4, Kanazawa, Ishikawa'),
+        ('%Itsukushima Torii%', 11, 'Miyajima-cho, Hatsukaichi, Hiroshima'),
+        ('%Itsukushima Shrine%', 12, '1-1 Miyajima-cho, Hatsukaichi, Hiroshima'),
+        ('%Takoyaki crawl%', 13, 'Dotonbori, Chuo-ku, Osaka'),
+        ('%TeamLab Planets%', 14, '6-1-16 Toyosu, Koto-ku, Tokyo'),
+    ]
+
+    for pattern, day_num, address in address_updates:
+        set_activity_field(pattern, day_num, 'address', address)
+
+    # --- Transport Route Notes (booking URLs) ---
+    nohi_tk = find_route('%Takayama%', '%Shirakawa%')
+    if nohi_tk and nohi_tk.notes and 'nouhibus' not in (nohi_tk.notes or ''):
+        nohi_tk.notes = (nohi_tk.notes or '') + ' Book: https://www.nouhibus.co.jp/english/'
+        changed = True
+
+    nohi_sk = find_route('%Shirakawa%', '%Kanazawa%')
+    if nohi_sk and nohi_sk.notes and 'nouhibus' not in (nohi_sk.notes or ''):
+        nohi_sk.notes = (nohi_sk.notes or '') + ' Book: https://www.nouhibus.co.jp/english/'
+        changed = True
+
+    osaka_shinkansen = find_route('%Osaka%', '%Shinagawa%', 14)
+    if osaka_shinkansen and 'Hikari' not in (osaka_shinkansen.notes or ''):
+        osaka_shinkansen.notes = ('Use Hikari (not Nozomi). Reserve seat at JR ticket office. '
+                                  + (osaka_shinkansen.notes or ''))
+        changed = True
+
+    # ================================================================
+    # VALIDATION: Double-check transport consistency
+    # ================================================================
+    warnings = []
+
+    # Check 1: Every day with non-optional activities should have routes or walkable note
+    # Day 13 excluded: Osaka-internal (walking/subway), Kyoto→Osaka route is on Day 12
+    days_needing_routes = {2, 3, 4, 5, 6, 8, 9, 12, 14}  # transit/multi-location days
+    for dn in days_needing_routes:
+        day = find_day(dn)
+        if day:
+            route_count = TransportRoute.query.filter_by(day_id=day.id).count()
+            if route_count == 0:
+                warnings.append(f"Day {dn} has no transport routes")
+
+    # Check 2: No duplicate routes on same day (same from+to)
+    all_days = Day.query.all()
+    for day in all_days:
+        routes = TransportRoute.query.filter_by(day_id=day.id).all()
+        seen = set()
+        for r in routes:
+            key = (r.route_from.lower().strip(), r.route_to.lower().strip())
+            if key in seen:
+                warnings.append(f"Day {day.day_number}: duplicate route {r.route_from} → {r.route_to}")
+            seen.add(key)
+
+    # Check 3: Activity titles shouldn't reference wrong city for their day
+    city_day_map = {
+        'Tokyo': {2, 3, 4, 5}, 'Takayama': {6, 7}, 'Kanazawa': {8, 9},
+        'Kyoto': {9, 10, 11, 12}, 'Osaka': {13, 14}, 'Hiroshima': {11, 12},
+    }
+    title_mismatches = [
+        (8, '%Kyoto Castle%'),   # Day 8 is Kanazawa, not Kyoto
+        (14, '%Kyoto%checkout%'),  # Day 14 is Osaka, not Kyoto
+        (14, '%Kyoto%exploration%'),
+    ]
+    for dn, pattern in title_mismatches:
+        bad = find_activity(pattern, dn)
+        if bad:
+            warnings.append(f"Day {dn}: activity '{bad.title}' references wrong city")
+
+    # Check 4: Renamed activities should exist
+    expected_titles = [
+        (None, '%Nohi Bus%Kanazawa%'),
+        (14, '%Shin-Osaka%Shinagawa%'),
+        (8, '%Kanazawa Castle Park%'),
+        (9, '%Kanazawa%Tsuruga%'),
+    ]
+    for dn, pattern in expected_titles:
+        if not find_activity(pattern, dn):
+            warnings.append(f"Expected activity '{pattern}' on Day {dn or 'any'} not found after rename")
+
+    # Check 5: Key routes should be on correct days
+    route_checks = [
+        (9, '%Kanazawa%', '%Kyoto%', 'Kanazawa→Kyoto should be on Day 9'),
+        (12, '%Kyoto%Station%', '%Hiroshima%Station%', 'Kyoto→Hiroshima should be on Day 12'),
+        (12, '%Hiroshima%Station%', '%Kyoto%Station%', 'Hiroshima→Kyoto return should be on Day 12'),
+        (3, '%Shinjuku%', '%Hamacho%', 'Sumo transit should be on Day 3'),
+        (5, '%Shinjuku%', '%Tokyo Station%', 'First mile should be on Day 5'),
+        (14, '%Leben%', '%Shin-Osaka%', 'Hotel→station should be on Day 14'),
+    ]
+    for dn, from_pat, to_pat, msg in route_checks:
+        if not find_route(from_pat, to_pat, dn):
+            warnings.append(f"MISSING: {msg}")
+
+    if warnings:
+        print(f"  ⚠ TRANSPORT VALIDATION WARNINGS ({len(warnings)}):")
+        for w in warnings:
+            print(f"    - {w}")
+    else:
+        print("  ✓ All transport validation checks passed")
+
+    # ================================================================
+    # Mark sentinel
+    # ================================================================
+    if trip:
+        trip.notes = (trip.notes or '') + '\n__transport_hardening_v1'
+        db.session.commit()
+        print(f"Migration transport_hardening_v1 complete (changed={changed})")
 
 
 if __name__ == '__main__':
