@@ -3495,6 +3495,238 @@ def _migrate_production_data_reapply(app):
         print("  Migration complete: production data already up to date.")
 
 
+def _migrate_add_transit_directions(app):
+    """Add getting_there transit directions to activities that are missing them.
+    Only updates activities where getting_there is NULL or empty.
+    Matches by title (ILIKE) for production safety."""
+    from models import Activity, Day, Trip
+
+    # Sentinel: check Trip.notes for marker
+    trip = Trip.query.first()
+    if trip and trip.notes and '__transit_dirs_v1' in trip.notes:
+        return
+
+    print("Running migration: add transit directions...")
+    count = 0
+
+    # Map of title patterns → getting_there text
+    directions = [
+        # Day 2 — ARRIVE TOKYO
+        ('%Train to Higashi-Shinjuku%',
+         'From Haneda Airport: Keikyu Line to Shinagawa, then JR Yamanote Line to Shinjuku, '
+         'then Oedo Line or Fukutoshin Line one stop to Higashi-Shinjuku. ~75-90 min total. '
+         'Or Airport Limousine Bus direct to Shinjuku Bus Terminal (~60-85 min) then 10 min walk.'),
+        ('%Light dinner nearby%',
+         'Walk from hotel. Shinjuku area has ramen shops, conveyor belt sushi, and 7-Elevens '
+         'within 5 min walk in every direction.'),
+        ('%Senso-ji%night%',
+         'Oedo Line from Higashi-Shinjuku to Kuramae Station (~25 min), then 10 min walk to '
+         'Senso-ji. Or Fukutoshin Line to Asakusa via transfer (~30 min).'),
+        ('%Kabukicho%night%',
+         'Walk from hotel \u2014 Kabukicho is 5 min walk from Higashi-Shinjuku Station. '
+         'Golden Gai and Omoide Yokocho are on the west side of Shinjuku Station (10 min walk).'),
+        ('%Late-night ramen%',
+         'Walk from hotel. Fuunji (tsukemen specialist) is 5 min walk toward Shinjuku Station. '
+         'Dozens of ramen shops within 10 min radius. Open late.'),
+
+        # Day 3 — FULL TOKYO DAY (alternates)
+        ('%Robot Restaurant%',
+         'In Kabukicho, Shinjuku \u2014 5 min walk from hotel. Near Golden Gai.'),
+        ('%Shimokitazawa%',
+         'Odakyu Line from Shinjuku Station to Shimokitazawa (3 min express, 7 min local). '
+         'South exit, walk into the neighborhood.'),
+        ('%Yozakura%Chidorigafuchi%',
+         'Hanzomon Line from nearest connection to Kudanshita Station (Exit 2). Or Toei Shinjuku '
+         'Line from Shinjuku-Sanchome to Kudanshita (~15 min). Boat rental area is 5 min walk.'),
+
+        # Day 4 — HAKONE (alternates)
+        ('%NIKKO%',
+         'JR Shinkansen to Utsunomiya (~50 min, JR Pass covered), then JR Nikko Line to Nikko '
+         'Station (~45 min). Total ~2 hours from Tokyo. Alternatively, Tobu Railway from Asakusa '
+         '(faster but not JR Pass).'),
+        ('%Last night in Shinjuku%',
+         'Return from Hakone: Hakone Tozan train to Odawara, then Shinkansen to Tokyo (~1 hour '
+         'total). Back at hotel area by ~7 PM.'),
+
+        # Day 5 — TOKYO → TAKAYAMA
+        ('%Dinner%Takayama old town%',
+         '10 min walk from TAKANOYU to Sanmachi Suji old town. Cross the Miyagawa River bridge. '
+         'Many restaurants along the preserved streets.'),
+        ('%Evening soak%TAKANOYU%',
+         'Walk back to TAKANOYU. Bathhouse open 1:00 PM - 10:00 PM. Last entry 9:30 PM.'),
+
+        # Day 6 — FULL DAY TAKAYAMA
+        ('%Breakfast%morning market%',
+         'At or near the Miyagawa Morning Market \u2014 many food stalls along the river. '
+         'Or find a kissaten (retro coffee shop) within 5 min walk of the market area.'),
+        ('%Sanmachi Suji%sake brew%',
+         'Walk from lunch area \u2014 Sanmachi Suji is the central old town district, 10 min walk '
+         'from the station. Everything is walkable within the district.'),
+        ('%Lantern-lit%night walk%',
+         'Walk from dinner \u2014 the old town streets are all within 10 min of each other. '
+         'No transit needed. Lanterns come on at dusk.'),
+        ('%Izakaya%Hida beef%',
+         'Walk through Sanmachi Suji area. Many izakayas along the old town streets and near the '
+         'station. Try streets south of Kokubunji-dori.'),
+
+        # Day 7 — TAKAYAMA DAY 3
+        ('%Miyagawa Morning Market%round 2%',
+         'Same route as Day 6: 10 min walk from TAKANOYU along the Miyagawa River east bank.'),
+        ('%Breakfast%kissaten%',
+         'Walk from morning market. Several kissaten (retro coffee shops) in the old town area '
+         'near Sanmachi Suji.'),
+        ('%Rent bikes%Miyagawa%',
+         'Bike rentals available near JR Takayama Station and in the old town area. Some '
+         'guesthouses also rent bikes. ~\u00a5200-500/hour.'),
+        ('%Train to Hida-Furukawa%',
+         'JR Takayama Line from JR Takayama Station to Hida-Furukawa (15 min, JR Pass covered). '
+         'Trains roughly every hour. Check schedule.'),
+        ('%Furukawa%White-Walled%',
+         '5 min walk from JR Hida-Furukawa Station. Exit station, walk south along the main '
+         'street to the canal district.'),
+        ('%Hida Crafts%sake tasting%',
+         'Walk within Hida-Furukawa \u2014 the town is compact. Watanabe Sake Brewery is 5 min '
+         'walk from the canal. Museum is near the station.'),
+        ('%Train back to Takayama%',
+         'JR Takayama Line from Hida-Furukawa back to JR Takayama Station (15 min). '
+         'Same line, reverse direction.'),
+        ('%Afternoon soak%TAKANOYU%',
+         'Walk or taxi from JR Takayama Station back to TAKANOYU (~20 min walk, 5 min taxi). '
+         'Bathhouse open 1:00 PM - 10:00 PM.'),
+        ('%Final Hida beef dinner%',
+         'Walk to Sanmachi Suji old town (10 min from TAKANOYU). For a special last night: '
+         'try Le Midi (French-Japanese fusion) or Kyoya (traditional wagyu). Reserve ahead.'),
+
+        # Day 8 — SHIRAKAWA-GO transit
+        ('%Village lunch%',
+         'Within Shirakawa-go village \u2014 several small restaurants near the bus terminal and '
+         'main street. Try soba noodles or local river fish.'),
+
+        # Day 9 — KYOTO DAY 1
+        ('%Keihan Line%',
+         'Take the Keihan Line from Fushimi-Inari Station to Gion-Shijo or Kiyomizu-Gojo. '
+         '~10 min ride. Connects the shrine to central Kyoto/Gion area.'),
+        ('%Fushimi sake%district%',
+         'Walk south from Fushimi Inari Shrine (~15 min) to the Fushimi sake district. '
+         'Or Keihan Line one stop to Chushojima. Gekkeikan Okura Museum is the main attraction.'),
+
+        # Day 10 — KYOTO DAY 2
+        ('%Kurama%Kibune%',
+         'Eizan Railway from Demachiyanagi Station to Kurama (30 min). Demachiyanagi is reachable '
+         'via Keihan Line from Gion-Shijo (~10 min). Hike from Kurama to Kibune (~1.5 hours) or '
+         'take each separately.'),
+
+        # Day 11 — HIROSHIMA & MIYAJIMA
+        ('%Floating%Itsukushima%Torii%',
+         'Walk from the JR Ferry terminal along the waterfront (~10 min). The torii gate is '
+         'visible from the ferry. At low tide, walk out to it on the sand. At high tide, view '
+         'from shore or take a small boat tour (~\u00a51,500).'),
+        ('%HIMEJI%NARA%',
+         'Shinkansen Kyoto \u2192 Himeji (~50 min, JR Pass covered). Castle is 15 min walk north '
+         'from JR Himeji Station. Then JR Himeji \u2192 Nara (~1 hour via transfer at Osaka). '
+         'Nara deer park is 5 min walk from JR Nara Station.'),
+
+        # Day 12 — OSAKA DAY 1
+        ('%Nijo Castle%tea ceremony%',
+         'Kyoto Metro Tozai Line to Nijojo-mae Station (direct). Or bus #9/#50 from Kyoto '
+         'Station. Castle is 1 min from the station exit.'),
+
+        # Day 13 — OSAKA DAY 2
+        ('%Morning coffee%konbini%',
+         'Walk from Hotel The Leben \u2014 Shinsaibashi/Minamisemba area has Lawson, FamilyMart, '
+         'and 7-Eleven within 2 min walk. For specialty coffee, try Lilo Coffee Roasters '
+         '(~5 min walk).'),
+
+        # Day 14 — DEPARTURE
+        ('%Haneda Airport%last shopping%',
+         'Already at Haneda after Shinagawa transfer. International Terminal (T3) has tax-free '
+         'shops, ramen street, and souvenir stores past security. Arrive by 1:30 PM for 3:50 PM '
+         'departure.'),
+
+        # Logistics activities
+        ('%Welcome Suica%',
+         'At Haneda Airport arrivals \u2014 look for the JR East Travel Service Center in the '
+         'arrivals hall. Open ~7:45 AM - 6:30 PM.'),
+        ('%eSIM%pocket WiFi%',
+         'eSIM: activate via app before or after landing (needs WiFi). Pocket WiFi: pick up at '
+         'designated counter in Haneda arrivals hall.'),
+        ('%Check into Sotetsu Fresa%',
+         'From Higashi-Shinjuku Station (Oedo/Fukutoshin Lines): Exit B1, 1 min walk. '
+         'From Shinjuku Station: 10 min walk east. Address: 7-27-9 Shinjuku.'),
+        ('%ACTIVATE%JR Pass%',
+         'JR ticket office (Midori no Madoguchi) at any major JR station. Tokyo Station is most '
+         'convenient \u2014 go to the JR Central ticket office on the Marunouchi side. Bring your '
+         'passport + exchange voucher.'),
+        ('%Check into TAKANOYU%',
+         'From JR Takayama Station: 20 min walk or 5 min taxi. Address: 107 Soyujimachi, '
+         'Takayama. Host Hiroto may offer pickup \u2014 contact via Airbnb.'),
+        ('%Check into Piece Hostel%',
+         'NOTE: The booked accommodation is Tsukiya-Mikazuki, not Piece Hostel. From Kyoto '
+         'Station: Karasuma Line to Gojo Station (1 stop, 3 min). 5 min walk to the machiya.'),
+        ('%Check into%machiya%',
+         'Kyotofish Teahouse in Miyagawacho. From Tsukiya-Mikazuki: walk north along Kamo River '
+         '(~15 min) or bus to Gion-Shijo area. Self check-in via lockbox. Handle washi paper '
+         'doors gently.'),
+        ('%Check into Osaka%',
+         'Hotel The Leben Osaka, Minamisemba. From Osaka Station: Midosuji Line to Shinsaibashi '
+         'Station (~10 min). Exit 1, 3 min walk south.'),
+    ]
+
+    for pattern, direction_text in directions:
+        # Use ILIKE for case-insensitive matching with wildcards
+        acts = Activity.query.filter(
+            Activity.title.ilike(pattern)
+        ).all()
+        for act in acts:
+            if not act.getting_there:  # Only fill if empty/null
+                act.getting_there = direction_text
+                count += 1
+
+    # Write sentinel marker
+    if trip:
+        trip.notes = ((trip.notes or '') + '\n__transit_dirs_v1').strip()
+    db.session.commit()
+    print(f"  Migration complete: added transit directions to {count} activities.")
+
+
+def _migrate_restore_hakone_route(app):
+    """Re-add the Odawara → Hakone (Loop) transport route on Day 4.
+    It was accidentally deleted instead of moved in a prior migration."""
+    from models import TransportRoute, Day
+
+    # Check if it already exists
+    existing = TransportRoute.query.filter(
+        TransportRoute.route_from.ilike('%Odawara%'),
+        TransportRoute.route_to.ilike('%Hakone%')
+    ).first()
+    if existing:
+        return
+
+    day4 = Day.query.filter_by(day_number=4).first()
+    if not day4:
+        return
+
+    print("Running migration: restore Odawara → Hakone transport route...")
+
+    # Find the sort_order — place it between Tokyo→Odawara and Hakone-Yumoto→Tokyo
+    tokyo_odawara = TransportRoute.query.filter_by(
+        day_id=day4.id, route_from='Tokyo').first()
+    sort = (tokyo_odawara.sort_order + 1) if tokyo_odawara and tokyo_odawara.sort_order else 2
+
+    db.session.add(TransportRoute(
+        route_from='Odawara',
+        route_to='Hakone (Loop)',
+        transport_type='Hakone Tozan Railway',
+        train_name='Switchback Train',
+        jr_pass_covered=False,
+        cost_if_not_covered='Hakone Free Pass',
+        day_id=day4.id,
+        sort_order=sort,
+    ))
+    db.session.commit()
+    print("  Migration complete: Odawara → Hakone route restored on Day 4.")
+
+
 def create_app(run_data_migrations=True):
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -3663,6 +3895,8 @@ def create_app(run_data_migrations=True):
             _migrate_transport_checklist_and_data_fixes(app)
             _migrate_remove_kanazawa_hotel(app)
             _migrate_production_data_reapply(app)
+            _migrate_add_transit_directions(app)
+            _migrate_restore_hakone_route(app)
 
     return app
 

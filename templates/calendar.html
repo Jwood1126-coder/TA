@@ -11,103 +11,136 @@
     <p class="cal-subtitle">{{ trip.start_date.strftime('%b %d') }} &ndash; {{ trip.end_date.strftime('%b %d, %Y') }}</p>
 </header>
 
-<div class="cal-timeline">
-{% set ns = namespace(prev_location='') %}
-{% for cd in calendar_days %}
-
-{# Location divider when city changes #}
-{% if cd.location_name != ns.prev_location %}
-<div class="cal-location-divider">
-    {{ icon_pin(14) }} <span>{{ cd.location_name }}</span>
+{# View Switcher #}
+<div class="cal-view-switcher" id="calViewSwitcher">
+    <button class="cal-view-btn active" data-view="month">Month</button>
+    <button class="cal-view-btn" data-view="week">Week</button>
+    <button class="cal-view-btn" data-view="day">Day</button>
+    <button class="cal-view-btn" data-view="list">List</button>
 </div>
-{% set ns.prev_location = cd.location_name %}
-{% endif %}
 
-<a href="/day/{{ cd.day.day_number }}" class="cal-day-card {% if cd.day.is_buffer_day %}buffer{% endif %} {% if today_day_num and cd.day.day_number == today_day_num %}cal-today{% endif %}" {% if today_day_num and cd.day.day_number == today_day_num %}id="calToday"{% endif %}>
-    {# Date sidebar #}
-    <div class="cal-date-col">
-        <span class="cal-weekday">{{ cd.day.date.strftime('%a') }}</span>
-        <span class="cal-datenum">{{ cd.day.date.day }}</span>
-        <span class="cal-month">{{ cd.day.date.strftime('%b') }}</span>
+{# ============== MONTH VIEW ============== #}
+<div class="cal-view" id="calMonth">
+    <div class="cal-month-header">
+        <div class="cal-month-title">April 2026</div>
     </div>
+    <div class="cal-month-grid">
+        {# Weekday headers #}
+        <div class="cal-grid-head">Sun</div>
+        <div class="cal-grid-head">Mon</div>
+        <div class="cal-grid-head">Tue</div>
+        <div class="cal-grid-head">Wed</div>
+        <div class="cal-grid-head">Thu</div>
+        <div class="cal-grid-head">Fri</div>
+        <div class="cal-grid-head">Sat</div>
+        {# Cells rendered by JS #}
+    </div>
+    {# Accommodation legend #}
+    <div class="cal-accom-legend" id="calAccomLegend"></div>
+</div>
 
-    {# Content #}
-    <div class="cal-content-col">
-        <div class="cal-day-title">
-            Day {{ cd.day.day_number }}: {{ cd.day.title }}
-            {% if cd.day.is_buffer_day %}<span class="buffer-badge-sm">Flex</span>{% endif %}
+{# ============== WEEK VIEW ============== #}
+<div class="cal-view" id="calWeek" style="display:none">
+    <div class="cal-week-nav">
+        <button class="cal-week-tab active" data-week="1">Week 1: Apr 5–11</button>
+        <button class="cal-week-tab" data-week="2">Week 2: Apr 12–18</button>
+    </div>
+    <div class="cal-week-container" id="calWeekContainer"></div>
+</div>
+
+{# ============== DAY VIEW ============== #}
+<div class="cal-view" id="calDay" style="display:none">
+    <div class="cal-day-nav">
+        <button class="cal-day-prev" id="calDayPrev">&lsaquo;</button>
+        <div class="cal-day-current" id="calDayCurrent"></div>
+        <button class="cal-day-next" id="calDayNext">&rsaquo;</button>
+    </div>
+    <div class="cal-day-detail" id="calDayDetail"></div>
+</div>
+
+{# ============== LIST VIEW (existing) ============== #}
+<div class="cal-view" id="calList" style="display:none">
+    <div class="cal-timeline">
+    {% set ns = namespace(prev_location='') %}
+    {% for cd in calendar_days %}
+
+    {% if cd.location_name != ns.prev_location %}
+    <div class="cal-location-divider">
+        {{ icon_pin(14) }} <span>{{ cd.location_name }}</span>
+    </div>
+    {% set ns.prev_location = cd.location_name %}
+    {% endif %}
+
+    <a href="/day/{{ cd.day.day_number }}" class="cal-day-card {% if cd.day.is_buffer_day %}buffer{% endif %} {% if today_day_num and cd.day.day_number == today_day_num %}cal-today{% endif %}" {% if today_day_num and cd.day.day_number == today_day_num %}id="calToday"{% endif %}>
+        <div class="cal-date-col">
+            <span class="cal-weekday">{{ cd.day.date.strftime('%a') }}</span>
+            <span class="cal-datenum">{{ cd.day.date.day }}</span>
+            <span class="cal-month">{{ cd.day.date.strftime('%b') }}</span>
         </div>
-
-        {# Flights #}
-        {% for f in cd.flights %}
-        <div class="cal-chip flight">
-            {{ icon_plane(12) }}
-            {{ f.flight_number }} {{ f.route_from }}&rarr;{{ f.route_to }}
-            {% if f.depart_time %}<span class="cal-chip-time">{{ f.depart_time }}</span>{% endif %}
-        </div>
-        {% endfor %}
-
-        {# Transport / city change #}
-        {% for t in cd.transport %}
-        <div class="cal-chip transport">
-            {{ icon_shinkansen(12) }}
-            {{ t.route_from }} &rarr; {{ t.route_to }}
-            {% if t.duration %}<span class="cal-chip-time">{{ t.duration }}</span>{% endif %}
-        </div>
-        {% endfor %}
-
-        {# Activities #}
-        <div class="cal-activities">
-            {% for a in cd.activities %}
-            <div class="cal-activity {% if a.is_completed %}done{% endif %} {% if a.is_optional %}optional{% endif %}">
-                {% if a.is_completed %}{{ icon_check(10) }}{% endif %}
-                <span>{{ a.title }}</span>
+        <div class="cal-content-col">
+            <div class="cal-day-title">
+                Day {{ cd.day.day_number }}: {{ cd.day.title }}
+                {% if cd.day.is_buffer_day %}<span class="buffer-badge-sm">Flex</span>{% endif %}
+            </div>
+            {% for f in cd.flights %}
+            <div class="cal-chip flight">
+                {{ icon_plane(12) }}
+                {{ f.flight_number }} {{ f.route_from }}&rarr;{{ f.route_to }}
+                {% if f.depart_time %}<span class="cal-chip-time">{{ f.depart_time }}</span>{% endif %}
             </div>
             {% endfor %}
-            {% if cd.remaining_count > 0 %}
-            <div class="cal-activity more">+{{ cd.remaining_count }} more</div>
-            {% endif %}
-        </div>
-
-        {# Accommodation #}
-        {% if cd.accom %}
-        <div class="cal-accom {% if cd.accom.status in ('booked', 'confirmed') %}booked{% endif %}">
-            {{ icon_hotel(12) }}
-            {% if cd.accom.name %}
-                {{ cd.accom.name }}
-            {% else %}
-                <em>Not selected</em>
-            {% endif %}
-            {% if cd.accom.check_in %}<span class="cal-accom-tag">Check-in</span>{% endif %}
-            {% if cd.accom.check_out and not cd.accom.check_in %}<span class="cal-accom-tag out">Check-out</span>{% endif %}
-            {% if cd.accom.status in ('booked', 'confirmed') %}
-            <span class="cal-booked-dot"></span>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        {# Progress bar #}
-        {% if cd.total > 0 %}
-        <div class="cal-progress-row">
-            <div class="progress-bar" role="progressbar" aria-valuenow="{{ cd.pct }}">
-                <div class="progress-fill" style="width: {{ cd.pct }}%"></div>
+            {% for t in cd.transport %}
+            <div class="cal-chip transport">
+                {{ icon_shinkansen(12) }}
+                {{ t.route_from }} &rarr; {{ t.route_to }}
+                {% if t.duration %}<span class="cal-chip-time">{{ t.duration }}</span>{% endif %}
             </div>
-            <span class="cal-progress-text">{{ cd.done }}/{{ cd.total }}</span>
+            {% endfor %}
+            <div class="cal-activities">
+                {% for a in cd.activities %}
+                <div class="cal-activity {% if a.is_completed %}done{% endif %} {% if a.is_optional %}optional{% endif %}">
+                    {% if a.is_completed %}{{ icon_check(10) }}{% endif %}
+                    <span>{{ a.title }}</span>
+                </div>
+                {% endfor %}
+                {% if cd.remaining_count > 0 %}
+                <div class="cal-activity more">+{{ cd.remaining_count }} more</div>
+                {% endif %}
+            </div>
+            {% if cd.accom %}
+            <div class="cal-accom {% if cd.accom.status in ('booked', 'confirmed') %}booked{% endif %}">
+                {{ icon_hotel(12) }}
+                {% if cd.accom.name %}{{ cd.accom.name }}{% else %}<em>Not selected</em>{% endif %}
+                {% if cd.accom.check_in %}<span class="cal-accom-tag">Check-in</span>{% endif %}
+                {% if cd.accom.check_out and not cd.accom.check_in %}<span class="cal-accom-tag out">Check-out</span>{% endif %}
+                {% if cd.accom.status in ('booked', 'confirmed') %}<span class="cal-booked-dot"></span>{% endif %}
+            </div>
+            {% endif %}
+            {% if cd.total > 0 %}
+            <div class="cal-progress-row">
+                <div class="progress-bar" role="progressbar" aria-valuenow="{{ cd.pct }}">
+                    <div class="progress-fill" style="width: {{ cd.pct }}%"></div>
+                </div>
+                <span class="cal-progress-text">{{ cd.done }}/{{ cd.total }}</span>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
+    </a>
+    {% endfor %}
     </div>
-</a>
-{% endfor %}
 </div>
 
-{% if today_day_num %}
+{# Data for JS #}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var el = document.getElementById('calToday');
-    if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-});
+window.CAL_DATA = {
+    monthData: {{ month_data | tojson }},
+    accomSpans: {{ accom_spans | tojson }},
+    weekData: {{ week_data | tojson }},
+    todayDayNum: {{ today_day_num | tojson }},
+    tripStarted: {{ trip_started | tojson }},
+    tripStart: "{{ trip.start_date.isoformat() }}",
+    tripEnd: "{{ trip.end_date.isoformat() }}"
+};
 </script>
-{% endif %}
+<script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
 {% endblock %}
