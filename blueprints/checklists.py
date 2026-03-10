@@ -194,12 +194,34 @@ def update_checklist_status(item_id):
     elif item.is_completed and item.status != 'completed':
         item.is_completed = False
         item.completed_at = None
+
+    # Sync to linked accommodation option's booking_status
+    accom_synced = False
+    if item.accommodation_location_id:
+        selected_opt = AccommodationOption.query.filter_by(
+            location_id=item.accommodation_location_id,
+            is_selected=True
+        ).first()
+        if selected_opt:
+            if new_status in ('booked', 'completed') and \
+               selected_opt.booking_status not in ('booked', 'confirmed'):
+                selected_opt.booking_status = 'booked'
+                accom_synced = True
+            elif new_status in ('pending', 'researching') and \
+                 selected_opt.booking_status == 'booked':
+                selected_opt.booking_status = 'not_booked'
+                accom_synced = True
+
     db.session.commit()
 
     from app import socketio
     socketio.emit('checklist_status_changed', {
         'id': item.id, 'status': item.status,
     })
+    if accom_synced:
+        socketio.emit('accommodation_updated', {
+            'location_id': item.accommodation_location_id,
+        })
     return jsonify({'ok': True})
 
 

@@ -4212,6 +4212,11 @@ def create_app(run_data_migrations=True):
             except Exception as e:
                 print(f"WARNING: transport hardening v1 migration failed: {e}")
                 db.session.rollback()
+            try:
+                _migrate_sync_accom_checklist_v1(app)
+            except Exception as e:
+                print(f"WARNING: sync accom checklist migration failed: {e}")
+                db.session.rollback()
 
     return app
 
@@ -4595,6 +4600,100 @@ def _migrate_transport_hardening_v1(app):
         trip.notes = (trip.notes or '') + '\n__transport_hardening_v1'
         db.session.commit()
         print(f"Migration transport_hardening_v1 complete (changed={changed})")
+
+
+def _migrate_sync_accom_checklist_v1(app):
+    """Ensure every AccommodationLocation has a linked ChecklistItem,
+    and sync booking statuses bidirectionally so documents page shows all reservations."""
+    from models import (AccommodationLocation, AccommodationOption,
+                        ChecklistItem, Trip, db)
+    from datetime import datetime
+
+    trip = Trip.query.first()
+    if not trip:
+        return
+    if '__sync_accom_checklist_v1' in (trip.notes or ''):
+        print("sync_accom_checklist_v1: already applied, skipping")
+        return
+
+    print("Running sync_accom_checklist_v1 migration...")
+    changed = False
+
+    # ================================================================
+    # Part A: Create missing ChecklistItems for unlinked AccommodationLocations
+    # ================================================================
+    max_sort = db.session.query(db.func.max(ChecklistItem.sort_order)).scalar() or 0
+
+    for loc in AccommodationLocation.query.order_by(
+            AccommodationLocation.sort_order).all():
+        existing = ChecklistItem.query.filter_by(
+            accommodation_location_id=loc.id).first()
+        if existing:
+            continue
+
+        # Build title like "Book Tokyo (3 nights, Apr 6-9)"
+        date_range = ''
+        if loc.check_in_date and loc.check_out_date:
+            cin = loc.check_in_date.strftime('%b %-d')
+            cout = loc.check_out_date.strftime('%-d')
+            date_range = f', {cin}-{cout}'
+        nights = loc.num_nights or 0
+        night_str = f"{nights} night{'s' if nights != 1 else ''}"
+        title = f"Book {loc.location_name} ({night_str}{date_range})"
+
+        max_sort += 1
+        item = ChecklistItem(
+            title=title,
+            item_type='decision',
+            category='pre_departure_today',
+            status='pending',
+            accommodation_location_id=loc.id,
+            sort_order=max_sort,
+        )
+        db.session.add(item)
+        changed = True
+        print(f"  + Created checklist item: {title}")
+
+    if changed:
+        db.session.flush()
+
+    # ================================================================
+    # Part B: Sync booking statuses bidirectionally
+    # ================================================================
+
+    # Pass 1: Checklist 'booked'/'completed' → AccommodationOption.booking_status
+    for item in ChecklistItem.query.filter(
+            ChecklistItem.accommodation_location_id.isnot(None),
+            ChecklistItem.status.in_(['booked', 'completed'])).all():
+        opt = AccommodationOption.query.filter_by(
+            location_id=item.accommodation_location_id,
+            is_selected=True).first()
+        if opt and opt.booking_status not in ('booked', 'confirmed'):
+            opt.booking_status = 'booked'
+            changed = True
+            print(f"  ~ Synced option '{opt.name}' booking_status → booked "
+                  f"(from checklist '{item.title}')")
+
+    # Pass 2: AccommodationOption booked/confirmed → ChecklistItem status
+    for opt in AccommodationOption.query.filter(
+            AccommodationOption.is_selected == True,
+            AccommodationOption.booking_status.in_(['booked', 'confirmed'])).all():
+        item = ChecklistItem.query.filter_by(
+            accommodation_location_id=opt.location_id).first()
+        if item and item.status not in ('booked', 'completed'):
+            item.status = 'booked'
+            item.is_completed = True
+            item.completed_at = datetime.utcnow()
+            changed = True
+            print(f"  ~ Synced checklist '{item.title}' → booked "
+                  f"(from option '{opt.name}')")
+
+    # ================================================================
+    # Mark sentinel
+    # ================================================================
+    trip.notes = (trip.notes or '') + '\n__sync_accom_checklist_v1'
+    db.session.commit()
+    print(f"Migration sync_accom_checklist_v1 complete (changed={changed})")
 
 
 if __name__ == '__main__':
