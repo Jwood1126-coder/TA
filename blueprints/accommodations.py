@@ -5,7 +5,8 @@ import requests
 from bs4 import BeautifulSoup
 from flask import Blueprint, render_template, jsonify, request, current_app
 from models import db, AccommodationLocation, AccommodationOption, ChecklistItem
-from guardrails import validate_booking_status, validate_non_negative, validate_document_status
+from guardrails import (validate_booking_status, validate_non_negative,
+                        validate_document_status, check_accom_date_overlap)
 
 accommodations_bp = Blueprint('accommodations', __name__)
 

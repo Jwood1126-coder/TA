@@ -116,30 +116,27 @@ def auto_link_documents():
                     break
 
         if not matched_accom:
-            # Try to match to flights
+            # Try to match to flights — don't break after first match,
+            # because multi-leg flights share one confirmation number
             for flight in flights:
                 if flight.document_id:
                     continue
+                matched = False
                 if flight.confirmation_number and flight.confirmation_number.lower() in fname_lower:
-                    flight.document_id = doc.id
-                    doc.doc_type = 'flight_receipt'
-                    linked += 1
-                    break
-                if flight.flight_number and flight.flight_number.lower() in fname_lower:
-                    flight.document_id = doc.id
-                    doc.doc_type = 'flight_receipt'
-                    linked += 1
-                    break
-                # Match flight receipts by date pattern
-                if flight.depart_date:
+                    matched = True
+                elif flight.flight_number and flight.flight_number.lower() in fname_lower:
+                    matched = True
+                elif flight.depart_date:
+                    # Match flight receipts by date pattern
                     day_str = f'{flight.depart_date.day:02d}'
                     month_str = flight.depart_date.strftime('%b').lower()
                     if ('flight' in fname_lower or 'receipt' in fname_lower or 'eticket' in fname_lower):
                         if f'{day_str}{month_str}' in fname_lower or f'{month_str}{day_str}' in fname_lower:
-                            flight.document_id = doc.id
-                            doc.doc_type = 'flight_receipt'
-                            linked += 1
-                            break
+                            matched = True
+                if matched:
+                    flight.document_id = doc.id
+                    doc.doc_type = 'flight_receipt'
+                    linked += 1
 
     db.session.commit()
     return linked

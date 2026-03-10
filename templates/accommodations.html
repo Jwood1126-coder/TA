@@ -51,7 +51,7 @@
     {% set is_booked_option = option.is_selected and option.booking_status in ('booked', 'confirmed') %}
     {% set is_alt = has_booking and not is_booked_option and not option.is_eliminated %}
     {% set is_hidden = (has_booking and not is_booked_option) or option.is_eliminated %}
-    <div class="option-card {% if option.is_selected %}selected{% endif %} {% if option.booking_status in ('booked', 'confirmed') %}status-booked{% endif %} {% if option.is_eliminated %}eliminated{% endif %} {% if is_alt %}alt-option{% endif %} swipe-enabled"
+    <div class="option-card {% if option.is_selected %}selected{% endif %} {% if option.booking_status in ('booked', 'confirmed') %}status-booked{% endif %} {% if option.is_eliminated %}eliminated{% endif %} {% if is_alt %}alt-option{% endif %} {% if option.document_id %}doc-backed{% elif option.booking_status in ('booked', 'confirmed') %}doc-planned{% endif %} swipe-enabled"
          data-option-id="{{ option.id }}" data-location-id="{{ loc.id }}"
          {% if is_hidden %}style="display:none;" data-hidden-option="true"{% endif %}>
         <div class="swipe-content">
@@ -81,6 +81,9 @@
                 ${{ option.price_low|int }}/nt
                 {% endif %}
             </div>
+            {% if option.document_id %}
+            <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>
+            {% endif %}
             {% if option.booking_status in ('booked', 'confirmed') %}
             <span class="option-booked-badge">{{ icon_check(12) }}</span>
             {% endif %}

@@ -277,3 +277,23 @@
 .checklist-overview-item:hover {
     background: rgba(128,128,128,0.15);
 }
+
+/* Checklist progress — moved from components.css */
+.co-label {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+.co-progress {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.co-done {
+    color: #4CAF50;
+}
+
+.confirmed-fill {
+    background: var(--sakura) !important;
+}

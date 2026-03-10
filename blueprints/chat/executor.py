@@ -4,7 +4,8 @@ from datetime import datetime
 from models import (db, ChecklistItem, Day, Activity, AccommodationOption,
                     AccommodationLocation, Flight, BudgetItem)
 from guardrails import (validate_time_slot, validate_booking_status,
-                        validate_non_negative, validate_document_status)
+                        validate_non_negative, validate_document_status,
+                        check_accom_date_overlap)
 
 
 def execute_tool(tool_name, tool_input):
@@ -85,6 +86,8 @@ def execute_tool(tool_name, tool_input):
             if not accom_loc:
                 return {"success": False, "error": f"No accommodation location matching '{loc_name}'. "
                         f"Available: {', '.join(l.location_name for l in AccommodationLocation.query.all())}"}
+            # Check for date overlaps with other locations
+            overlap_warning = check_accom_date_overlap(accom_loc)
             # Determine next rank
             existing = AccommodationOption.query.filter_by(location_id=accom_loc.id).all()
             next_rank = max([o.rank for o in existing] or [0]) + 1
@@ -112,8 +115,11 @@ def execute_tool(tool_name, tool_input):
             )
             db.session.add(option)
             db.session.commit()
-            return {"success": True, "message": f"Added '{option.name}' as option #{next_rank} for {accom_loc.location_name} "
-                    f"({accom_loc.check_in_date.strftime('%b %d')}-{accom_loc.check_out_date.strftime('%b %d')})"}
+            msg = (f"Added '{option.name}' as option #{next_rank} for {accom_loc.location_name} "
+                   f"({accom_loc.check_in_date.strftime('%b %d')}-{accom_loc.check_out_date.strftime('%b %d')})")
+            if overlap_warning:
+                msg += f" ⚠️ {overlap_warning}"
+            return {"success": True, "message": msg}
 
         elif tool_name == "select_accommodation":
             name = tool_input['name']

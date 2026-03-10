@@ -43,10 +43,10 @@
 
 <!-- Accommodation check-out -->
 {% if day_checkout and checkout_option %}
-<section class="accommodation-day-card checkout">
+<section class="accommodation-day-card checkout {% if checkout_option.document_id %}doc-backed{% else %}doc-planned{% endif %}">
     <div class="accom-day-icon">{{ icon_bellhop(24) }}</div>
     <div class="accom-day-info">
-        <div class="accom-day-label">Check out &middot; {{ day_checkout.location_name }}</div>
+        <div class="accom-day-label">Check out &middot; {{ day_checkout.location_name }}{% if checkout_option.document_id %} <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>{% endif %}</div>
         <div class="accom-day-name">{{ checkout_option.name }}</div>
         {% if checkout_option.address %}
         <a href="{{ checkout_option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
@@ -147,10 +147,10 @@
 
 <!-- Accommodation check-in -->
 {% if day_checkin and checkin_option %}
-<section class="accommodation-day-card checkin">
+<section class="accommodation-day-card checkin {% if checkin_option.document_id %}doc-backed{% else %}doc-planned{% endif %}">
     <div class="accom-day-icon">{{ icon_hotel(24) }}</div>
     <div class="accom-day-info">
-        <div class="accom-day-label">Check in</div>
+        <div class="accom-day-label">Check in{% if checkin_option.document_id %} <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>{% endif %}</div>
         <div class="accom-day-name">{{ checkin_option.name }}</div>
         {% if checkin_option.confirmation_number %}
         <div class="accom-day-conf">Conf: {{ checkin_option.confirmation_number }}</div>

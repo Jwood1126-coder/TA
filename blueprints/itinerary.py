@@ -21,6 +21,7 @@ def _build_location_groups(days):
                 'end_date': day.date,
                 'accom_name': None,
                 'accom_status': None,
+                'accom_doc_backed': False,
                 'accom_pending_count': 0,
             }
             location_groups.append(current_group)
@@ -47,6 +48,7 @@ def _build_location_groups(days):
             if selected:
                 group['accom_name'] = selected.name
                 group['accom_status'] = selected.booking_status
+                group['accom_doc_backed'] = bool(selected.document_id)
             else:
                 group['accom_pending_count'] = sum(
                     1 for o in all_opts if not o.is_eliminated)

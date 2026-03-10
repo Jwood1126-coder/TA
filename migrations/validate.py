@@ -80,6 +80,17 @@ def validate_schedule(app):
             warnings.append(
                 f"MULTI-SELECT: {loc.location_name} has {selected_count} selected options (should be 0 or 1)")
 
+    # --- Auto-fix: eliminated options should not claim confirmed/booked ---
+    for loc in all_locs:
+        for opt in loc.options:
+            if opt.is_eliminated and opt.booking_status in ('confirmed', 'booked'):
+                old_status = opt.booking_status
+                opt.booking_status = 'cancelled'
+                db.session.commit()
+                warnings.append(
+                    f"AUTO-FIX: '{opt.name}' was eliminated but {old_status} "
+                    f"— downgraded to cancelled")
+
     # --- Check 6: Document integrity (confirmed without document) ---
     for loc in all_locs:
         for opt in loc.options:

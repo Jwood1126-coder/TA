@@ -207,38 +207,12 @@
 
 .doc-empty-hint { padding: 8px 12px; font-size: 0.85rem; color: var(--pico-muted-color); }
 
-/* Document-first: planned vs confirmed visual distinction */
-
-.doc-backed {
-    border-left: 3px solid #22c55e;
-}
-
-.doc-planned {
-    border-left: 3px dashed #eab308;
-    opacity: 0.92;
-}
-
-.doc-backed-icon {
-    font-size: 0.85rem;
-    cursor: help;
-}
+/* Document-specific styles (shared doc-backed/doc-planned/planned-badge now in components.css) */
 
 .doc-linked-badge {
     font-size: 0.75rem;
     color: #22c55e;
     cursor: help;
-}
-
-.planned-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    padding: 1px 8px;
-    border-radius: 10px;
-    background: #fef3c7;
-    color: #92400e;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
 }
 
 .doc-needed {

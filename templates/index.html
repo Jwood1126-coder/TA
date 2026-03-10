@@ -120,9 +120,12 @@
         {% endfor %}
 
         {% if group.accom_name %}
-        <div class="loc-group-accom">
+        <div class="loc-group-accom {% if group.accom_doc_backed %}doc-backed{% elif group.accom_status in ('booked', 'confirmed') %}doc-planned{% endif %}">
             <span class="loc-accom-icon">{{ icon_hotel(16) }}</span>
             <span class="loc-accom-name">{{ group.accom_name }}</span>
+            {% if group.accom_doc_backed %}
+            <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>
+            {% endif %}
             {% if group.accom_status and group.accom_status != 'not_booked' %}
             <span class="booking-badge {{ group.accom_status }}">
                 {{ group.accom_status | replace('_', ' ') | title }}

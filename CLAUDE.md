@@ -81,8 +81,6 @@ CSS is split into 12 files loaded via `{% block page_css %}` in templates:
 - **Always loaded** (in base.html): `base.css` → `layout.css` → `components.css` → `dark.css`
 - **Per-page**: `dashboard.css`, `day.css`, `calendar.css`, `accommodations.css`, `checklists.css`, `activities.css`, `chat.css`, `documents.css`
 - **dark.css** loads last for specificity (all `[data-theme="dark"]` selectors)
-- **`static/css/app.css`** is the old monolith (5,267 lines) — kept as reference, NOT loaded by any template
-
 When adding styles:
 - Add to the appropriate per-page CSS file, or `components.css` for shared styles
 - Dark mode overrides go in `dark.css`

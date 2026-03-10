@@ -575,3 +575,196 @@
 .cal-day-detail {
     padding-bottom: 80px;
 }
+
+/* Calendar week/day view — moved from components.css */
+.mg-date {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--pico-color);
+    line-height: 1;
+}
+
+.mg-trip-num {
+    font-size: 0.55rem;
+    font-weight: 600;
+    color: var(--pico-muted-color);
+    line-height: 1;
+}
+
+.mg-icon {
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+.mg-count {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(212,39,106,0.1);
+    border-radius: 6px;
+    padding: 0 3px;
+    line-height: 1.4;
+}
+
+.cw-day-header {
+    margin-bottom: 6px;
+}
+
+.cw-day-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    color: inherit;
+    flex-wrap: wrap;
+}
+
+.cw-weekday {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--pico-muted-color);
+}
+
+.cw-datenum {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--sakura-text);
+    line-height: 1;
+}
+
+.cw-emoji {
+    font-size: 0.85rem;
+}
+
+.cw-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--pico-color);
+}
+
+.cw-accom {
+    font-size: 0.7rem;
+    color: var(--pico-muted-color);
+    margin-top: 3px;
+    padding: 3px 8px;
+    background: var(--sakura-light);
+    border-radius: 6px;
+    display: inline-block;
+}
+
+.cw-accom-tag {
+    font-size: 0.58rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--accent);
+    color: #fff;
+}
+
+.cw-accom-tag.out {
+    background: #f59e0b;
+}
+
+.cw-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 16px;
+    margin: 2px 4px 2px 0;
+}
+
+.cw-chip.flight {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+.cw-chip.transport {
+    background: #0c4a6e;
+    color: #7dd3fc;
+}
+
+.cw-chip-time {
+    opacity: 0.7;
+    font-weight: 400;
+}
+
+.cw-slot {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.cw-slot-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--pico-muted-color);
+    min-width: 60px;
+    padding-top: 4px;
+    letter-spacing: 0.03em;
+}
+
+.cw-slot-items {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cw-activity {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-left: 3px solid #888;
+    background: rgba(255,255,255,0.03);
+    border-radius: 0 6px 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.cw-activity.completed {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+.cw-activity.optional {
+    font-style: italic;
+    opacity: 0.75;
+}
+
+.cw-act-title {
+    color: var(--pico-color);
+}
+
+.cw-act-time {
+    font-size: 0.62rem;
+    color: var(--pico-muted-color);
+    font-family: 'Space Mono', monospace;
+}
+
+.cw-badge {
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0 4px;
+    border-radius: 3px;
+}
+
+.cw-badge.optional {
+    color: #f59e0b;
+}
+
+.cw-badge.book {
+    background: rgba(244,114,168,0.15);
+    color: var(--accent);
+}
+
+.cw-badge.done {
+    color: var(--jr-green);
+}

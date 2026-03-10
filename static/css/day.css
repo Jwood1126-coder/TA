@@ -504,3 +504,207 @@
 .cdv-timeline {
     margin-top: 10px;
 }
+
+/* Day detail view — moved from components.css */
+.cd-weekday {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--pico-muted-color);
+}
+
+.cd-daynum {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--sakura-text);
+}
+
+.cdv-emoji {
+    font-size: 1.4rem;
+}
+
+.cdv-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--pico-color);
+}
+
+.cdv-location {
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
+    padding: 2px 8px;
+    background: var(--sakura-light);
+    border-radius: 12px;
+}
+
+.cdv-accom {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8rem;
+    color: var(--pico-color);
+    padding: 8px 10px;
+    background: var(--sakura-light);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.cdv-accom-icon {
+    font-size: 0.9rem;
+}
+
+.cdv-accom-tag {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--accent);
+    color: #fff;
+}
+
+.cdv-accom-tag.out {
+    background: #f59e0b;
+}
+
+.cdv-flight, .cdv-transit {
+    font-size: 0.82rem;
+    padding: 6px 10px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+}
+
+.cdv-flight {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+.cdv-transit {
+    background: #0c4a6e;
+    color: #7dd3fc;
+}
+
+.cdv-jr {
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--jr-green);
+    color: #fff;
+}
+
+.cdv-slot {
+    margin-bottom: 12px;
+}
+
+.cdv-slot-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--sakura-text);
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+    padding-left: 4px;
+}
+
+.cdv-slot-acts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cdv-act {
+    padding: 8px 10px;
+    border-left: 3px solid #888;
+    border-radius: 0 8px 8px 0;
+    background: rgba(255,255,255,0.03);
+    transition: background 0.15s;
+}
+
+.cdv-act:hover {
+    background: var(--sakura-light);
+}
+
+.cdv-act.completed {
+    opacity: 0.5;
+}
+
+.cdv-act.completed .cdv-act-title {
+    text-decoration: line-through;
+}
+
+.cdv-act.optional {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.cdv-act-main {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cdv-done-check {
+    color: var(--jr-green);
+    font-weight: 700;
+}
+
+.cdv-act-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--pico-color);
+}
+
+.cdv-act-meta {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 2px;
+    flex-wrap: wrap;
+}
+
+.cdv-act-time {
+    font-size: 0.68rem;
+    color: var(--pico-muted-color);
+    font-family: 'Space Mono', monospace;
+}
+
+.cdv-badge {
+    font-size: 0.58rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.cdv-badge.optional {
+    color: #f59e0b;
+}
+
+.cdv-badge.book {
+    background: rgba(244,114,168,0.15);
+    color: var(--accent);
+}
+
+.cdv-badge.confirmed {
+    background: rgba(60,179,113,0.15);
+    color: var(--jr-green);
+}
+
+.cdv-full-link {
+    display: block;
+    text-align: center;
+    margin-top: 16px;
+    padding: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    background: var(--sakura-light);
+    border-radius: 8px;
+    transition: background 0.15s;
+}
+
+.cdv-full-link:hover {
+    background: rgba(212,39,106,0.1);
+}
