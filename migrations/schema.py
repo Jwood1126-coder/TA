@@ -64,6 +64,9 @@ def run_schema_migrations(app):
         # Phase 6: document-first FK columns
         ('accommodation_option', 'document_id', 'INTEGER REFERENCES document(id)'),
         ('flight', 'document_id', 'INTEGER REFERENCES document(id)'),
+        # Transport route enrichment
+        ('transport_route', 'maps_url', 'TEXT'),
+        ('transport_route', 'url', 'TEXT'),
     ]
     for table, column, col_type in migrations:
         try:

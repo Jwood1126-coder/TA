@@ -35,7 +35,7 @@ A Flask + SQLite PWA for planning and managing a Japan trip. Deployed on Railway
 app.py                  # App factory, auth routes, template filters (~190 lines)
 models.py               # 15 SQLAlchemy models (includes Document model)
 extensions.py           # Shared Flask extensions (socketio) — importable without circular deps
-guardrails.py           # Runtime validation: booking status, document-first rule, date overlaps
+guardrails.py           # Runtime validation: booking status, document-first rule, date overlaps, category, transport type
 config.py               # Flask config, env vars, production validation
 wsgi.py                 # Gunicorn entry point (imports create_app)
 start.py                # Railway bootstrap: dir setup, DB backup, seed, launch gunicorn
@@ -46,9 +46,10 @@ data/seed.db            # Canonical seed database (committed, matches confirmed 
 services/               # Domain service layer — canonical mutation pipeline
   __init__.py            # Package docstring
   accommodations.py      # select, eliminate, delete, update_status, add_option, reorder
-  activities.py          # toggle, add, update, eliminate, delete, update_notes, update_day_notes
+  activities.py          # toggle, add, update, eliminate, delete, update_notes, update_day_notes, confirm
   checklists.py          # toggle, update_status, create, delete
-  trip_audit.py          # Pre-export audit: accommodation chain, route chain, narrative staleness
+  transport.py           # add, update, delete — transport route mutations with validation + Socket.IO
+  trip_audit.py          # Pre-export audit: accommodation chain, route chain, narrative staleness, activity/transport completeness
 
 scripts/
   export_seed.py        # Export current DB as new seed.db (strips chat/photos)
@@ -56,7 +57,7 @@ scripts/
 
 tests/
   test_smoke.py         # 29 smoke tests: seed integrity, routes, export quality
-  test_services.py      # 39 service+parity+audit tests: mutations, cascades, validation, trip audit
+  test_services.py      # 59 service+parity+audit tests: mutations, cascades, validation, trip audit, transport
   conftest.py           # Restores DB from seed after test runs
 
 migrations/
@@ -192,6 +193,8 @@ Days get their city from the accommodation covering that date. Transport routes 
 - `validate_booking_status()` — rejects invalid status strings
 - `validate_document_status()` — enforces the iron rule (confirmed requires document)
 - `validate_time_slot()` — rejects invalid time slots
+- `validate_category()` — rejects invalid activity categories, normalizes to lowercase
+- `validate_transport_type()` — rejects invalid transport types, normalizes aliases
 - `validate_non_negative()` — rejects negative prices/costs
 - `check_accom_date_overlap()` — detects overlapping accommodation dates
 
@@ -208,6 +211,8 @@ Pre-export reconciliation that compares canonical structured facts against narra
 - Departure day schedule conflicts
 - Overpacked days (>10 activities)
 - Stale narrative references (activity text mentioning eliminated hotels)
+- Activity completeness: missing categories, missing time_slots, book_ahead without notes
+- Transport day linkage: routes not assigned to a day
 
 **Narrative reference detection**: Extracts brand names from eliminated hotel options and scans active activity titles/descriptions. Uses word-boundary matching and filters common English words to avoid false positives.
 
@@ -223,7 +228,7 @@ Delegates to the trip audit service. Runs on every boot, prints warnings (does n
 
 ## Service Layer (`services/`)
 
-All mutations to accommodations, activities, and checklists flow through the service layer. This ensures UI routes and AI chat tools share identical validation, cascades, and Socket.IO emits.
+All mutations to accommodations, activities, transport, and checklists flow through the service layer. This ensures UI routes and AI chat tools share identical validation, cascades, and Socket.IO emits.
 
 ### Pipeline per operation
 Each service function owns: **input validation → DB write → cascade side effects → Socket.IO emit**
@@ -259,7 +264,7 @@ Each service function owns: **input validation → DB write → cascade side eff
 
 ### AI Chat (blueprints/chat/)
 - 140-line system prompt with trip context, personality, and tool instructions (`prompt.py`)
-- 16 tools for modifying DB records: accommodations, activities, flights, checklists, budget (`tools.py` + `executor.py`)
+- 19 tools for modifying DB records: accommodations, activities, flights, transport, checklists, budget (`tools.py` + `executor.py`)
 - Image processing: extracts booking confirmations, flight receipts via Claude vision
 - SSE streaming for incremental response display (`routes.py`)
 - Dynamic context includes full trip state: all accommodations, activities, flights, transport (`context.py`)

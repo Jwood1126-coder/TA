@@ -16,7 +16,7 @@ from datetime import datetime
 
 from app import create_app
 from models import (db, Activity, Day, AccommodationOption, AccommodationLocation,
-                    ChecklistItem, ChecklistOption, Flight)
+                    ChecklistItem, ChecklistOption, Flight, TransportRoute)
 
 
 @pytest.fixture(scope='module')
@@ -740,3 +740,159 @@ class TestUpdateLocationDates:
         with pytest.raises(ValueError, match='overlap'):
             with patch('services.accommodations.socketio'):
                 update_location_dates(7, date(2026, 4, 15), date(2026, 4, 18))
+
+
+# ==========================================================================
+# Activity category validation
+# ==========================================================================
+
+class TestActivityCategoryValidation:
+
+    def test_add_validates_category(self, ctx):
+        from services.activities import add
+        day = Day.query.first()
+        with pytest.raises(ValueError, match='Invalid category'):
+            with patch('services.activities.socketio'):
+                add(day.id, {'title': 'Test', 'category': 'invalid_cat'})
+
+    def test_add_accepts_valid_category(self, ctx):
+        from services.activities import add
+        day = Day.query.first()
+        with patch('services.activities.socketio'):
+            act = add(day.id, {'title': 'Test Temple', 'category': 'temple'})
+            assert act.category == 'temple'
+            db.session.delete(act)
+            db.session.commit()
+
+    def test_update_normalizes_category(self, ctx):
+        from services.activities import update
+        act = Activity.query.first()
+        orig_cat = act.category
+        with patch('services.activities.socketio'):
+            update(act.id, {'category': 'FOOD'})
+            assert act.category == 'food'
+            # Restore
+            act.category = orig_cat
+            db.session.commit()
+
+    def test_update_emits_activity_updated(self, ctx):
+        from services.activities import update
+        act = Activity.query.first()
+        with patch('services.activities.socketio') as mock_sio:
+            update(act.id, {'notes': 'test note'})
+            assert mock_sio.emit.called
+            event_name = mock_sio.emit.call_args[0][0]
+            assert event_name == 'activity_updated'
+            # Restore
+            act.notes = None
+            db.session.commit()
+
+
+# ==========================================================================
+# Activity eliminate cascade
+# ==========================================================================
+
+class TestActivityEliminateCascade:
+
+    def test_eliminate_clears_confirmed(self, ctx):
+        """Eliminating a confirmed activity should clear is_confirmed."""
+        from services.activities import eliminate, confirm
+        act = Activity.query.filter_by(is_eliminated=False).first()
+        with patch('services.activities.socketio'):
+            # First confirm it
+            act.is_confirmed = True
+            db.session.commit()
+            # Now eliminate — should clear confirmed
+            eliminate(act.id)
+            assert act.is_eliminated is True
+            assert act.is_confirmed is False
+            # Restore
+            act.is_eliminated = False
+            db.session.commit()
+
+
+# ==========================================================================
+# Transport service
+# ==========================================================================
+
+class TestTransportAdd:
+
+    def test_add_validates_required_fields(self, ctx):
+        from services.transport import add
+        with pytest.raises(ValueError, match='route_from and route_to'):
+            with patch('services.transport.socketio'):
+                add({'transport_type': 'Bus'})
+
+    def test_add_validates_transport_type(self, ctx):
+        from services.transport import add
+        with pytest.raises(ValueError, match='transport_type is required'):
+            with patch('services.transport.socketio'):
+                add({'route_from': 'A', 'route_to': 'B'})
+
+    def test_add_creates_route(self, ctx):
+        from services.transport import add, delete
+        day = Day.query.first()
+        with patch('services.transport.socketio'):
+            route = add({
+                'route_from': 'Test Station',
+                'route_to': 'End Station',
+                'transport_type': 'Bus',
+                'day_id': day.id,
+                'duration': '30 min',
+            })
+            assert route.id is not None
+            assert route.route_from == 'Test Station'
+            assert route.transport_type == 'bus'
+            assert route.day_id == day.id
+            # Clean up
+            delete(route.id)
+
+
+class TestTransportUpdate:
+
+    def test_update_changes_fields(self, ctx):
+        from services.transport import update
+        route = TransportRoute.query.first()
+        orig_notes = route.notes
+        with patch('services.transport.socketio'):
+            update(route.id, {'notes': 'Test note'})
+            assert route.notes == 'Test note'
+            # Restore
+            route.notes = orig_notes
+            db.session.commit()
+
+    def test_update_rejects_empty_route_from(self, ctx):
+        from services.transport import update
+        route = TransportRoute.query.first()
+        with pytest.raises(ValueError, match='cannot be empty'):
+            with patch('services.transport.socketio'):
+                update(route.id, {'route_from': ''})
+
+
+class TestTransportDayLinkage:
+
+    def test_seed_routes_have_day_linkage(self, ctx):
+        """All seed routes except Kyoto→Tokyo should have day_id."""
+        routes = TransportRoute.query.all()
+        unlinked = [r for r in routes
+                    if r.day_id is None
+                    and not (r.route_from == 'Kyoto' and r.route_to == 'Tokyo')]
+        assert len(unlinked) == 0, \
+            f"Unlinked routes: {[(r.route_from, r.route_to) for r in unlinked]}"
+
+
+class TestAuditActivityTransport:
+
+    def test_audit_warns_about_missing_categories(self, ctx):
+        from services.trip_audit import audit_trip
+        result = audit_trip()
+        cat_warnings = [w for w in result.warnings if 'missing category' in w]
+        assert len(cat_warnings) > 0  # Seed has 0 categories populated
+
+    def test_audit_warns_about_unlinked_routes(self, ctx):
+        from services.trip_audit import audit_trip
+        result = audit_trip()
+        unlinked = [w for w in result.warnings if 'Unlinked transport' in w]
+        # Only Kyoto→Tokyo should be unlinked
+        assert len(unlinked) == 1
+        assert 'Kyoto → Tokyo' in unlinked[0]

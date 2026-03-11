@@ -436,3 +436,34 @@ def get_budget():
     } for i in items])
 
 
+# --- Transport Route CRUD ---
+
+@itinerary_bp.route('/api/transport', methods=['POST'])
+def add_transport():
+    import services.transport as transport_svc
+    data = request.get_json()
+    try:
+        route = transport_svc.add(data)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True, 'id': route.id})
+
+
+@itinerary_bp.route('/api/transport/<int:route_id>', methods=['PUT'])
+def update_transport(route_id):
+    import services.transport as transport_svc
+    data = request.get_json()
+    try:
+        transport_svc.update(route_id, data)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    return jsonify({'ok': True})
+
+
+@itinerary_bp.route('/api/transport/<int:route_id>', methods=['DELETE'])
+def delete_transport(route_id):
+    import services.transport as transport_svc
+    transport_svc.delete(route_id)
+    return jsonify({'ok': True})
+
+

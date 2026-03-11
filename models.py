@@ -206,6 +206,8 @@ class TransportRoute(db.Model):
     notes = db.Column(db.Text)
     day_id = db.Column(db.Integer, db.ForeignKey('day.id'))
     sort_order = db.Column(db.Integer)
+    maps_url = db.Column(db.String(500))   # Google Maps route/station link
+    url = db.Column(db.String(500))        # Operator website or booking link
 
 
 class BudgetItem(db.Model):

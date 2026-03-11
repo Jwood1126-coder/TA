@@ -9,6 +9,14 @@ Document-first iron rule: status 'confirmed' requires a linked Document.
 
 VALID_TIME_SLOTS = {'morning', 'afternoon', 'evening', 'night'}
 VALID_BOOKING_STATUSES = {'not_booked', 'booked', 'confirmed', 'researching', 'cancelled'}
+VALID_CATEGORIES = {
+    'temple', 'food', 'nightlife', 'shopping', 'nature',
+    'culture', 'transit', 'logistics', 'entertainment',
+}
+VALID_TRANSPORT_TYPES = {
+    'shinkansen', 'jr express', 'limited express', 'local train',
+    'bus', 'ferry', 'subway', 'private railway', 'taxi', 'walk', 'other',
+}
 
 # Statuses that require a document_id to be set
 DOCUMENT_REQUIRED_STATUSES = {'confirmed'}
@@ -45,6 +53,32 @@ def validate_non_negative(value, field_name):
     if v < 0:
         raise ValueError(f"'{field_name}' cannot be negative (got {v})")
     return v
+
+
+def validate_category(category):
+    """Return cleaned category or None. Raises ValueError if invalid."""
+    if not category:
+        return None
+    c = category.strip().lower()
+    if c not in VALID_CATEGORIES:
+        raise ValueError(f"Invalid category '{category}'. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+    return c
+
+
+def validate_transport_type(transport_type):
+    """Return cleaned transport_type. Raises ValueError if invalid."""
+    if not transport_type:
+        raise ValueError("transport_type is required")
+    t = transport_type.strip().lower()
+    # Normalize common variations
+    aliases = {
+        'jr': 'jr express', 'express': 'jr express',
+        'bullet train': 'shinkansen', 'train': 'local train',
+    }
+    t = aliases.get(t, t)
+    if t not in VALID_TRANSPORT_TYPES:
+        raise ValueError(f"Invalid transport_type '{transport_type}'. Must be one of: {', '.join(sorted(VALID_TRANSPORT_TYPES))}")
+    return t
 
 
 def validate_document_status(new_status, document_id, entity_name='item'):

@@ -4,12 +4,13 @@ Chat-specific logic (fuzzy matching by name) lives here.
 All mutations delegate to services/ for validation, cascade, and emit.
 """
 from models import (db, ChecklistItem, Day, Activity, AccommodationOption,
-                    AccommodationLocation, Flight, BudgetItem)
+                    AccommodationLocation, Flight, BudgetItem, TransportRoute)
 from guardrails import (validate_booking_status, validate_non_negative,
                         validate_document_status)
 import services.accommodations as accom_svc
 import services.activities as activity_svc
 import services.checklists as checklist_svc
+import services.transport as transport_svc
 
 
 def execute_tool(tool_name, tool_input):
@@ -246,6 +247,61 @@ def execute_tool(tool_name, tool_input):
                 return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
             activity_svc.update_day_notes(day.id, tool_input['notes'])
             return {"success": True, "message": f"Updated notes for Day {day.day_number}"}
+
+        elif tool_name == "add_transport_route":
+            # Resolve day_number to day_id
+            fields = dict(tool_input)
+            if 'day_number' in fields:
+                day = Day.query.filter_by(day_number=fields.pop('day_number')).first()
+                if day:
+                    fields['day_id'] = day.id
+            try:
+                route = transport_svc.add(fields)
+            except ValueError as e:
+                return {"success": False, "error": str(e)}
+            jr = " (JR Pass ✓)" if route.jr_pass_covered else ""
+            return {"success": True, "message": f"Added route: {route.route_from} → {route.route_to} ({route.transport_type}){jr}"}
+
+        elif tool_name == "update_transport_route":
+            # Fuzzy match by from/to
+            route_from = tool_input['route_from']
+            route_to = tool_input['route_to']
+            route = TransportRoute.query.filter(
+                TransportRoute.route_from.ilike(f"%{route_from}%"),
+                TransportRoute.route_to.ilike(f"%{route_to}%")
+            ).first()
+            if not route:
+                return {"success": False, "error": f"Route '{route_from} → {route_to}' not found"}
+            fields = {}
+            if tool_input.get('new_route_from'):
+                fields['route_from'] = tool_input['new_route_from']
+            if tool_input.get('new_route_to'):
+                fields['route_to'] = tool_input['new_route_to']
+            for f in ('transport_type', 'train_name', 'duration',
+                      'jr_pass_covered', 'cost_if_not_covered', 'notes', 'url'):
+                if tool_input.get(f) is not None:
+                    fields[f] = tool_input[f]
+            if 'day_number' in tool_input:
+                day = Day.query.filter_by(day_number=tool_input['day_number']).first()
+                if day:
+                    fields['day_id'] = day.id
+            try:
+                transport_svc.update(route.id, fields)
+            except ValueError as e:
+                return {"success": False, "error": str(e)}
+            return {"success": True, "message": f"Updated route: {route.route_from} → {route.route_to}"}
+
+        elif tool_name == "delete_transport_route":
+            route_from = tool_input['route_from']
+            route_to = tool_input['route_to']
+            route = TransportRoute.query.filter(
+                TransportRoute.route_from.ilike(f"%{route_from}%"),
+                TransportRoute.route_to.ilike(f"%{route_to}%")
+            ).first()
+            if not route:
+                return {"success": False, "error": f"Route '{route_from} → {route_to}' not found"}
+            desc, day_id = transport_svc.delete(route.id)
+            return {"success": True, "message": f"Deleted route: {desc}"}
 
     except Exception as e:
         return {"success": False, "error": str(e)}

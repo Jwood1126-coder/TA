@@ -84,21 +84,27 @@ TOOLS = [
     },
     {
         "name": "update_activity",
-        "description": "Update an existing activity or add a new one. Supports full activity details.",
+        "description": "Update an existing activity or add a new one. When creating, ALWAYS set category. Include address and url when known.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "title": {"type": "string", "description": "Activity title (for matching existing or creating new)"},
                 "time_slot": {"type": "string", "enum": ["morning", "afternoon", "evening", "night"]},
                 "start_time": {"type": "string"},
                 "cost_per_person": {"type": "number"},
                 "cost_note": {"type": "string", "description": "Cost description e.g. '¥500 entry'"},
                 "address": {"type": "string"},
+                "maps_url": {"type": "string", "description": "Google Maps URL for the venue"},
                 "description": {"type": "string", "description": "Activity description"},
-                "url": {"type": "string", "description": "Website or booking URL"},
+                "url": {"type": "string", "description": "Official website or booking URL"},
                 "notes": {"type": "string"},
+                "getting_there": {"type": "string", "description": "Transit tip from previous activity"},
+                "category": {"type": "string", "enum": ["temple", "food", "nightlife", "shopping", "nature", "culture", "transit", "logistics", "entertainment"]},
+                "book_ahead": {"type": "boolean", "description": "True if advance tickets/reservation needed"},
+                "book_ahead_note": {"type": "string", "description": "Where/how to book in advance"},
                 "is_optional": {"type": "boolean"},
+                "jr_pass_covered": {"type": "boolean"},
                 "create_new": {"type": "boolean", "description": "True to add a new activity, false to update existing"},
             },
             "required": ["day_number", "title"]
@@ -224,10 +230,64 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "notes": {"type": "string", "description": "The notes text (replaces existing)"},
             },
             "required": ["day_number", "notes"]
+        }
+    },
+    {
+        "name": "add_transport_route",
+        "description": "Add a new transport route between cities/stations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "route_from": {"type": "string", "description": "Origin station/city"},
+                "route_to": {"type": "string", "description": "Destination station/city"},
+                "transport_type": {"type": "string", "description": "e.g. 'Shinkansen', 'Bus', 'JR Express', 'Limited Express', 'Local Train', 'Ferry', 'Subway'"},
+                "day_number": {"type": "integer", "description": "Day number this route is used on"},
+                "train_name": {"type": "string", "description": "Specific train service name e.g. 'Hida Limited Express'"},
+                "duration": {"type": "string", "description": "Travel time e.g. '2h 20min'"},
+                "jr_pass_covered": {"type": "boolean", "description": "True if JR Pass covers this route"},
+                "cost_if_not_covered": {"type": "string", "description": "Cost if not covered by JR Pass e.g. '¥3,600'"},
+                "notes": {"type": "string"},
+                "url": {"type": "string", "description": "Operator website or timetable URL"},
+            },
+            "required": ["route_from", "route_to", "transport_type"]
+        }
+    },
+    {
+        "name": "update_transport_route",
+        "description": "Update an existing transport route. Match by from/to station names.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "route_from": {"type": "string", "description": "Origin station to match (partial ok)"},
+                "route_to": {"type": "string", "description": "Destination station to match (partial ok)"},
+                "new_route_from": {"type": "string", "description": "New origin (if changing)"},
+                "new_route_to": {"type": "string", "description": "New destination (if changing)"},
+                "transport_type": {"type": "string"},
+                "day_number": {"type": "integer"},
+                "train_name": {"type": "string"},
+                "duration": {"type": "string"},
+                "jr_pass_covered": {"type": "boolean"},
+                "cost_if_not_covered": {"type": "string"},
+                "notes": {"type": "string"},
+                "url": {"type": "string"},
+            },
+            "required": ["route_from", "route_to"]
+        }
+    },
+    {
+        "name": "delete_transport_route",
+        "description": "Delete a transport route. Match by from/to station names.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "route_from": {"type": "string", "description": "Origin station to match (partial ok)"},
+                "route_to": {"type": "string", "description": "Destination station to match (partial ok)"},
+            },
+            "required": ["route_from", "route_to"]
         }
     }
 ]

@@ -68,6 +68,8 @@ def audit_trip():
     _check_document_integrity(result)
     _check_departure_conflicts(result)
     _check_overpacked_days(result)
+    _check_activity_completeness(result)
+    _check_transport_day_linkage(result)
 
     return result
 
@@ -383,3 +385,52 @@ def _check_overpacked_days(result):
             result.warnings.append(
                 f'Overpacked: Day {d.day_number} ({d.title}) '
                 f'has {count} active activities')
+
+
+# ---------------------------------------------------------------------------
+# Check F: Activity completeness
+# ---------------------------------------------------------------------------
+
+def _check_activity_completeness(result):
+    """Flag activities missing key structural fields."""
+    activities = Activity.query.filter_by(
+        is_eliminated=False, is_substitute=False).all()
+
+    no_timeslot = 0
+    no_category = 0
+    book_ahead_no_note = 0
+
+    for a in activities:
+        # Skip transit/logistics for time_slot check
+        if not a.time_slot and a.category not in ('transit', 'logistics'):
+            no_timeslot += 1
+        if not a.category:
+            no_category += 1
+        if a.book_ahead and not a.book_ahead_note:
+            day = Day.query.get(a.day_id)
+            result.warnings.append(
+                f'Book-ahead without details: Day {day.day_number} '
+                f'"{_truncate(a.title, 40)}" — needs booking info')
+            book_ahead_no_note += 1
+
+    if no_category > 10:
+        result.warnings.append(
+            f'Activity completeness: {no_category} activities missing category')
+    if no_timeslot > 5:
+        result.warnings.append(
+            f'Activity completeness: {no_timeslot} activities missing time_slot')
+
+
+# ---------------------------------------------------------------------------
+# Check G: Transport route day linkage
+# ---------------------------------------------------------------------------
+
+def _check_transport_day_linkage(result):
+    """Flag transport routes not linked to a day."""
+    routes = TransportRoute.query.all()
+    unlinked = [r for r in routes if r.day_id is None]
+    if unlinked:
+        for r in unlinked:
+            result.warnings.append(
+                f'Unlinked transport: {r.route_from} → {r.route_to} '
+                f'has no day assignment')
