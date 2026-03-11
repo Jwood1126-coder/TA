@@ -216,7 +216,10 @@ Pre-export reconciliation that compares canonical structured facts against narra
 **API**: `GET /api/trip/audit` returns the full audit result as JSON.
 
 ### Boot-time Validation (`migrations/validate.py`)
-Delegates to the trip audit service. Runs on every boot, prints warnings (does not block startup). Also auto-fixes eliminated options that still claim booked/confirmed status.
+Delegates to the trip audit service. Runs on every boot, prints warnings (does not block startup). Also includes:
+- **Kyoto overlap fix**: One-time reconciliation of legacy overlapping Kyoto accommodation locations (corrects dates, merges duplicates, normalizes names to "Kyoto (Stay 1)"/"Kyoto (Stay 2)"). No-op when data is already clean.
+- **num_nights auto-sync**: Safety net that syncs stored `num_nights` with date arithmetic.
+- **Eliminated status fix**: Downgrades eliminated options that still claim booked/confirmed to cancelled.
 
 ## Service Layer (`services/`)
 
@@ -265,7 +268,7 @@ Each service function owns: **input validation → DB write → cascade side eff
 
 ### Template Filters (defined in create_app)
 - `maps_link(address)` — Google Maps search URL
-- `translate_link(url)` — Google Translate wrapper for Japanese pages
+- `translate_link(url)` — Google Translate wrapper (ja→en). **All external booking/activity URLs use this filter by default** — there are no separate translate buttons
 - `linkify_stations(text)` — Auto-links station names to Google Maps
 
 ### Accommodation Selection Logic
