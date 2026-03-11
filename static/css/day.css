@@ -745,49 +745,36 @@
     color: var(--pico-color);
 }
 
-.transport-card-details {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-    padding-left: 46px;
-}
-
-.transport-detail-chip {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 6px;
-    background: rgba(0,0,0,0.05);
-    color: var(--pico-muted-color);
-}
-
-.transport-detail-chip.jr {
-    background: var(--jr-green);
-    color: #fff;
-}
-
-.transport-detail-chip.cost {
-    background: rgba(233,30,122,0.1);
-    color: var(--accent);
+.jr-inline {
     font-weight: 700;
-}
-
-.transport-card-note {
-    font-size: 0.8rem;
-    color: var(--pico-muted-color);
-    line-height: 1.4;
-    margin-top: 6px;
-    padding-left: 46px;
+    color: var(--jr-green, #16a34a);
 }
 
 .transport-action-row {
     display: flex;
     gap: 8px;
     margin-top: 8px;
-    padding-left: 46px;
+    padding-left: 30px;
+}
+
+.transport-details {
+    margin-top: 6px;
+    padding-left: 30px;
+}
+
+.transport-details summary {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--pico-muted-color);
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.transport-card-note {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    line-height: 1.5;
+    margin-top: 4px;
 }
 
 .transport-action-btn {

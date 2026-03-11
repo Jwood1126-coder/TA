@@ -374,10 +374,70 @@ def day_view(day_number):
                 return True
         return False
 
-    # Filter activities: hide hotel-specific ones unless hotel is booked
+    # Build transport route names for duplicate detection
+    _transport_route_names = set()
+    for r in transport_routes:
+        _transport_route_names.add(r.transport_type.lower())
+        if r.train_name:
+            _transport_route_names.add(r.train_name.lower())
+    _flight_numbers = set()
+    for f in day_flights:
+        _flight_numbers.add(f.flight_number.lower())
+    _checkin_name_words = set()
+    if checkin_option:
+        for word in checkin_option.name.lower().split():
+            if len(word) > 3 and word not in ('hotel', 'the'):
+                _checkin_name_words.add(word)
+    _checkout_name_words = set()
+    if checkout_option:
+        for word in checkout_option.name.lower().split():
+            if len(word) > 3 and word not in ('hotel', 'the'):
+                _checkout_name_words.add(word)
+
+    # Transport keywords for title matching (only distinctive words)
+    _TRANSPORT_STOP_WORDS = {'the', 'and', 'for', 'from', 'into', 'with',
+                             'line', 'train', 'bus', 'express', 'limited',
+                             'station', 'airport'}
+    _transport_distinct = set()
+    for r in transport_routes:
+        for word in r.transport_type.lower().split():
+            if len(word) > 3 and word not in _TRANSPORT_STOP_WORDS:
+                _transport_distinct.add(word)
+
+    def _is_logistics_duplicate(activity):
+        """Return True if activity duplicates a transport/flight/accom card."""
+        title = activity.title.lower()
+        # Check-in/out duplicates (must start with check-in/out phrase)
+        if title.startswith('check into') or title.startswith('check in at') or title.startswith('check in to'):
+            for kw in _checkin_name_words:
+                if kw in title:
+                    return True
+        if title.startswith('check out of') or title.startswith('check out from'):
+            for kw in _checkout_name_words:
+                if kw in title:
+                    return True
+        # Flight duplicates (exact flight number in title)
+        for fn in _flight_numbers:
+            if fn in title:
+                return True
+        # Transport duplicates — match full route names (any length)
+        for name in _transport_route_names:
+            if name in title:
+                return True
+        # Match distinctive transport keywords (keikyu, shinkansen, etc.) — short titles only
+        if len(title) < 40:
+            for kw in _transport_distinct:
+                if kw in title:
+                    return True
+        return False
+
+    # Filter activities: hide hotel-specific ones unless hotel is booked,
+    # and hide logistics activities that duplicate transport/flight/accom cards
     hidden_ids = set()
     for a in day.activities:
         if _is_hotel_activity(a) and not _hotel_is_booked(a):
+            hidden_ids.add(a.id)
+        elif _is_logistics_duplicate(a):
             hidden_ids.add(a.id)
 
     return render_template('day.html', day=day, prev_day=prev_day,

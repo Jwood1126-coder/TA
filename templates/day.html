@@ -41,7 +41,127 @@
     {% endif %}
 </header>
 
-<!-- Accommodation check-out -->
+{# ===== Activity card macro ===== #}
+{% set slots = ['morning', 'afternoon', 'evening', 'night'] %}
+{% set slot_labels = {'morning': 'Morning', 'afternoon': 'Afternoon', 'evening': 'Evening', 'night': 'Night'} %}
+{% set slot_macros = {'morning': icon_sun, 'afternoon': icon_cloud_sun, 'evening': icon_moon, 'night': icon_stars} %}
+
+{% macro activity_card(activity, compact=false) %}
+<div class="activity-card {% if compact %}compact{% endif %} {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %}"
+     data-id="{{ activity.id }}">
+    <div class="activity-main">
+        <label class="activity-check">
+            <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
+                   onchange="toggleActivity({{ activity.id }})">
+            <span class="checkmark"></span>
+        </label>
+        <div class="activity-content">
+            <div class="activity-title-row">
+                {% if activity.start_time %}
+                <span class="activity-start-time">{{ activity.start_time }}</span>
+                {% endif %}
+                <span class="activity-title">{{ activity.title }}</span>
+                {% if activity.cost_per_person %}
+                <span class="cost-badge">&yen;{{ activity.cost_per_person | int }}</span>
+                {% endif %}
+                {% if activity.jr_pass_covered %}
+                <span class="jr-badge" title="Covered by JR Pass">JR</span>
+                {% endif %}
+                {% if activity.book_ahead %}
+                <span class="book-ahead-badge" title="Book in advance">Book</span>
+                {% endif %}
+                {% if activity.is_optional and compact %}
+                <span class="optional-badge">optional</span>
+                {% endif %}
+            </div>
+            {% if activity.maps_url or activity.address or activity.url %}
+            <div class="activity-action-row">
+                {% if activity.maps_url %}
+                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} Navigate</a>
+                {% elif activity.address %}
+                <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} {{ activity.address }}</a>
+                {% endif %}
+                {% if activity.url %}
+                <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-action-btn secondary">{{ icon_ticket(14) }} Tickets / Info</a>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if activity.cost_note %}
+            <div class="activity-cost">{{ activity.cost_note }}</div>
+            {% endif %}
+            {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
+            <details class="activity-details">
+                <summary>Details</summary>
+                {% if activity.description %}
+                <p>{{ activity.description }}</p>
+                {% endif %}
+                {% if activity.getting_there %}
+                <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
+                {% endif %}
+                {% if activity.book_ahead_note %}
+                <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
+                {% endif %}
+                {% if activity.why %}
+                <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
+                {% endif %}
+            </details>
+            {% endif %}
+            {% if activity.notes %}
+            <div class="activity-user-note">{{ activity.notes }}</div>
+            {% endif %}
+        </div>
+    </div>
+    <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
+            title="Add note" aria-label="Add note to {{ activity.title }}">{{ icon_pencil(16) }}</button>
+</div>
+{% endmacro %}
+
+{# Macro to render a time slot's activities #}
+{% macro render_slot(slot, slot_activities) %}
+{% if slot_activities %}
+<section class="time-slot-section">
+    <h3 class="slot-heading">{{ slot_macros[slot](18) }} {{ slot_labels[slot] }}</h3>
+    {% set major = [] %}
+    {% set minor = [] %}
+    {% for activity in slot_activities %}
+        {% if activity.cost_per_person or activity.jr_pass_covered or activity.book_ahead or activity.start_time %}
+            {% if major.append(activity) %}{% endif %}
+        {% else %}
+            {% if minor.append(activity) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% for activity in major %}
+    {{ activity_card(activity) }}
+    {% endfor %}
+    {% if minor %}
+    {% if major %}
+    <details class="minor-activities">
+        <summary>{{ minor|length }} more activit{{ 'y' if minor|length == 1 else 'ies' }}</summary>
+    {% endif %}
+        {% for activity in minor %}
+        {{ activity_card(activity, compact=true) }}
+        {% endfor %}
+    {% if major %}
+    </details>
+    {% endif %}
+    {% endif %}
+</section>
+{% endif %}
+{% endmacro %}
+
+{# ===== Pre-compute activity lists per slot ===== #}
+{% set morning_raw = day.activities | selectattr('time_slot', 'equalto', 'morning') | rejectattr('is_substitute') | list %}
+{% set morning_acts = [] %}{% for _a in morning_raw %}{% if _a.id not in hidden_activity_ids %}{% if morning_acts.append(_a) %}{% endif %}{% endif %}{% endfor %}
+{% set afternoon_raw = day.activities | selectattr('time_slot', 'equalto', 'afternoon') | rejectattr('is_substitute') | list %}
+{% set afternoon_acts = [] %}{% for _a in afternoon_raw %}{% if _a.id not in hidden_activity_ids %}{% if afternoon_acts.append(_a) %}{% endif %}{% endif %}{% endfor %}
+{% set evening_raw = day.activities | selectattr('time_slot', 'equalto', 'evening') | rejectattr('is_substitute') | list %}
+{% set evening_acts = [] %}{% for _a in evening_raw %}{% if _a.id not in hidden_activity_ids %}{% if evening_acts.append(_a) %}{% endif %}{% endif %}{% endfor %}
+{% set night_raw = day.activities | selectattr('time_slot', 'equalto', 'night') | rejectattr('is_substitute') | list %}
+{% set night_acts = [] %}{% for _a in night_raw %}{% if _a.id not in hidden_activity_ids %}{% if night_acts.append(_a) %}{% endif %}{% endif %}{% endfor %}
+
+{# ===== CHRONOLOGICAL DAY FLOW ===== #}
+
+{# 1. Checkout (leaving the hotel) #}
 {% if day_checkout and checkout_option %}
 <section class="accommodation-day-card checkout {% if checkout_option.document_id %}doc-backed{% else %}doc-planned{% endif %}">
     <div class="accom-day-icon">{{ icon_bellhop(24) }}</div>
@@ -95,10 +215,13 @@
 </section>
 {% endif %}
 
-<!-- Flights on this day -->
+{# 2. Morning activities (before travel) #}
+{{ render_slot('morning', morning_acts) }}
+
+{# 3. Flights #}
 {% if day_flights %}
 <section class="day-flights-section">
-    <h3 class="slot-heading">{{ icon_plane(18) }} Flights Today</h3>
+    <h3 class="slot-heading">{{ icon_plane(18) }} Flights</h3>
     {% for flight in day_flights %}
     <div class="flight-card-tripit compact">
         <div class="flight-card-header">
@@ -127,10 +250,10 @@
 </section>
 {% endif %}
 
-<!-- Transport to this location (travel days) -->
+{# 4. Ground transport #}
 {% if transport_routes %}
 <section class="transport-banner">
-    <h3 class="slot-heading">{{ icon_train(18) }} Getting Here</h3>
+    <h3 class="slot-heading">{{ icon_train(18) }} Ground Transport</h3>
     {% for route in transport_routes %}
     <div class="transport-card-v2">
         <div class="transport-card-header">
@@ -140,39 +263,33 @@
             <div class="transport-card-info">
                 <div class="transport-route-text">{{ route.route_from }} &rarr; {{ route.route_to }}</div>
                 <div class="transport-meta">
-                    {{ route.transport_type }}{% if route.train_name %} &middot; <strong>{{ route.train_name }}</strong>{% endif %}
+                    {{ route.transport_type }}
+                    {% if route.duration %} &middot; {{ route.duration }}{% endif %}
+                    {% if route.jr_pass_covered %} &middot; <span class="jr-inline">JR Pass</span>
+                    {% elif route.cost_if_not_covered %} &middot; <strong>{{ route.cost_if_not_covered }}</strong>{% endif %}
                 </div>
             </div>
         </div>
-        <div class="transport-card-details">
-            {% if route.duration %}
-            <span class="transport-detail-chip">{{ route.duration }}</span>
-            {% endif %}
-            {% if route.jr_pass_covered %}
-            <span class="transport-detail-chip jr">JR Pass</span>
-            {% elif route.cost_if_not_covered %}
-            <span class="transport-detail-chip cost">{{ route.cost_if_not_covered }}</span>
-            {% endif %}
-        </div>
-        {% if route.notes %}
-        <div class="transport-card-note">{{ route.notes }}</div>
-        {% endif %}
-        {% if route.maps_url or route.url %}
         <div class="transport-action-row">
             {% if route.maps_url %}
-            <a href="{{ route.maps_url }}" target="_blank" rel="noopener" class="transport-action-btn">{{ icon_pin(14) }} Open Route</a>
+            <a href="{{ route.maps_url }}" target="_blank" rel="noopener" class="transport-action-btn">{{ icon_pin(14) }} Directions</a>
             {% endif %}
             {% if route.url %}
             <a href="{{ route.url | translate_link }}" target="_blank" rel="noopener" class="transport-action-btn secondary">{{ icon_link(14) }} Website</a>
             {% endif %}
         </div>
+        {% if route.notes %}
+        <details class="transport-details">
+            <summary>Details</summary>
+            <div class="transport-card-note">{{ route.notes | linkify_stations }}</div>
+        </details>
         {% endif %}
     </div>
     {% endfor %}
 </section>
 {% endif %}
 
-<!-- Accommodation check-in -->
+{# 5. Check-in (arriving at hotel) #}
 {% if day_checkin and checkin_option %}
 <section class="accommodation-day-card checkin {% if checkin_option.document_id %}doc-backed{% else %}doc-planned{% endif %}">
     <div class="accom-card-content">
@@ -241,121 +358,10 @@
 </section>
 {% endif %}
 
-<!-- Activities grouped by time slot -->
-{% set slots = ['morning', 'afternoon', 'evening', 'night'] %}
-{% set slot_labels = {'morning': 'Morning', 'afternoon': 'Afternoon', 'evening': 'Evening', 'night': 'Night'} %}
-{% set slot_macros = {'morning': icon_sun, 'afternoon': icon_cloud_sun, 'evening': icon_moon, 'night': icon_stars} %}
-
-{# Reusable activity card macro — avoids duplicating major/minor/unslotted markup #}
-{% macro activity_card(activity, compact=false) %}
-<div class="activity-card {% if compact %}compact{% endif %} {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %}"
-     data-id="{{ activity.id }}">
-    <div class="activity-main">
-        <label class="activity-check">
-            <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
-                   onchange="toggleActivity({{ activity.id }})">
-            <span class="checkmark"></span>
-        </label>
-        <div class="activity-content">
-            <div class="activity-title-row">
-                {% if activity.start_time %}
-                <span class="activity-start-time">{{ activity.start_time }}</span>
-                {% endif %}
-                <span class="activity-title">{{ activity.title }}</span>
-                {% if activity.cost_per_person %}
-                <span class="cost-badge">&yen;{{ activity.cost_per_person | int }}</span>
-                {% endif %}
-                {% if activity.jr_pass_covered %}
-                <span class="jr-badge" title="Covered by JR Pass">JR</span>
-                {% endif %}
-                {% if activity.book_ahead %}
-                <span class="book-ahead-badge" title="Book in advance">Book</span>
-                {% endif %}
-                {% if activity.is_optional and compact %}
-                <span class="optional-badge">optional</span>
-                {% endif %}
-            </div>
-            {# Action links row — Navigate + Tickets as tappable buttons #}
-            {% if activity.maps_url or activity.address or activity.url %}
-            <div class="activity-action-row">
-                {% if activity.maps_url %}
-                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} Navigate</a>
-                {% elif activity.address %}
-                <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} {{ activity.address }}</a>
-                {% endif %}
-                {% if activity.url %}
-                <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-action-btn secondary">{{ icon_ticket(14) }} Tickets / Info</a>
-                {% endif %}
-            </div>
-            {% endif %}
-            {% if activity.cost_note %}
-            <div class="activity-cost">{{ activity.cost_note }}</div>
-            {% endif %}
-            {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
-            <details class="activity-details">
-                <summary>Details</summary>
-                {% if activity.description %}
-                <p>{{ activity.description }}</p>
-                {% endif %}
-                {% if activity.getting_there %}
-                <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
-                {% endif %}
-                {% if activity.book_ahead_note %}
-                <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
-                {% endif %}
-                {% if activity.why %}
-                <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
-                {% endif %}
-            </details>
-            {% endif %}
-            {% if activity.notes %}
-            <div class="activity-user-note">{{ activity.notes }}</div>
-            {% endif %}
-        </div>
-    </div>
-    <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
-            title="Add note" aria-label="Add note to {{ activity.title }}">{{ icon_pencil(16) }}</button>
-</div>
-{% endmacro %}
-
-{% for slot in slots %}
-{% set _raw = day.activities | selectattr('time_slot', 'equalto', slot) | rejectattr('is_substitute') | list %}
-{% set slot_activities = [] %}{% for _a in _raw %}{% if _a.id not in hidden_activity_ids %}{% if slot_activities.append(_a) %}{% endif %}{% endif %}{% endfor %}
-{% if slot_activities %}
-<section class="time-slot-section">
-    <h3 class="slot-heading">{{ slot_macros[slot](18) }} {{ slot_labels[slot] }}</h3>
-
-    {# Major activities: has cost, JR pass, or needs advance booking #}
-    {% set major = [] %}
-    {% set minor = [] %}
-    {% for activity in slot_activities %}
-        {% if activity.cost_per_person or activity.jr_pass_covered or activity.book_ahead or activity.start_time %}
-            {% if major.append(activity) %}{% endif %}
-        {% else %}
-            {% if minor.append(activity) %}{% endif %}
-        {% endif %}
-    {% endfor %}
-
-    {% for activity in major %}
-    {{ activity_card(activity) }}
-    {% endfor %}
-
-    {# Minor activities: collapsed if there are also major ones #}
-    {% if minor %}
-    {% if major %}
-    <details class="minor-activities">
-        <summary>{{ minor|length }} more activit{{ 'y' if minor|length == 1 else 'ies' }}</summary>
-    {% endif %}
-        {% for activity in minor %}
-        {{ activity_card(activity, compact=true) }}
-        {% endfor %}
-    {% if major %}
-    </details>
-    {% endif %}
-    {% endif %}
-</section>
-{% endif %}
-{% endfor %}
+{# 6. Afternoon / Evening / Night activities #}
+{{ render_slot('afternoon', afternoon_acts) }}
+{{ render_slot('evening', evening_acts) }}
+{{ render_slot('night', night_acts) }}
 
 <!-- Activities without a time slot -->
 {% set _unslotted_raw = day.activities | rejectattr('time_slot') | rejectattr('is_substitute') | list %}
