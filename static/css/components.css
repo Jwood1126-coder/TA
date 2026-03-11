@@ -943,6 +943,94 @@
     flex-wrap: wrap;
 }
 
+/* ===== Option select radio dot ===== */
+
+.cl-option-select-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--pico-muted-border-color);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    position: relative;
+}
+
+.cl-option-select-dot:hover {
+    border-color: var(--accent);
+}
+
+.cl-option-select-dot.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    box-shadow: inset 0 0 0 3px #fff;
+}
+
+/* ===== Checklist option action row (replaces cl-option-actions) ===== */
+
+.cl-option-action-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 0.5rem 0 0.25rem;
+}
+
+.cl-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    min-height: 36px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 8px;
+    background: var(--sakura-light);
+    color: var(--accent);
+    border: 1px solid var(--sakura);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.cl-action-btn:hover { background: rgba(233,30,122,0.1); }
+
+.cl-action-btn.secondary {
+    background: transparent;
+    border-color: var(--pico-muted-border-color);
+}
+
+.cl-action-btn.danger {
+    background: transparent;
+    border-color: var(--pico-muted-border-color);
+    color: var(--pico-muted-color);
+    font-weight: 500;
+}
+
+.cl-action-btn.danger:hover {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+}
+
+.cl-action-btn.danger.active {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+}
+
+.cl-action-btn svg { vertical-align: -2px; flex-shrink: 0; }
+
+/* ===== Option address line ===== */
+
+.cl-option-address {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    margin: 0.3rem 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .eliminate-btn {
     padding: 4px 12px;
     border-radius: 6px;

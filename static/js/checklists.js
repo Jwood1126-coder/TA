@@ -70,6 +70,27 @@ async function updateItemStatus(itemId, status) {
     }
 }
 
+// ---------- Tap-to-change status badge ----------
+
+function toggleStatusDropdown(itemId) {
+    const item = document.querySelector(`[data-id="${itemId}"]`);
+    if (!item) return;
+    const panel = document.getElementById(`options-${itemId}`);
+    // Open the panel if not already open, then focus the status select
+    if (panel && panel.style.display === 'none') {
+        panel.style.display = '';
+        const arrow = document.getElementById(`arrow-${itemId}`);
+        if (arrow) arrow.classList.add('open');
+    }
+    const select = panel && panel.querySelector('.status-select-sm');
+    if (select) {
+        select.focus();
+        // Brief visual pulse to draw attention
+        select.style.outline = '2px solid var(--accent)';
+        setTimeout(() => { select.style.outline = ''; }, 1500);
+    }
+}
+
 // ---------- ChecklistOption actions ----------
 
 async function eliminateClOption(optionId) {
@@ -256,7 +277,8 @@ function showAddOption(itemId) {
     form.className = 'add-option-form';
     form.innerHTML = `
         <input type="text" placeholder="Option name" class="new-opt-name">
-        <input type="text" placeholder="URL (optional)" class="new-opt-url">
+        <input type="text" placeholder="Website URL (optional)" class="new-opt-url">
+        <input type="text" placeholder="Google Maps URL (optional)" class="new-opt-maps">
         <input type="text" placeholder="Price note (optional)" class="new-opt-price">
         <div class="add-option-form-btns">
             <button onclick="submitNewOption(${itemId}, this)" class="select-btn-sm">Save</button>
@@ -280,6 +302,7 @@ async function submitNewOption(itemId, btn) {
             body: JSON.stringify({
                 name,
                 url: form.querySelector('.new-opt-url').value.trim() || null,
+                maps_url: form.querySelector('.new-opt-maps').value.trim() || null,
                 price_note: form.querySelector('.new-opt-price').value.trim() || null,
             })
         });

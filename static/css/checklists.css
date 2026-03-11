@@ -112,13 +112,20 @@
 }
 
 .decision-status-badge {
-    font-size: 0.65rem;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 700;
     white-space: nowrap;
     flex-shrink: 0;
+    cursor: pointer;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    transition: opacity 0.15s;
 }
+
+.decision-status-badge:hover { opacity: 0.8; }
 
 .decision-status-badge.pending { background: #f3f4f6; color: #6b7280; }
 

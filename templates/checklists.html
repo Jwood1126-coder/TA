@@ -44,7 +44,8 @@
             <span class="option-count">{{ active_count }}/{{ item.options|length }}</span>
         {% endif %}
 
-        <span class="decision-status-badge {{ item.status }}">
+        <span class="decision-status-badge {{ item.status }}"
+              onclick="event.stopPropagation(); toggleStatusDropdown({{ item.id }})">
             {% if item.status == 'pending' %}Pending
             {% elif item.status == 'researching' %}Researching
             {% elif item.status == 'decided' %}Decided
@@ -95,7 +96,9 @@
         <div class="cl-option-card {% if option.is_eliminated %}eliminated{% endif %} {% if option.is_selected %}selected{% endif %}"
              data-option-id="accom-{{ option.id }}">
             <div class="cl-option-header" onclick="toggleClOptionDetails(this)">
-                <span class="cl-option-rank">#{{ option.rank }}</span>
+                <span class="cl-option-select-dot {% if option.is_selected %}active{% endif %}"
+                      onclick="event.stopPropagation(); selectAccomOption({{ option.id }})"
+                      title="{{ 'Selected' if option.is_selected else 'Click to select' }}"></span>
                 <span class="cl-option-name">{{ option.name }}</span>
                 {% if option.property_type %}
                 <span class="cl-option-type">{{ option.property_type }}</span>
@@ -120,24 +123,31 @@
                 <div class="cl-option-total">Total: ${{ option.total_low|int }}&ndash;${{ option.total_high|int }}</div>
                 {% endif %}
                 {% if option.address %}
-                <a href="{{ option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-                    {{ icon_pin(14) }} {{ option.address }}
-                </a>
+                <p class="cl-option-address">{{ icon_pin(14) }} {{ option.address }}</p>
                 {% endif %}
-                <div class="cl-option-actions">
+                <div class="cl-option-action-row">
                     {% if option.booking_url %}
-                    <a href="{{ option.booking_url | translate_link }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
+                    <a href="{{ option.booking_url | translate_link }}" target="_blank" rel="noopener" class="cl-action-btn">
+                        {{ icon_link(14) }} Book / Details
+                    </a>
                     {% endif %}
                     {% if option.alt_booking_url %}
-                    <a href="{{ option.alt_booking_url | translate_link }}" target="_blank" rel="noopener" class="book-link alt">Alt &rarr;</a>
+                    <a href="{{ option.alt_booking_url | translate_link }}" target="_blank" rel="noopener" class="cl-action-btn secondary">
+                        {{ icon_link(14) }} Alt Booking
+                    </a>
                     {% endif %}
-                    <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
-                            onclick="selectAccomOption({{ option.id }})">
-                        {{ 'Selected' if option.is_selected else 'Select' }}
-                    </button>
-                    <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
+                    {% if option.maps_url %}
+                    <a href="{{ option.maps_url }}" target="_blank" rel="noopener" class="cl-action-btn">
+                        {{ icon_pin(14) }} Navigate
+                    </a>
+                    {% elif option.address %}
+                    <a href="{{ option.address | maps_link }}" target="_blank" rel="noopener" class="cl-action-btn">
+                        {{ icon_pin(14) }} Navigate
+                    </a>
+                    {% endif %}
+                    <button class="cl-action-btn danger {% if option.is_eliminated %}active{% endif %}"
                             onclick="eliminateAccomOption({{ option.id }})">
-                        {{ 'Restore' if option.is_eliminated else 'Remove' }}
+                        {{ 'Restore' if option.is_eliminated else '&#x2715; Remove' }}
                     </button>
                 </div>
                 {# Booking tracker for selected option #}
@@ -168,6 +178,9 @@
         <div class="cl-option-card {% if option.is_eliminated %}eliminated{% endif %} {% if option.is_selected %}selected{% endif %}"
              data-option-id="cl-{{ option.id }}">
             <div class="cl-option-header" onclick="toggleClOptionDetails(this)">
+                <span class="cl-option-select-dot {% if option.is_selected %}active{% endif %}"
+                      onclick="event.stopPropagation(); selectClOption({{ option.id }})"
+                      title="{{ 'Selected' if option.is_selected else 'Click to select' }}"></span>
                 <span class="cl-option-name">{{ option.name }}</span>
                 {% if option.price_note %}
                 <span class="cl-option-price">{{ option.price_note }}</span>
@@ -180,17 +193,20 @@
                 {% if option.why %}
                 <p class="cl-option-why">{{ option.why }}</p>
                 {% endif %}
-                <div class="cl-option-actions">
+                <div class="cl-option-action-row">
                     {% if option.url %}
-                    <a href="{{ option.url | translate_link }}" target="_blank" rel="noopener" class="book-link">Check &rarr;</a>
+                    <a href="{{ option.url | translate_link }}" target="_blank" rel="noopener" class="cl-action-btn">
+                        {{ icon_link(14) }} Book / Details
+                    </a>
                     {% endif %}
-                    <button class="select-btn-sm {% if option.is_selected %}active{% endif %}"
-                            onclick="selectClOption({{ option.id }})">
-                        {{ 'Selected' if option.is_selected else 'Select' }}
-                    </button>
-                    <button class="eliminate-btn {% if option.is_eliminated %}active{% endif %}"
+                    {% if option.maps_url %}
+                    <a href="{{ option.maps_url }}" target="_blank" rel="noopener" class="cl-action-btn">
+                        {{ icon_pin(14) }} Navigate
+                    </a>
+                    {% endif %}
+                    <button class="cl-action-btn danger {% if option.is_eliminated %}active{% endif %}"
                             onclick="eliminateClOption({{ option.id }})">
-                        {{ 'Restore' if option.is_eliminated else 'Remove' }}
+                        {{ 'Restore' if option.is_eliminated else '&#x2715; Remove' }}
                     </button>
                 </div>
                 <textarea class="option-notes" placeholder="Notes..."

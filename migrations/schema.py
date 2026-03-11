@@ -67,6 +67,8 @@ def run_schema_migrations(app):
         # Transport route enrichment
         ('transport_route', 'maps_url', 'TEXT'),
         ('transport_route', 'url', 'TEXT'),
+        # Checklist option location link
+        ('checklist_option', 'maps_url', 'TEXT'),
     ]
     for table, column, col_type in migrations:
         try:

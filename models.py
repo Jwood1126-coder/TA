@@ -252,6 +252,7 @@ class ChecklistOption(db.Model):
     description = db.Column(db.Text)
     why = db.Column(db.Text)
     url = db.Column(db.String(500))
+    maps_url = db.Column(db.String(500))
     price_note = db.Column(db.String(100))
     is_eliminated = db.Column(db.Boolean, default=False)
     is_selected = db.Column(db.Boolean, default=False)
@@ -266,6 +267,7 @@ class ChecklistOption(db.Model):
             'description': self.description,
             'why': self.why,
             'url': self.url,
+            'maps_url': self.maps_url,
             'price_note': self.price_note,
             'is_eliminated': self.is_eliminated,
             'is_selected': self.is_selected,
