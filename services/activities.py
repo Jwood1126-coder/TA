@@ -20,6 +20,24 @@ def toggle(activity_id):
     return activity
 
 
+def set_completed(activity_id, completed):
+    """Set activity completion to an explicit state (not toggle).
+
+    Used by chat tools where the AI specifies the desired end state.
+    """
+    activity = Activity.query.get_or_404(activity_id)
+    activity.is_completed = completed
+    activity.completed_at = datetime.utcnow() if completed else None
+    db.session.commit()
+
+    socketio.emit('activity_toggled', {
+        'id': activity.id,
+        'is_completed': activity.is_completed,
+        'day_id': activity.day_id,
+    })
+    return activity
+
+
 def add(day_id, fields):
     """Add a new activity to a day.
 
@@ -101,6 +119,41 @@ def update_notes(activity_id, notes):
         'id': activity.id,
         'notes': activity.notes,
     })
+    return activity
+
+
+def confirm(activity_id):
+    """Toggle activity confirmation. Un-eliminates if confirming."""
+    activity = Activity.query.get_or_404(activity_id)
+    activity.is_confirmed = not activity.is_confirmed
+    if activity.is_confirmed and activity.is_eliminated:
+        activity.is_eliminated = False
+    db.session.commit()
+    return activity
+
+
+def unflag_bookahead(activity_id):
+    """Clear book-ahead flag and note."""
+    activity = Activity.query.get_or_404(activity_id)
+    activity.book_ahead = False
+    activity.book_ahead_note = None
+    db.session.commit()
+    return activity
+
+
+def update_why(activity_id, why):
+    """Update activity reasoning/comparison notes."""
+    activity = Activity.query.get_or_404(activity_id)
+    activity.why = why
+    db.session.commit()
+    return activity
+
+
+def update_maps_url(activity_id, maps_url):
+    """Update activity Google Maps URL."""
+    activity = Activity.query.get_or_404(activity_id)
+    activity.maps_url = maps_url or None
+    db.session.commit()
     return activity
 
 

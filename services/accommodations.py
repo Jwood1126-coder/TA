@@ -25,6 +25,18 @@ def select(option_id):
     return option
 
 
+def deselect(option_id):
+    """Deselect an option without selecting a replacement."""
+    option = AccommodationOption.query.get_or_404(option_id)
+    option.is_selected = False
+    db.session.commit()
+
+    socketio.emit('accommodation_updated', {
+        'location_id': option.location_id,
+    })
+    return option
+
+
 def eliminate(option_id, eliminate=None):
     """Toggle or set elimination status. Blocks if booked/confirmed."""
     option = AccommodationOption.query.get_or_404(option_id)

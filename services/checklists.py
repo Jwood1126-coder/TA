@@ -27,6 +27,28 @@ def toggle(item_id):
     return item
 
 
+def set_completed(item_id, completed):
+    """Set checklist item to an explicit completion state (not toggle).
+
+    Used by chat tools where the AI specifies the desired end state.
+    Syncs the status field like toggle() does.
+    """
+    item = ChecklistItem.query.get_or_404(item_id)
+    item.is_completed = completed
+    item.completed_at = datetime.utcnow() if completed else None
+    if completed and item.status != 'completed':
+        item.status = 'completed'
+    elif not completed and item.status == 'completed':
+        item.status = 'pending'
+    db.session.commit()
+
+    socketio.emit('checklist_toggled', {
+        'id': item.id,
+        'is_completed': item.is_completed,
+    })
+    return item
+
+
 def update_status(item_id, new_status):
     """Update checklist status. Cascades to linked accommodation."""
     if new_status not in VALID_STATUSES:

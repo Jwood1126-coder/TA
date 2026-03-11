@@ -3,12 +3,10 @@
 Chat-specific logic (fuzzy matching by name) lives here.
 All mutations delegate to services/ for validation, cascade, and emit.
 """
-from datetime import datetime
 from models import (db, ChecklistItem, Day, Activity, AccommodationOption,
                     AccommodationLocation, Flight, BudgetItem)
-from guardrails import (validate_time_slot, validate_booking_status,
-                        validate_non_negative, validate_document_status,
-                        check_accom_date_overlap)
+from guardrails import (validate_booking_status, validate_non_negative,
+                        validate_document_status)
 import services.accommodations as accom_svc
 import services.activities as activity_svc
 import services.checklists as checklist_svc
@@ -92,8 +90,7 @@ def execute_tool(tool_name, tool_input):
             if select:
                 accom_svc.select(option.id)
             else:
-                option.is_selected = False
-                db.session.commit()
+                accom_svc.deselect(option.id)
             loc = AccommodationLocation.query.get(option.location_id)
             action = "Selected" if select else "Deselected"
             return {"success": True, "message": f"{action} '{option.name}' for {loc.location_name}"}
@@ -151,16 +148,7 @@ def execute_tool(tool_name, tool_input):
             ).first()
             if not activity:
                 return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
-            # Set completion directly (chat specifies explicit state, not toggle)
-            activity.is_completed = tool_input['completed']
-            activity.completed_at = datetime.utcnow() if activity.is_completed else None
-            db.session.commit()
-            from extensions import socketio
-            socketio.emit('activity_toggled', {
-                'id': activity.id,
-                'is_completed': activity.is_completed,
-                'day_id': activity.day_id,
-            })
+            activity = activity_svc.set_completed(activity.id, tool_input['completed'])
             status = "completed" if activity.is_completed else "not completed"
             return {"success": True, "message": f"Marked '{activity.title}' as {status}"}
 
@@ -197,19 +185,7 @@ def execute_tool(tool_name, tool_input):
             ).first()
             if not item:
                 return {"success": False, "error": f"Checklist item '{tool_input['title']}' not found"}
-            # Set completion directly and sync status field
-            item.is_completed = tool_input['completed']
-            item.completed_at = datetime.utcnow() if item.is_completed else None
-            if item.is_completed and item.status != 'completed':
-                item.status = 'completed'
-            elif not item.is_completed and item.status == 'completed':
-                item.status = 'pending'
-            db.session.commit()
-            from extensions import socketio
-            socketio.emit('checklist_toggled', {
-                'id': item.id,
-                'is_completed': item.is_completed,
-            })
+            item = checklist_svc.set_completed(item.id, tool_input['completed'])
             status = "completed" if item.is_completed else "not completed"
             return {"success": True, "message": f"Marked '{item.title}' as {status}"}
 

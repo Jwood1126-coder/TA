@@ -408,10 +408,9 @@ def update_activity_notes(activity_id):
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/maps-url', methods=['PUT'])
 def update_activity_maps_url(activity_id):
-    activity = Activity.query.get_or_404(activity_id)
+    import services.activities as activity_svc
     data = request.get_json()
-    activity.maps_url = data.get('maps_url', '') or None
-    db.session.commit()
+    activity_svc.update_maps_url(activity_id, data.get('maps_url', ''))
     return jsonify({'ok': True})
 
 

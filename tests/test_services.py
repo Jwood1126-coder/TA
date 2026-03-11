@@ -3,15 +3,20 @@ Service layer tests — verify shared mutation behavior for UI and chat paths.
 
 Validates that services produce correct side effects: DB writes, cascades,
 and validation. Socket.IO emits are tested via mock.
+
+Includes parity tests that verify UI routes and chat executor produce the
+same DB state by exercising the same service functions.
+
 Run: python -m pytest tests/test_services.py -v
 """
+import json
 import pytest
 from unittest.mock import patch
 from datetime import datetime
 
 from app import create_app
 from models import (db, Activity, Day, AccommodationOption, AccommodationLocation,
-                    ChecklistItem, ChecklistOption)
+                    ChecklistItem, ChecklistOption, Flight)
 
 
 @pytest.fixture(scope='module')
@@ -277,3 +282,242 @@ class TestChecklistDelete:
             item = create({'title': '__test_del__', 'category': 'packing_essential'})
             delete(item.id, enforce_category=False)
         assert ChecklistItem.query.get(item.id) is None
+
+
+# ---- New Service Function Tests ----
+
+class TestActivitySetCompleted:
+    """Test set_completed (explicit state, used by chat)."""
+
+    def test_set_completed_true(self, ctx):
+        from services.activities import set_completed
+        act = Activity.query.filter_by(is_completed=False).first()
+        with patch('services.activities.socketio'):
+            result = set_completed(act.id, True)
+        assert result.is_completed is True
+        assert result.completed_at is not None
+        # Restore
+        with patch('services.activities.socketio'):
+            set_completed(act.id, False)
+
+    def test_set_completed_false(self, ctx):
+        from services.activities import set_completed
+        act = Activity.query.filter_by(is_completed=False).first()
+        # First set to true
+        with patch('services.activities.socketio'):
+            set_completed(act.id, True)
+            result = set_completed(act.id, False)
+        assert result.is_completed is False
+        assert result.completed_at is None
+
+    def test_set_completed_emits_same_event_as_toggle(self, ctx):
+        from services.activities import set_completed, toggle
+        act = Activity.query.filter_by(is_completed=False).first()
+        with patch('services.activities.socketio') as mock_sio:
+            set_completed(act.id, True)
+            event_name = mock_sio.emit.call_args[0][0]
+            event_data = mock_sio.emit.call_args[0][1]
+            assert event_name == 'activity_toggled'
+            assert event_data['id'] == act.id
+            assert event_data['is_completed'] is True
+        # Restore
+        with patch('services.activities.socketio'):
+            set_completed(act.id, False)
+
+
+class TestActivityConfirm:
+    def test_confirm_toggles(self, ctx):
+        from services.activities import confirm
+        act = Activity.query.filter_by(is_confirmed=False).first()
+        result = confirm(act.id)
+        assert result.is_confirmed is True
+        result = confirm(act.id)
+        assert result.is_confirmed is False
+
+    def test_confirm_un_eliminates(self, ctx):
+        from services.activities import confirm, eliminate
+        act = Activity.query.filter_by(is_eliminated=False, is_confirmed=False).first()
+        eliminate(act.id)  # eliminate first
+        assert act.is_eliminated is True
+        result = confirm(act.id)  # confirming should un-eliminate
+        assert result.is_confirmed is True
+        assert result.is_eliminated is False
+        # Restore
+        confirm(act.id)
+
+
+class TestChecklistSetCompleted:
+    """Test set_completed (explicit state, used by chat)."""
+
+    def test_set_completed_syncs_status(self, ctx):
+        from services.checklists import set_completed
+        item = ChecklistItem.query.filter_by(is_completed=False).first()
+        with patch('services.checklists.socketio'):
+            result = set_completed(item.id, True)
+        assert result.is_completed is True
+        assert result.status == 'completed'
+        with patch('services.checklists.socketio'):
+            result = set_completed(item.id, False)
+        assert result.is_completed is False
+        assert result.status == 'pending'
+
+
+class TestAccommodationDeselect:
+    def test_deselect_emits_event(self, ctx):
+        from services.accommodations import deselect, select
+        opt = AccommodationOption.query.filter_by(is_selected=True).first()
+        if not opt:
+            pytest.skip('No selected option')
+        with patch('services.accommodations.socketio') as mock_sio:
+            deselect(opt.id)
+            mock_sio.emit.assert_called_once()
+            assert mock_sio.emit.call_args[0][0] == 'accommodation_updated'
+        assert opt.is_selected is False
+        # Restore
+        with patch('services.accommodations.socketio'):
+            select(opt.id)
+
+
+# ---- Mutation Path Parity Tests ----
+
+class TestParityActivityEliminate:
+    """Verify UI route and chat executor both use the same service for eliminate."""
+
+    def test_ui_and_chat_produce_same_result(self, ctx):
+        """Call eliminate via service (shared path), verify DB state is identical
+        regardless of which entry point triggers it."""
+        from services.activities import eliminate
+        # Pick two non-eliminated activities
+        acts = Activity.query.filter_by(is_eliminated=False).limit(2).all()
+        if len(acts) < 2:
+            pytest.skip('Need 2 non-eliminated activities')
+        a1, a2 = acts[0], acts[1]
+
+        # "UI path" — service call (same as blueprints/activities.py now uses)
+        result_ui = eliminate(a1.id)
+        # "Chat path" — service call (same as executor.py uses)
+        result_chat = eliminate(a2.id)
+
+        # Both should produce same side effects
+        assert result_ui.is_eliminated is True
+        assert result_chat.is_eliminated is True
+
+        # Restore
+        eliminate(a1.id)
+        eliminate(a2.id)
+
+
+class TestParityAccommodationStatus:
+    """Verify UI and chat accommodation status updates cascade identically."""
+
+    def test_both_paths_cascade_to_checklist(self, ctx):
+        """The service's update_status() is the only path for both UI and chat.
+        Verify it produces checklist cascade."""
+        from services.accommodations import update_status
+        cl = ChecklistItem.query.filter(
+            ChecklistItem.accommodation_location_id.isnot(None)
+        ).first()
+        if not cl:
+            pytest.skip('No linked checklist items')
+        opt = AccommodationOption.query.filter_by(
+            location_id=cl.accommodation_location_id, is_selected=True
+        ).first()
+        if not opt:
+            pytest.skip('No selected option')
+
+        orig_status = opt.booking_status
+        orig_cl_status = cl.status
+
+        # This is the SAME function called by both:
+        #   blueprints/accommodations.py:update_status → accom_svc.update_status()
+        #   blueprints/chat/executor.py:update_accommodation → accom_svc.update_status()
+        with patch('services.accommodations.socketio'):
+            update_status(opt.id, {'booking_status': 'booked'})
+
+        db.session.refresh(cl)
+        assert cl.status == 'booked', "Checklist cascade failed"
+
+        # Restore
+        opt.booking_status = orig_status
+        cl.status = orig_cl_status
+        db.session.commit()
+
+    def test_both_paths_reject_confirmed_without_document(self, ctx):
+        """Both UI and chat hit the same validation in update_status()."""
+        from services.accommodations import update_status
+        opt = AccommodationOption.query.filter(
+            AccommodationOption.document_id.is_(None)
+        ).first()
+        if not opt:
+            pytest.skip('All options have documents')
+
+        # UI route calls: accom_svc.update_status(option_id, {'booking_status': 'confirmed'})
+        # Chat executor calls: accom_svc.update_status(option.id, fields)
+        # Both go through the same validation:
+        with pytest.raises(ValueError, match='document'):
+            with patch('services.accommodations.socketio'):
+                update_status(opt.id, {'booking_status': 'confirmed'})
+
+
+class TestParityChecklistToggle:
+    """Verify toggle (UI) and set_completed (chat) produce equivalent results."""
+
+    def test_toggle_and_set_completed_produce_same_state(self, ctx):
+        from services.checklists import toggle, set_completed
+        items = ChecklistItem.query.filter_by(is_completed=False).limit(2).all()
+        if len(items) < 2:
+            pytest.skip('Need 2 uncompleted checklist items')
+        item_ui, item_chat = items[0], items[1]
+
+        # UI path: toggle (flips to completed)
+        with patch('services.checklists.socketio'):
+            result_ui = toggle(item_ui.id)
+        # Chat path: set_completed (sets to completed explicitly)
+        with patch('services.checklists.socketio'):
+            result_chat = set_completed(item_chat.id, True)
+
+        # Both should end in the same state
+        assert result_ui.is_completed is True
+        assert result_chat.is_completed is True
+        assert result_ui.status == 'completed'
+        assert result_chat.status == 'completed'
+        assert result_ui.completed_at is not None
+        assert result_chat.completed_at is not None
+
+        # Restore
+        with patch('services.checklists.socketio'):
+            toggle(item_ui.id)
+            set_completed(item_chat.id, False)
+
+
+class TestParityActivityCompletion:
+    """Verify toggle (UI) and set_completed (chat) produce equivalent results."""
+
+    def test_toggle_and_set_completed_produce_same_state(self, ctx):
+        from services.activities import toggle, set_completed
+        acts = Activity.query.filter_by(is_completed=False).limit(2).all()
+        if len(acts) < 2:
+            pytest.skip('Need 2 uncompleted activities')
+        act_ui, act_chat = acts[0], acts[1]
+
+        # UI path: toggle
+        with patch('services.activities.socketio'):
+            result_ui = toggle(act_ui.id)
+        # Chat path: set_completed
+        with patch('services.activities.socketio'):
+            result_chat = set_completed(act_chat.id, True)
+
+        assert result_ui.is_completed is True
+        assert result_chat.is_completed is True
+        assert result_ui.completed_at is not None
+        assert result_chat.completed_at is not None
+
+        # Both emit the same event name
+        with patch('services.activities.socketio') as m1:
+            toggle(act_ui.id)  # restore
+            event_ui = m1.emit.call_args[0][0]
+        with patch('services.activities.socketio') as m2:
+            set_completed(act_chat.id, False)  # restore
+            event_chat = m2.emit.call_args[0][0]
+
+        assert event_ui == event_chat == 'activity_toggled'
