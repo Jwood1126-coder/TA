@@ -10,6 +10,23 @@
     <p class="touch-hint">Hold &amp; drag to reorder &middot; Swipe left to delete</p>
 </header>
 
+{% if accom_blockers %}
+<div class="accom-integrity-banner blocker">
+    <strong>Accommodation Integrity Error</strong>
+    <ul>
+    {% for b in accom_blockers %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% if accom_warnings %}
+<div class="accom-integrity-banner warning">
+    <strong>Accommodation Warnings</strong>
+    <ul>
+    {% for w in accom_warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <!-- Location tabs -->
 <div class="location-tabs" id="locationTabs">
     {% for loc in locations %}
@@ -31,7 +48,7 @@
     <p class="accom-dates">
         {{ loc.check_in_date.strftime('%b %d') }} &ndash;
         {{ loc.check_out_date.strftime('%b %d') }}
-        ({{ loc.num_nights }} night{{ 's' if loc.num_nights != 1 }})
+        ({{ loc.nights }} night{{ 's' if loc.nights != 1 }})
     </p>
     {% if loc.quick_notes %}
     <p class="accom-notes">{{ loc.quick_notes }}</p>

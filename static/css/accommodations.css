@@ -1,3 +1,26 @@
+/* Accommodation integrity banners */
+.accom-integrity-banner {
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+}
+.accom-integrity-banner strong { display: block; margin-bottom: 4px; }
+.accom-integrity-banner ul { margin: 0 0 0 16px; padding: 0; }
+.accom-integrity-banner li { margin-bottom: 2px; }
+.accom-integrity-banner.blocker {
+    background: #fef2f2;
+    border: 1px solid #dc2626;
+    color: #991b1b;
+}
+.accom-integrity-banner.blocker strong { color: #dc2626; }
+.accom-integrity-banner.warning {
+    background: #fffbeb;
+    border: 1px solid #d97706;
+    color: #92400e;
+}
+.accom-integrity-banner.warning strong { color: #b45309; }
+
 /* Accommodation status in location group */
 
 .loc-group-accom {

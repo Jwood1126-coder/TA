@@ -362,6 +362,43 @@ class TestChecklistSetCompleted:
         assert result.status == 'pending'
 
 
+class TestAccommodationOverlapGuard:
+    """Test cross-location overlap prevention on select()."""
+
+    def test_select_rejects_overlapping_location(self, ctx):
+        """Selecting at a location that overlaps another should raise ValueError."""
+        from services.accommodations import select
+        # Takayama Budget (id=3) has same dates as Takayama (id=2): Apr 9-12
+        # All options at Budget are eliminated. Un-eliminate one and try to select.
+        budget_opt = AccommodationOption.query.filter_by(
+            location_id=3, is_eliminated=True).first()
+        if not budget_opt:
+            pytest.skip('No eliminated option at Takayama Budget')
+        budget_opt.is_eliminated = False
+        db.session.flush()
+
+        with pytest.raises(ValueError, match='overlaps'):
+            with patch('services.accommodations.socketio'):
+                select(budget_opt.id)
+
+        # Restore
+        budget_opt.is_eliminated = True
+        budget_opt.is_selected = False
+        db.session.commit()
+
+    def test_select_allows_non_overlapping(self, ctx):
+        """Selecting at a non-overlapping location should work fine."""
+        from services.accommodations import select, deselect
+        # Re-selecting the already-selected Tokyo option should work
+        tokyo_opt = AccommodationOption.query.filter_by(
+            location_id=1, is_selected=True).first()
+        if not tokyo_opt:
+            pytest.skip('No selected Tokyo option')
+        with patch('services.accommodations.socketio'):
+            result = select(tokyo_opt.id)
+        assert result.is_selected is True
+
+
 class TestAccommodationDeselect:
     def test_deselect_emits_event(self, ctx):
         from services.accommodations import deselect, select
@@ -648,3 +685,58 @@ class TestTripAuditExportRoute:
             assert 'exportable' in data
             assert 'blockers' in data
             assert 'warnings' in data
+
+
+class TestAccommodationNightsProperty:
+    """Test the derived nights property on AccommodationLocation."""
+
+    def test_nights_matches_date_arithmetic(self, ctx):
+        loc = AccommodationLocation.query.first()
+        expected = (loc.check_out_date - loc.check_in_date).days
+        assert loc.nights == expected
+
+    def test_nights_independent_of_stored_num_nights(self, ctx):
+        """Even if num_nights drifts, nights property returns correct value."""
+        loc = AccommodationLocation.query.first()
+        orig = loc.num_nights
+        loc.num_nights = 999  # Simulate drift
+        db.session.flush()
+        assert loc.nights == (loc.check_out_date - loc.check_in_date).days
+        # Restore
+        loc.num_nights = orig
+        db.session.commit()
+
+
+class TestUpdateLocationDates:
+    """Test the update_location_dates service function."""
+
+    def test_updates_dates_and_syncs_num_nights(self, ctx):
+        from services.accommodations import update_location_dates
+        from datetime import date
+        loc = AccommodationLocation.query.get(7)  # Osaka
+        orig_in, orig_out, orig_n = loc.check_in_date, loc.check_out_date, loc.num_nights
+        with patch('services.accommodations.socketio'):
+            update_location_dates(7, date(2026, 4, 16), date(2026, 4, 19))
+        assert loc.check_out_date == date(2026, 4, 19)
+        assert loc.num_nights == 3
+        assert loc.nights == 3
+        # Restore
+        loc.check_in_date = orig_in
+        loc.check_out_date = orig_out
+        loc.num_nights = orig_n
+        db.session.commit()
+
+    def test_rejects_checkout_before_checkin(self, ctx):
+        from services.accommodations import update_location_dates
+        from datetime import date
+        with pytest.raises(ValueError, match='must be after'):
+            with patch('services.accommodations.socketio'):
+                update_location_dates(7, date(2026, 4, 18), date(2026, 4, 16))
+
+    def test_rejects_overlapping_dates(self, ctx):
+        from services.accommodations import update_location_dates
+        from datetime import date
+        # Try to move Osaka (id=7) to overlap with Kyoto Stay 2 (Apr 14-16)
+        with pytest.raises(ValueError, match='overlap'):
+            with patch('services.accommodations.socketio'):
+                update_location_dates(7, date(2026, 4, 15), date(2026, 4, 18))

@@ -12,6 +12,7 @@ accommodations_bp = Blueprint('accommodations', __name__)
 
 @accommodations_bp.route('/accommodations')
 def accommodations_view():
+    from services.trip_audit import audit_trip
     locations = AccommodationLocation.query.order_by(
         AccommodationLocation.check_in_date).all()
     # Build booking status summary per location for tab badges
@@ -24,14 +25,28 @@ def accommodations_view():
             'booked_name': booked[0].name if len(booked) == 1 else None,
             'double_booked': len(booked) > 1,
         }
+    # Run audit to surface accommodation blockers
+    audit = audit_trip()
+    accom_blockers = [b for b in audit.blockers
+                      if any(kw in b.lower() for kw in
+                             ('accommodation', 'overlap', 'stay', 'multiple stays',
+                              'selected options', 'night'))]
+    accom_warnings = [w for w in audit.warnings
+                      if any(kw in w.lower() for kw in
+                             ('night', 'accommodation', 'stay'))]
     return render_template('accommodations.html',
-                           locations=locations, loc_status=loc_status)
+                           locations=locations, loc_status=loc_status,
+                           accom_blockers=accom_blockers,
+                           accom_warnings=accom_warnings)
 
 
 @accommodations_bp.route('/api/accommodations/<int:option_id>/select',
                           methods=['POST'])
 def select_option(option_id):
-    accom_svc.select(option_id)
+    try:
+        accom_svc.select(option_id)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True})
 
 

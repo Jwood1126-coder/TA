@@ -11,6 +11,9 @@ def validate_schedule(app):
     """Post-migration schedule validation. Prints warnings for conflicts.
     Runs on every boot to catch data issues early."""
 
+    # Auto-fix: sync num_nights with date arithmetic (safety net)
+    _autofix_num_nights()
+
     # Auto-fix: eliminated options should not claim confirmed/booked
     _autofix_eliminated_status()
 
@@ -31,6 +34,19 @@ def validate_schedule(app):
         print(f"{'='*60}\n")
     else:
         print("Schedule validation: all checks passed")
+
+
+def _autofix_num_nights():
+    """Safety net: sync stored num_nights with date arithmetic."""
+    for loc in AccommodationLocation.query.all():
+        if loc.check_in_date and loc.check_out_date:
+            expected = (loc.check_out_date - loc.check_in_date).days
+            if loc.num_nights != expected:
+                old = loc.num_nights
+                loc.num_nights = expected
+                db.session.commit()
+                print(f"  AUTO-FIX: '{loc.location_name}' num_nights {old} → {expected} "
+                      f"(from dates {loc.check_in_date} to {loc.check_out_date})")
 
 
 def _autofix_eliminated_status():

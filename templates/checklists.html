@@ -76,7 +76,7 @@
         <p class="accom-dates-inline">
             {{ accom_loc.check_in_date.strftime('%b %d') }} &ndash;
             {{ accom_loc.check_out_date.strftime('%b %d') }}
-            ({{ accom_loc.num_nights }} night{{ 's' if accom_loc.num_nights != 1 else '' }})
+            ({{ accom_loc.nights }} night{{ 's' if accom_loc.nights != 1 else '' }})
         </p>
         {% if accom_loc.quick_notes %}
         <p class="accom-quick-note">{{ accom_loc.quick_notes }}</p>

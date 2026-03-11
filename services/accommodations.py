@@ -11,8 +11,37 @@ from extensions import socketio
 
 
 def select(option_id):
-    """Mark an option as selected, deselecting all siblings."""
+    """Mark an option as selected, deselecting all siblings.
+
+    Rejects selection if another location already covers overlapping nights.
+    """
     option = AccommodationOption.query.get_or_404(option_id)
+    loc = AccommodationLocation.query.get(option.location_id)
+
+    # Cross-location overlap check: reject if another location has a selected
+    # option covering any of the same nights
+    if loc.check_in_date and loc.check_out_date:
+        for other_loc in AccommodationLocation.query.filter(
+                AccommodationLocation.id != loc.id).all():
+            if not other_loc.check_in_date or not other_loc.check_out_date:
+                continue
+            # Skip all-eliminated locations (not part of canonical chain)
+            if all(o.is_eliminated for o in other_loc.options):
+                continue
+            other_sel = next((o for o in other_loc.options if o.is_selected), None)
+            if not other_sel:
+                continue
+            # Check night overlap (same-day checkout/checkin is allowed)
+            if (loc.check_in_date < other_loc.check_out_date and
+                    loc.check_out_date > other_loc.check_in_date and
+                    loc.check_in_date != other_loc.check_out_date and
+                    loc.check_out_date != other_loc.check_in_date):
+                raise ValueError(
+                    f"Cannot select — {loc.location_name} ({loc.check_in_date} to "
+                    f"{loc.check_out_date}) overlaps with {other_loc.location_name} "
+                    f"({other_loc.check_in_date} to {other_loc.check_out_date}). "
+                    f"Deselect or eliminate the conflicting stay first.")
+
     AccommodationOption.query.filter_by(
         location_id=option.location_id).update({'is_selected': False})
     option.is_selected = True
@@ -153,8 +182,8 @@ def add_option(location_id, fields):
         property_type=fields.get('property_type', ''),
         price_low=price_low,
         price_high=price_high,
-        total_low=price_low * loc.num_nights if price_low else None,
-        total_high=(price_high or price_low) * loc.num_nights if price_low else None,
+        total_low=price_low * loc.nights if price_low else None,
+        total_high=(price_high or price_low) * loc.nights if price_low else None,
         booking_url=fields.get('booking_url') or None,
         alt_booking_url=fields.get('alt_booking_url') or None,
         maps_url=fields.get('maps_url') or None,
@@ -202,6 +231,63 @@ def reorder_batch(location_id, order):
     socketio.emit('accommodation_updated', {'location_id': int(location_id)})
 
 
+def update_location_dates(location_id, check_in, check_out):
+    """Update an AccommodationLocation's dates with full validation.
+
+    Enforces:
+    - check_out > check_in
+    - no overlap with other canonical locations
+    - num_nights auto-synced from date arithmetic
+    - totals recalculated for selected option
+    """
+    from datetime import date as date_type
+    loc = AccommodationLocation.query.get_or_404(location_id)
+
+    # Parse dates if strings
+    if isinstance(check_in, str):
+        check_in = date_type.fromisoformat(check_in)
+    if isinstance(check_out, str):
+        check_out = date_type.fromisoformat(check_out)
+
+    if check_out <= check_in:
+        raise ValueError(f"check_out ({check_out}) must be after check_in ({check_in})")
+
+    # Cross-location overlap check (same logic as select())
+    selected = next((o for o in loc.options if o.is_selected), None)
+    if selected:
+        for other_loc in AccommodationLocation.query.filter(
+                AccommodationLocation.id != loc.id).all():
+            if not other_loc.check_in_date or not other_loc.check_out_date:
+                continue
+            if all(o.is_eliminated for o in other_loc.options):
+                continue
+            other_sel = next((o for o in other_loc.options if o.is_selected), None)
+            if not other_sel:
+                continue
+            if (check_in < other_loc.check_out_date and
+                    check_out > other_loc.check_in_date and
+                    check_in != other_loc.check_out_date and
+                    check_out != other_loc.check_in_date):
+                raise ValueError(
+                    f"Date change would create overlap: {loc.location_name} "
+                    f"({check_in} to {check_out}) overlaps with "
+                    f"{other_loc.location_name} ({other_loc.check_in_date} to "
+                    f"{other_loc.check_out_date})")
+
+    loc.check_in_date = check_in
+    loc.check_out_date = check_out
+    loc.num_nights = (check_out - check_in).days
+
+    # Recalculate totals for selected option
+    if selected:
+        _recalc_totals(selected)
+
+    db.session.commit()
+
+    socketio.emit('accommodation_updated', {'location_id': loc.id})
+    return loc
+
+
 # -- Internal helpers --
 
 def _rerank(location_id):
@@ -217,8 +303,8 @@ def _recalc_totals(option):
     if option.price_low and option.location_id:
         loc = AccommodationLocation.query.get(option.location_id)
         if loc:
-            option.total_low = option.price_low * loc.num_nights
-            option.total_high = (option.price_high or option.price_low) * loc.num_nights
+            option.total_low = option.price_low * loc.nights
+            option.total_high = (option.price_high or option.price_low) * loc.nights
 
 
 def _sync_checklist_status(option):

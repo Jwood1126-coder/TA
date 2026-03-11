@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template
-from models import (db, Day, Trip, Location, Activity, Flight,
+from models import (Day, Trip, Flight,
                     AccommodationLocation, AccommodationOption, TransportRoute)
 from datetime import date, timedelta
 
@@ -46,23 +46,52 @@ def _get_type_icon(title):
     return 'explore'
 
 
+def _build_canonical_chain():
+    """Build the canonical accommodation chain: one stay per night, no overlaps.
+
+    Returns list of (AccommodationLocation, AccommodationOption|None) tuples.
+    Sorted by check-in date. If two locations claim the same night, the earlier
+    check-in wins and the overlapping location is excluded entirely.
+    """
+    locs = AccommodationLocation.query.order_by(
+        AccommodationLocation.check_in_date).all()
+    covered_nights = set()
+    chain = []
+    for loc in locs:
+        if not loc.check_in_date or not loc.check_out_date:
+            continue
+        # Skip all-eliminated locations
+        if all(o.is_eliminated for o in loc.options):
+            continue
+        selected = next((o for o in loc.options if o.is_selected), None)
+        if not selected:
+            continue
+        # Check if any of this location's nights are already covered
+        nights = set()
+        d = loc.check_in_date
+        while d < loc.check_out_date:
+            nights.add(d)
+            d += timedelta(days=1)
+        if nights & covered_nights:
+            # Overlapping — skip this location (audit will flag it)
+            continue
+        covered_nights |= nights
+        chain.append((loc, selected))
+    return chain
+
+
 @calendar_bp.route('/calendar')
 def calendar_view():
     trip = Trip.query.first()
     days = Day.query.order_by(Day.day_number).all()
 
-    # Pre-load accommodations with selected options
-    accom_locs = AccommodationLocation.query.all()
-    accom_options = AccommodationOption.query.filter_by(is_selected=True).all()
-    options_by_loc = {o.location_id: o for o in accom_options}
+    # Build canonical accommodation chain: one stay per night, no overlaps.
+    # Locations are sorted by check-in date; first-come wins for any night.
+    canonical_locs = _build_canonical_chain()
 
-    # Build date → accommodation mapping
-    # Sort by check-in so earlier locations are processed first
+    # Build date → accommodation mapping from canonical chain only
     accom_by_date = {}
-    for loc in sorted(accom_locs, key=lambda a: a.check_in_date or date.min):
-        if not loc.check_in_date or not loc.check_out_date:
-            continue
-        opt = options_by_loc.get(loc.id)
+    for loc, opt in canonical_locs:
         name = opt.name if opt else None
         status = opt.booking_status if opt else 'not_booked'
         d = loc.check_in_date
@@ -155,32 +184,27 @@ def calendar_view():
             'is_buffer': day.is_buffer_day,
         })
 
-    # --- Accommodation spans for month grid ---
+    # --- Accommodation spans for month grid (canonical chain only) ---
     accom_spans = []
-    for loc in AccommodationLocation.query.order_by(
-            AccommodationLocation.sort_order).all():
-        if not loc.check_in_date or not loc.check_out_date:
+    for loc, selected in canonical_locs:
+        if not selected:
             continue
-        selected = AccommodationOption.query.filter_by(
-            location_id=loc.id, is_selected=True).first()
-        if selected:
-            # Extract city name from location_name (e.g. "Tokyo 3 nights" → "Tokyo")
-            city = loc.location_name.split()[0] if loc.location_name else ''
-            colors = CITY_COLORS.get(city, {'bg': '#888', 'glow': 'rgba(136,136,136,0.3)'})
-            accom_spans.append({
-                'name': selected.name,
-                'location_name': loc.location_name,
-                'city': city,
-                'check_in': loc.check_in_date.isoformat(),
-                'check_out': loc.check_out_date.isoformat(),
-                'check_in_day': loc.check_in_date.day,
-                'check_out_day': loc.check_out_date.day,
-                'num_nights': loc.num_nights,
-                'status': selected.booking_status,
-                'location_id': loc.id,
-                'color_bg': colors['bg'],
-                'color_glow': colors['glow'],
-            })
+        city = loc.location_name.split()[0] if loc.location_name else ''
+        colors = CITY_COLORS.get(city, {'bg': '#888', 'glow': 'rgba(136,136,136,0.3)'})
+        accom_spans.append({
+            'name': selected.name,
+            'location_name': loc.location_name,
+            'city': city,
+            'check_in': loc.check_in_date.isoformat(),
+            'check_out': loc.check_out_date.isoformat(),
+            'check_in_day': loc.check_in_date.day,
+            'check_out_day': loc.check_out_date.day,
+            'num_nights': (loc.check_out_date - loc.check_in_date).days,
+            'status': selected.booking_status,
+            'location_id': loc.id,
+            'color_bg': colors['bg'],
+            'color_glow': colors['glow'],
+        })
 
     # --- Week view data ---
     week_data = {}
@@ -247,6 +271,15 @@ def calendar_view():
         if today_day:
             today_day_num = today_day.day_number
 
+    # Surface accommodation blockers so the canonical-chain filter
+    # doesn't silently mask overlap problems
+    from services.trip_audit import audit_trip
+    audit = audit_trip()
+    accom_blockers = [b for b in audit.blockers
+                      if any(kw in b.lower() for kw in
+                             ('accommodation', 'overlap', 'stay', 'multiple stays',
+                              'selected options', 'night'))]
+
     return render_template('calendar.html',
                            trip=trip,
                            calendar_days=calendar_days,
@@ -254,4 +287,5 @@ def calendar_view():
                            trip_started=trip_started,
                            month_data=month_data,
                            accom_spans=accom_spans,
-                           week_data=week_data)
+                           week_data=week_data,
+                           accom_blockers=accom_blockers)

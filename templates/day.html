@@ -172,7 +172,7 @@
     <div class="accom-day-icon">{{ icon_hotel(24) }}</div>
     <div class="accom-day-info">
         <div class="accom-day-label">Check in &middot; {{ day_checkin.location_name }}</div>
-        <div class="accom-dates-sm">{{ day_checkin.num_nights }} night{{ 's' if day_checkin.num_nights != 1 }}</div>
+        <div class="accom-dates-sm">{{ day_checkin.nights }} night{{ 's' if day_checkin.nights != 1 }}</div>
         <div class="accom-pending-options">
             {% for opt in checkin_options_pending %}
             <div class="accom-pending-option">
@@ -194,7 +194,7 @@
     <div class="accom-day-icon">{{ icon_hotel(24) }}</div>
     <div class="accom-day-info">
         <div class="accom-day-label">Check in &middot; {{ day_checkin.location_name }}</div>
-        <div class="accom-dates-sm">{{ day_checkin.num_nights }} night{{ 's' if day_checkin.num_nights != 1 }}</div>
+        <div class="accom-dates-sm">{{ day_checkin.nights }} night{{ 's' if day_checkin.nights != 1 }}</div>
         <a href="{{ url_for('accommodations.accommodations_view') }}" class="choose-link">View in Stays &rarr;</a>
     </div>
 </section>

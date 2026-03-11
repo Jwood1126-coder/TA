@@ -254,7 +254,7 @@
 {% for a in accommodations %}
 <tr>
     <td class="loc-name">{{ a.location.location_name }}</td>
-    <td>{{ a.location.check_in_date.strftime('%b %d') }} &ndash; {{ a.location.check_out_date.strftime('%b %d') }} ({{ a.location.num_nights }}N)</td>
+    <td>{{ a.location.check_in_date.strftime('%b %d') }} &ndash; {{ a.location.check_out_date.strftime('%b %d') }} ({{ a.location.nights }}N)</td>
     {% if a.selected %}
     <td class="hotel-name">{{ a.selected.name }}</td>
     <td>

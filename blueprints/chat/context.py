@@ -78,7 +78,7 @@ def build_context():
             selected = next((o for o in opts if o.is_selected), None)
             active = [o for o in opts if not o.is_eliminated]
             parts.append(f"  {loc.location_name} ({loc.check_in_date.strftime('%b %d')}-"
-                         f"{loc.check_out_date.strftime('%b %d')}, {loc.num_nights} nights):")
+                         f"{loc.check_out_date.strftime('%b %d')}, {loc.nights} nights):")
             if selected:
                 conf = f" [Conf: {selected.confirmation_number}]" if selected.confirmation_number else ""
                 price = f" ${selected.price_low:.0f}-{selected.price_high:.0f}/nt" if selected.price_low else ""

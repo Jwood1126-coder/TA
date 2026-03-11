@@ -91,6 +91,18 @@
     color: #fbbf24;
     border-left-color: #f59e0b;
 }
+[data-theme="dark"] .accom-integrity-banner.blocker {
+    background: #450a0a;
+    color: #fca5a5;
+    border-color: #991b1b;
+}
+[data-theme="dark"] .accom-integrity-banner.blocker strong { color: #f87171; }
+[data-theme="dark"] .accom-integrity-banner.warning {
+    background: #451a03;
+    color: #fde68a;
+    border-color: #92400e;
+}
+[data-theme="dark"] .accom-integrity-banner.warning strong { color: #fbbf24; }
 
 [data-theme="dark"] .booking-confirmed-banner {
     background: #052e16;

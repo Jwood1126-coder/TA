@@ -157,7 +157,7 @@
         <div class="doc-card-meta">
             {{ loc.location_name }} &middot;
             {{ loc.check_in_date.strftime('%b %d') }} &ndash; {{ loc.check_out_date.strftime('%b %d') }}
-            ({{ loc.num_nights }} night{{ 's' if loc.num_nights != 1 }})
+            ({{ loc.nights }} night{{ 's' if loc.nights != 1 }})
         </div>
         {% if opt.check_in_info or opt.check_out_info %}
         <div class="doc-card-meta">

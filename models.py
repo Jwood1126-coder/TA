@@ -93,6 +93,13 @@ class AccommodationLocation(db.Model):
     options = db.relationship('AccommodationOption', backref='accom_location',
                               lazy=True, order_by='AccommodationOption.rank')
 
+    @property
+    def nights(self):
+        """Derived night count from dates. Always use this for display/logic."""
+        if self.check_in_date and self.check_out_date:
+            return (self.check_out_date - self.check_in_date).days
+        return self.num_nights
+
 
 class AccommodationOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
