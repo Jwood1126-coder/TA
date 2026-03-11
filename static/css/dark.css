@@ -38,6 +38,24 @@
 
 [data-theme="dark"] .transport-card { background: linear-gradient(135deg, var(--sakura-light), transparent); border-color: #4a2030; }
 
+[data-theme="dark"] .transport-card-v2 { background: linear-gradient(135deg, var(--sakura-light), transparent); border-color: #4a2030; }
+
+[data-theme="dark"] .transport-detail-chip { background: rgba(255,255,255,0.08); }
+
+[data-theme="dark"] .transport-detail-chip.cost { background: rgba(244,114,168,0.15); }
+
+[data-theme="dark"] .transport-action-btn.secondary { border-color: #4a2030; }
+
+[data-theme="dark"] .accom-action-row { border-top-color: rgba(255,255,255,0.08); }
+
+[data-theme="dark"] .accom-action-btn.secondary { border-color: #4a2030; }
+
+[data-theme="dark"] .activity-action-btn { background: var(--sakura-light); border-color: #4a2030; }
+
+[data-theme="dark"] .activity-action-btn:hover { background: rgba(244,114,168,0.15); }
+
+[data-theme="dark"] .activity-action-btn.secondary { background: transparent; border-color: #333; }
+
 [data-theme="dark"] .buffer-badge { background: #78350f; color: #fcd34d; }
 
 [data-theme="dark"] .badge.breakfast { background: #78350f; color: #fcd34d; }

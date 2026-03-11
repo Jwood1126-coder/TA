@@ -708,3 +708,208 @@
 .cdv-full-link:hover {
     background: rgba(212,39,106,0.1);
 }
+
+/* ===== Transport Card V2 — Operational transit module ===== */
+
+.transport-card-v2 {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--sakura-light), transparent);
+    border: 1px solid var(--sakura);
+}
+
+.transport-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.transport-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.transport-card-info .transport-route-text {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.transport-card-info .transport-meta {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    margin-top: 2px;
+}
+
+.transport-card-info .transport-meta strong {
+    color: var(--pico-color);
+}
+
+.transport-card-details {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    padding-left: 46px;
+}
+
+.transport-detail-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.05);
+    color: var(--pico-muted-color);
+}
+
+.transport-detail-chip.jr {
+    background: var(--jr-green);
+    color: #fff;
+}
+
+.transport-detail-chip.cost {
+    background: rgba(233,30,122,0.1);
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.transport-card-note {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    line-height: 1.4;
+    margin-top: 6px;
+    padding-left: 46px;
+}
+
+.transport-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    padding-left: 46px;
+}
+
+.transport-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    min-height: 36px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    transition: opacity 0.15s;
+}
+
+.transport-action-btn:hover { opacity: 0.85; }
+
+.transport-action-btn.secondary {
+    background: transparent;
+    border: 1px solid var(--pico-muted-border-color);
+    color: var(--accent);
+}
+
+.transport-action-btn.secondary:hover { background: var(--sakura-light); }
+
+.transport-action-btn svg { vertical-align: -2px; }
+
+/* ===== Accommodation Card — Action row ===== */
+
+.accom-card-content {
+    width: 100%;
+}
+
+.accom-card-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.accom-day-detail {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    margin-top: 2px;
+}
+
+.conf-value {
+    font-family: monospace;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.accom-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+.accom-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    min-height: 36px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    transition: opacity 0.15s;
+}
+
+.accom-action-btn:hover { opacity: 0.85; }
+
+.accom-action-btn.secondary {
+    background: transparent;
+    border: 1px solid var(--pico-muted-border-color);
+    color: var(--accent);
+}
+
+.accom-action-btn.secondary:hover { background: var(--sakura-light); }
+
+.accom-action-btn svg { vertical-align: -2px; }
+
+/* ===== Activity Action Row — tappable buttons ===== */
+
+.activity-action-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.activity-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    min-height: 32px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-decoration: none;
+    border-radius: 6px;
+    background: var(--sakura-light);
+    color: var(--accent);
+    border: 1px solid var(--sakura);
+    transition: background 0.15s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.activity-action-btn:hover { background: rgba(233,30,122,0.1); }
+
+.activity-action-btn.secondary {
+    background: transparent;
+    border-color: var(--pico-muted-border-color);
+}
+
+.activity-action-btn svg { vertical-align: -2px; flex-shrink: 0; }

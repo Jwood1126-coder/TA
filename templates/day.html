@@ -3,7 +3,7 @@
 {% block page_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/day.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
 
 {% block content %}
-{% from "icons.html" import icon_book, icon_bellhop, icon_hotel, icon_pin, icon_train, icon_shinkansen, icon_bus, icon_ferry, icon_plane, icon_sun, icon_cloud_sun, icon_moon, icon_stars, icon_ticket, icon_pencil, icon_pushpin, icon_refresh, icon_notes, icon_lightbulb %}
+{% from "icons.html" import icon_book, icon_bellhop, icon_hotel, icon_pin, icon_train, icon_shinkansen, icon_bus, icon_ferry, icon_plane, icon_sun, icon_cloud_sun, icon_moon, icon_stars, icon_ticket, icon_pencil, icon_pushpin, icon_refresh, icon_notes, icon_lightbulb, icon_map, icon_link %}
 <a href="{{ url_for('itinerary.index') }}" class="back-to-overview">&larr; All Days</a>
 <header class="day-header">
     <div class="day-nav-row">
@@ -48,11 +48,21 @@
     <div class="accom-day-info">
         <div class="accom-day-label">Check out &middot; {{ day_checkout.location_name }}{% if checkout_option.document_id %} <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>{% endif %}</div>
         <div class="accom-day-name">{{ checkout_option.name }}</div>
+        {% if checkout_option.check_out_info %}
+        <div class="accom-day-detail">{{ checkout_option.check_out_info }}</div>
+        {% endif %}
         {% if checkout_option.address %}
         <a href="{{ checkout_option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
             {{ icon_pin(14) }}{{ checkout_option.address }}
         </a>
         {% endif %}
+        <div class="accom-action-row">
+            {% if checkout_option.maps_url %}
+            <a href="{{ checkout_option.maps_url }}" target="_blank" rel="noopener" class="accom-action-btn">{{ icon_pin(14) }} Navigate</a>
+            {% elif checkout_option.address %}
+            <a href="{{ checkout_option.address | maps_link }}" target="_blank" rel="noopener" class="accom-action-btn">{{ icon_pin(14) }} Navigate</a>
+            {% endif %}
+        </div>
     </div>
 </section>
 {% elif day_checkout and checkout_options_pending %}
@@ -90,23 +100,41 @@
 <section class="transport-banner">
     <h3 class="slot-heading">{{ icon_train(18) }} Getting Here</h3>
     {% for route in transport_routes %}
-    <div class="transport-card">
-        <div class="transport-icon">
-            {% if 'Shinkansen' in route.transport_type %}{{ icon_shinkansen(20) }}{% elif 'Bus' in route.transport_type %}{{ icon_bus(20) }}{% elif 'Ferry' in route.transport_type %}{{ icon_ferry(20) }}{% else %}{{ icon_train(20) }}{% endif %}
-        </div>
-        <div class="transport-details">
-            <div class="transport-route-text">{{ route.route_from }} &rarr; {{ route.route_to }}</div>
-            <div class="transport-meta">
-                {{ route.transport_type }}{% if route.train_name %} &middot; {{ route.train_name }}{% endif %}{% if route.duration %} &middot; {{ route.duration }}{% endif %}
+    <div class="transport-card-v2">
+        <div class="transport-card-header">
+            <div class="transport-icon">
+                {% if 'Shinkansen' in route.transport_type %}{{ icon_shinkansen(20) }}{% elif 'Bus' in route.transport_type %}{{ icon_bus(20) }}{% elif 'Ferry' in route.transport_type %}{{ icon_ferry(20) }}{% else %}{{ icon_train(20) }}{% endif %}
+            </div>
+            <div class="transport-card-info">
+                <div class="transport-route-text">{{ route.route_from }} &rarr; {{ route.route_to }}</div>
+                <div class="transport-meta">
+                    {{ route.transport_type }}{% if route.train_name %} &middot; <strong>{{ route.train_name }}</strong>{% endif %}
+                </div>
             </div>
         </div>
-        <div class="transport-badges">
+        <div class="transport-card-details">
+            {% if route.duration %}
+            <span class="transport-detail-chip">{{ route.duration }}</span>
+            {% endif %}
             {% if route.jr_pass_covered %}
-            <span class="jr-badge">JR</span>
+            <span class="transport-detail-chip jr">JR Pass</span>
             {% elif route.cost_if_not_covered %}
-            <span class="transport-cost">{{ route.cost_if_not_covered }}</span>
+            <span class="transport-detail-chip cost">{{ route.cost_if_not_covered }}</span>
             {% endif %}
         </div>
+        {% if route.notes %}
+        <div class="transport-card-note">{{ route.notes }}</div>
+        {% endif %}
+        {% if route.maps_url or route.url %}
+        <div class="transport-action-row">
+            {% if route.maps_url %}
+            <a href="{{ route.maps_url }}" target="_blank" rel="noopener" class="transport-action-btn">{{ icon_pin(14) }} Open Route</a>
+            {% endif %}
+            {% if route.url %}
+            <a href="{{ route.url | translate_link }}" target="_blank" rel="noopener" class="transport-action-btn secondary">{{ icon_link(14) }} Website</a>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
     {% endfor %}
 </section>
@@ -147,23 +175,38 @@
 <!-- Accommodation check-in -->
 {% if day_checkin and checkin_option %}
 <section class="accommodation-day-card checkin {% if checkin_option.document_id %}doc-backed{% else %}doc-planned{% endif %}">
-    <div class="accom-day-icon">{{ icon_hotel(24) }}</div>
-    <div class="accom-day-info">
-        <div class="accom-day-label">Check in{% if checkin_option.document_id %} <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>{% endif %}</div>
-        <div class="accom-day-name">{{ checkin_option.name }}</div>
-        {% if checkin_option.confirmation_number %}
-        <div class="accom-day-conf">Conf: {{ checkin_option.confirmation_number }}</div>
-        {% endif %}
-        {% if checkin_option.address %}
-        <a href="{{ checkin_option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-            {{ icon_pin(14) }}{{ checkin_option.address }}
-        </a>
-        {% endif %}
-    </div>
-    <div class="accom-day-status">
-        <span class="booking-badge {{ checkin_option.booking_status }}">
-            {{ checkin_option.booking_status | replace('_', ' ') | title }}
-        </span>
+    <div class="accom-card-content">
+        <div class="accom-card-top">
+            <div class="accom-day-icon">{{ icon_hotel(24) }}</div>
+            <div class="accom-day-info">
+                <div class="accom-day-label">Check in{% if checkin_option.document_id %} <span class="doc-backed-icon" title="Document on file">&#x1F4C4;</span>{% endif %}</div>
+                <div class="accom-day-name">{{ checkin_option.name }}</div>
+                {% if checkin_option.confirmation_number %}
+                <div class="accom-day-conf"><span class="conf-label">Conf:</span> <span class="conf-value">{{ checkin_option.confirmation_number }}</span></div>
+                {% endif %}
+                {% if checkin_option.check_in_info %}
+                <div class="accom-day-detail">{{ checkin_option.check_in_info }}</div>
+                {% endif %}
+                {% if checkin_option.address %}
+                <a href="{{ checkin_option.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
+                    {{ icon_pin(14) }}{{ checkin_option.address }}
+                </a>
+                {% endif %}
+            </div>
+            <div class="accom-day-status">
+                <span class="booking-badge {{ checkin_option.booking_status }}">
+                    {{ checkin_option.booking_status | replace('_', ' ') | title }}
+                </span>
+            </div>
+        </div>
+        <div class="accom-action-row">
+            {% if checkin_option.maps_url %}
+            <a href="{{ checkin_option.maps_url }}" target="_blank" rel="noopener" class="accom-action-btn">{{ icon_pin(14) }} Navigate</a>
+            {% elif checkin_option.address %}
+            <a href="{{ checkin_option.address | maps_link }}" target="_blank" rel="noopener" class="accom-action-btn">{{ icon_pin(14) }} Navigate</a>
+            {% endif %}
+            <a href="{{ url_for('accommodations.accommodations_view') }}" class="accom-action-btn secondary">{{ icon_hotel(14) }} View Booking</a>
+        </div>
     </div>
 </section>
 {% elif day_checkin and checkin_options_pending %}
@@ -203,6 +246,78 @@
 {% set slot_labels = {'morning': 'Morning', 'afternoon': 'Afternoon', 'evening': 'Evening', 'night': 'Night'} %}
 {% set slot_macros = {'morning': icon_sun, 'afternoon': icon_cloud_sun, 'evening': icon_moon, 'night': icon_stars} %}
 
+{# Reusable activity card macro — avoids duplicating major/minor/unslotted markup #}
+{% macro activity_card(activity, compact=false) %}
+<div class="activity-card {% if compact %}compact{% endif %} {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %}"
+     data-id="{{ activity.id }}">
+    <div class="activity-main">
+        <label class="activity-check">
+            <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
+                   onchange="toggleActivity({{ activity.id }})">
+            <span class="checkmark"></span>
+        </label>
+        <div class="activity-content">
+            <div class="activity-title-row">
+                {% if activity.start_time %}
+                <span class="activity-start-time">{{ activity.start_time }}</span>
+                {% endif %}
+                <span class="activity-title">{{ activity.title }}</span>
+                {% if activity.cost_per_person %}
+                <span class="cost-badge">&yen;{{ activity.cost_per_person | int }}</span>
+                {% endif %}
+                {% if activity.jr_pass_covered %}
+                <span class="jr-badge" title="Covered by JR Pass">JR</span>
+                {% endif %}
+                {% if activity.book_ahead %}
+                <span class="book-ahead-badge" title="Book in advance">Book</span>
+                {% endif %}
+                {% if activity.is_optional and compact %}
+                <span class="optional-badge">optional</span>
+                {% endif %}
+            </div>
+            {# Action links row — Navigate + Tickets as tappable buttons #}
+            {% if activity.maps_url or activity.address or activity.url %}
+            <div class="activity-action-row">
+                {% if activity.maps_url %}
+                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} Navigate</a>
+                {% elif activity.address %}
+                <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} {{ activity.address }}</a>
+                {% endif %}
+                {% if activity.url %}
+                <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-action-btn secondary">{{ icon_ticket(14) }} Tickets / Info</a>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if activity.cost_note %}
+            <div class="activity-cost">{{ activity.cost_note }}</div>
+            {% endif %}
+            {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
+            <details class="activity-details">
+                <summary>Details</summary>
+                {% if activity.description %}
+                <p>{{ activity.description }}</p>
+                {% endif %}
+                {% if activity.getting_there %}
+                <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
+                {% endif %}
+                {% if activity.book_ahead_note %}
+                <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
+                {% endif %}
+                {% if activity.why %}
+                <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
+                {% endif %}
+            </details>
+            {% endif %}
+            {% if activity.notes %}
+            <div class="activity-user-note">{{ activity.notes }}</div>
+            {% endif %}
+        </div>
+    </div>
+    <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
+            title="Add note" aria-label="Add note to {{ activity.title }}">{{ icon_pencil(16) }}</button>
+</div>
+{% endmacro %}
+
 {% for slot in slots %}
 {% set _raw = day.activities | selectattr('time_slot', 'equalto', slot) | rejectattr('is_substitute') | list %}
 {% set slot_activities = [] %}{% for _a in _raw %}{% if _a.id not in hidden_activity_ids %}{% if slot_activities.append(_a) %}{% endif %}{% endif %}{% endfor %}
@@ -222,75 +337,7 @@
     {% endfor %}
 
     {% for activity in major %}
-    <div class="activity-card {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %}"
-         data-id="{{ activity.id }}">
-        <div class="activity-main">
-            <label class="activity-check">
-                <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
-                       onchange="toggleActivity({{ activity.id }})">
-                <span class="checkmark"></span>
-            </label>
-            <div class="activity-content">
-                <div class="activity-title-row">
-                    {% if activity.start_time %}
-                    <span class="activity-start-time">{{ activity.start_time }}</span>
-                    {% endif %}
-                    <span class="activity-title">{{ activity.title }}</span>
-                    {% if activity.cost_per_person %}
-                    <span class="cost-badge">&yen;{{ activity.cost_per_person | int }}</span>
-                    {% endif %}
-                    {% if activity.jr_pass_covered %}
-                    <span class="jr-badge" title="Covered by JR Pass">JR</span>
-                    {% endif %}
-                    {% if activity.book_ahead %}
-                    <span class="book-ahead-badge" title="Book in advance">Book</span>
-                    {% endif %}
-                </div>
-                {% if activity.maps_url %}
-                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
-                    {{ icon_pin(14) }} Navigate
-                </a>
-                {% elif activity.address %}
-                <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-                    {{ icon_pin(14) }}{{ activity.address }}
-                </a>
-                {% endif %}
-                {% if activity.url %}
-                <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-url-link">
-                    {{ icon_ticket(14) }} Tickets / Info
-                </a>
-                {% endif %}
-                {% if activity.cost_note %}
-                <div class="activity-cost">{{ activity.cost_note }}</div>
-                {% endif %}
-                {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
-                <details class="activity-details">
-                    <summary>Details</summary>
-                    {% if activity.description %}
-                    <p>{{ activity.description }}</p>
-                    {% endif %}
-                    {% if activity.getting_there %}
-                    <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
-                    {% endif %}
-                    {% if activity.book_ahead_note %}
-                    <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
-                    {% endif %}
-                    {% if activity.why %}
-                    <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
-                    {% endif %}
-                </details>
-                {% endif %}
-                {% if activity.notes %}
-                <div class="activity-user-note">{{ activity.notes }}</div>
-                {% endif %}
-                <input type="url" class="maps-url-input" placeholder="Paste Google Maps link"
-                       value="{{ activity.maps_url or '' }}"
-                       onchange="saveActivityMapsUrl({{ activity.id }}, this.value)">
-            </div>
-        </div>
-        <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
-                title="Add note" aria-label="Add note to {{ activity.title }}">{{ icon_pencil(16) }}</button>
-    </div>
+    {{ activity_card(activity) }}
     {% endfor %}
 
     {# Minor activities: collapsed if there are also major ones #}
@@ -300,63 +347,7 @@
         <summary>{{ minor|length }} more activit{{ 'y' if minor|length == 1 else 'ies' }}</summary>
     {% endif %}
         {% for activity in minor %}
-        <div class="activity-card compact {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %}"
-             data-id="{{ activity.id }}">
-            <div class="activity-main">
-                <label class="activity-check">
-                    <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
-                           onchange="toggleActivity({{ activity.id }})">
-                    <span class="checkmark"></span>
-                </label>
-                <div class="activity-content">
-                    <div class="activity-title-row">
-                        {% if activity.start_time %}
-                        <span class="activity-start-time">{{ activity.start_time }}</span>
-                        {% endif %}
-                        <span class="activity-title">{{ activity.title }}</span>
-                        {% if activity.is_optional %}
-                        <span class="optional-badge">optional</span>
-                        {% endif %}
-                    </div>
-                    {% if activity.maps_url %}
-                    <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
-                        {{ icon_pin(14) }} Navigate
-                    </a>
-                    {% elif activity.address %}
-                    <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-                        {{ icon_pin(14) }}{{ activity.address }}
-                    </a>
-                    {% endif %}
-                    {% if activity.url %}
-                    <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-url-link">
-                        {{ icon_ticket(14) }} Tickets / Info
-                    </a>
-                    {% endif %}
-                    {% if activity.description or activity.getting_there or activity.book_ahead_note or activity.why %}
-                    <details class="activity-details">
-                        <summary>Details</summary>
-                        {% if activity.description %}
-                        <p>{{ activity.description }}</p>
-                        {% endif %}
-                        {% if activity.getting_there %}
-                        <div class="activity-transit-tip">&#x1F686; {{ activity.getting_there | linkify_stations }}</div>
-                        {% endif %}
-                        {% if activity.book_ahead_note %}
-                        <div class="activity-book-tip">&#x1F3AB; {{ activity.book_ahead_note }}</div>
-                        {% endif %}
-                        {% if activity.why %}
-                        <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
-                        {% endif %}
-                    </details>
-                    {% endif %}
-                    {% if activity.notes %}
-                    <div class="activity-user-note">{{ activity.notes }}</div>
-                    {% endif %}
-                </div>
-            </div>
-            <button class="note-btn" onclick="openNoteEditor({{ activity.id }}, this)"
-                    title="Add note">{{ icon_pencil(16) }}</button>
-        </div>
+        {{ activity_card(activity, compact=true) }}
         {% endfor %}
     {% if major %}
     </details>
@@ -373,34 +364,7 @@
 <section class="time-slot-section">
     <h3 class="slot-heading">{{ icon_pushpin(18) }} Activities</h3>
     {% for activity in unslotted %}
-    <div class="activity-card {% if activity.is_completed %}completed{% endif %}"
-         data-id="{{ activity.id }}">
-        <div class="activity-main">
-            <label class="activity-check">
-                <input type="checkbox" {% if activity.is_completed %}checked{% endif %}
-                       onchange="toggleActivity({{ activity.id }})">
-                <span class="checkmark"></span>
-            </label>
-            <div class="activity-content">
-                <span class="activity-title">{{ activity.title }}</span>
-                {% if activity.maps_url %}
-                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
-                    {{ icon_pin(14) }} Navigate
-                </a>
-                {% elif activity.address %}
-                <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-                    {{ icon_pin(14) }}{{ activity.address }}
-                </a>
-                {% endif %}
-                {% if activity.description %}
-                <details class="activity-details">
-                    <summary>Details</summary>
-                    <p>{{ activity.description }}</p>
-                </details>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+    {{ activity_card(activity) }}
     {% endfor %}
 </section>
 {% endif %}
@@ -428,19 +392,17 @@
             {% if activity.why %}
             <div class="activity-why-tip">{{ icon_lightbulb(14) }} {{ activity.why }}</div>
             {% endif %}
-            {% if activity.maps_url %}
-            <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="maps-navigate-btn">
-                {{ icon_pin(14) }} Navigate
-            </a>
-            {% elif activity.address %}
-            <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="maps-link">
-                {{ icon_pin(14) }}{{ activity.address }}
-            </a>
-            {% endif %}
-            {% if activity.url %}
-            <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-url-link">
-                {{ icon_ticket(14) }} Tickets / Info
-            </a>
+            {% if activity.maps_url or activity.address or activity.url %}
+            <div class="activity-action-row">
+                {% if activity.maps_url %}
+                <a href="{{ activity.maps_url }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} Navigate</a>
+                {% elif activity.address %}
+                <a href="{{ activity.address | maps_link }}" target="_blank" rel="noopener" class="activity-action-btn">{{ icon_pin(14) }} {{ activity.address }}</a>
+                {% endif %}
+                {% if activity.url %}
+                <a href="{{ activity.url | translate_link }}" target="_blank" rel="noopener" class="activity-action-btn secondary">{{ icon_ticket(14) }} Tickets / Info</a>
+                {% endif %}
+            </div>
             {% endif %}
         </div>
     </div>
