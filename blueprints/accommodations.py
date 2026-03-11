@@ -4,9 +4,8 @@ import uuid
 import requests
 from bs4 import BeautifulSoup
 from flask import Blueprint, render_template, jsonify, request, current_app
-from models import db, AccommodationLocation, AccommodationOption, ChecklistItem
-from guardrails import (validate_booking_status, validate_non_negative,
-                        validate_document_status, check_accom_date_overlap)
+from models import db, AccommodationLocation, AccommodationOption
+import services.accommodations as accom_svc
 
 accommodations_bp = Blueprint('accommodations', __name__)
 
@@ -32,80 +31,32 @@ def accommodations_view():
 @accommodations_bp.route('/api/accommodations/<int:option_id>/select',
                           methods=['POST'])
 def select_option(option_id):
-    option = AccommodationOption.query.get_or_404(option_id)
-    # Deselect all others in this location
-    AccommodationOption.query.filter_by(
-        location_id=option.location_id).update({'is_selected': False})
-    option.is_selected = True
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {
-        'location_id': option.location_id,
-        'selected_id': option.id,
-    })
-
+    accom_svc.select(option_id)
     return jsonify({'ok': True})
 
 
 @accommodations_bp.route('/api/accommodations/<int:option_id>/eliminate',
                           methods=['POST'])
 def eliminate_option(option_id):
-    option = AccommodationOption.query.get_or_404(option_id)
-    # Prevent eliminating a booked/confirmed accommodation
-    if not option.is_eliminated and option.booking_status in ('booked', 'confirmed'):
-        return jsonify({'ok': False, 'error': f"Cannot eliminate — {option.name} is {option.booking_status}. "
-                        f"Change booking status first."}), 400
-    option.is_eliminated = not option.is_eliminated
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {
-        'location_id': option.location_id,
-        'option_id': option.id,
-        'is_eliminated': option.is_eliminated,
-    })
+    try:
+        option = accom_svc.eliminate(option_id)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True, 'is_eliminated': option.is_eliminated})
 
 
 @accommodations_bp.route('/api/accommodations/<int:option_id>/delete',
                           methods=['DELETE'])
 def delete_option(option_id):
-    option = AccommodationOption.query.get_or_404(option_id)
-    loc_id = option.location_id
-    db.session.delete(option)
-    # Re-rank remaining options
-    remaining = AccommodationOption.query.filter_by(
-        location_id=loc_id).order_by(AccommodationOption.rank).all()
-    for i, opt in enumerate(remaining, 1):
-        opt.rank = i
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {'location_id': loc_id})
+    accom_svc.delete(option_id)
     return jsonify({'ok': True})
 
 
 @accommodations_bp.route('/api/accommodations/<int:option_id>/reorder',
                           methods=['PUT'])
 def reorder_option(option_id):
-    option = AccommodationOption.query.get_or_404(option_id)
     data = request.get_json()
-    direction = data.get('direction')  # 'up' or 'down'
-    siblings = AccommodationOption.query.filter_by(
-        location_id=option.location_id
-    ).order_by(AccommodationOption.rank).all()
-    idx = next((i for i, o in enumerate(siblings) if o.id == option.id), None)
-    if idx is None:
-        return jsonify({'ok': False}), 400
-    if direction == 'up' and idx > 0:
-        siblings[idx].rank, siblings[idx-1].rank = siblings[idx-1].rank, siblings[idx].rank
-    elif direction == 'down' and idx < len(siblings) - 1:
-        siblings[idx].rank, siblings[idx+1].rank = siblings[idx+1].rank, siblings[idx].rank
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {'location_id': option.location_id})
+    accom_svc.reorder(option_id, data.get('direction'))
     return jsonify({'ok': True})
 
 
@@ -113,46 +64,20 @@ def reorder_option(option_id):
 def reorder_batch():
     data = request.get_json()
     location_id = data.get('location_id')
-    order = data.get('order', [])  # list of option IDs as strings
+    order = data.get('order', [])
     if not location_id or not order:
         return jsonify({'ok': False}), 400
-    for rank, oid in enumerate(order, 1):
-        opt = AccommodationOption.query.get(int(oid))
-        if opt and opt.location_id == int(location_id):
-            opt.rank = rank
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {'location_id': int(location_id)})
+    accom_svc.reorder_batch(location_id, order)
     return jsonify({'ok': True})
 
 
 @accommodations_bp.route('/api/accommodations/<int:location_id>/add', methods=['POST'])
 def add_option(location_id):
-    loc = AccommodationLocation.query.get_or_404(location_id)
     data = request.get_json()
-    name = (data.get('name') or '').strip()
-    if not name:
-        return jsonify({'ok': False, 'error': 'Name is required'}), 400
-
-    max_rank = db.session.query(db.func.max(AccommodationOption.rank)).filter_by(
-        location_id=location_id).scalar() or 0
-
-    option = AccommodationOption(
-        location_id=location_id,
-        rank=max_rank + 1,
-        name=name,
-        property_type=data.get('property_type', ''),
-        price_low=float(data['price_low']) if data.get('price_low') else None,
-        price_high=float(data['price_high']) if data.get('price_high') else None,
-        booking_url=data.get('booking_url') or None,
-        maps_url=data.get('maps_url') or None,
-    )
-    db.session.add(option)
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {'location_id': location_id})
+    try:
+        option, loc, overlap = accom_svc.add_option(location_id, data)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True, 'id': option.id})
 
 
@@ -170,7 +95,6 @@ def fetch_url_info():
     parsed = urlparse(url)
     if parsed.scheme not in ('http', 'https'):
         return jsonify({'ok': False, 'error': 'URL must use http or https'}), 400
-    # Block SSRF to localhost and private/internal IP ranges
     hostname = parsed.hostname or ''
     try:
         resolved = socket.gethostbyname(hostname)
@@ -180,7 +104,6 @@ def fetch_url_info():
     except (socket.gaierror, ValueError):
         return jsonify({'ok': False, 'error': 'Could not resolve hostname'}), 400
 
-    # Fetch the page
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -192,14 +115,10 @@ def fetch_url_info():
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Could not fetch URL: {str(e)}'}), 400
 
-    # Extract useful text from page
     soup = BeautifulSoup(resp.text, 'html.parser')
-
-    # Remove scripts, styles, etc.
     for tag in soup(['script', 'style', 'noscript', 'iframe', 'svg']):
         tag.decompose()
 
-    # Grab OpenGraph and meta tags
     meta_info = {}
     for meta in soup.find_all('meta'):
         prop = meta.get('property', '') or meta.get('name', '')
@@ -207,7 +126,6 @@ def fetch_url_info():
         if prop and content:
             meta_info[prop] = content[:500]
 
-    # Grab JSON-LD structured data
     json_ld = []
     for script in soup.find_all('script', type='application/ld+json'):
         try:
@@ -215,11 +133,9 @@ def fetch_url_info():
         except Exception:
             pass
 
-    # Get page title and trimmed body text
     title = soup.title.string.strip() if soup.title and soup.title.string else ''
     body_text = soup.get_text(separator=' ', strip=True)[:4000]
 
-    # Build context for Claude
     page_context = f"Page title: {title}\n\n"
     if meta_info:
         page_context += "Meta tags:\n"
@@ -233,10 +149,8 @@ def fetch_url_info():
         page_context += "\n"
     page_context += f"Page text (trimmed):\n{body_text}"
 
-    # Ask Claude to extract property info
     api_key = current_app.config.get('ANTHROPIC_API_KEY')
     if not api_key:
-        # Fallback: just use title from meta/page
         return jsonify({
             'ok': True,
             'data': {
@@ -266,16 +180,14 @@ def fetch_url_info():
             }],
         )
         result_text = msg.content[0].text.strip()
-        # Extract JSON from response (handle markdown code blocks)
         if '```' in result_text:
             result_text = result_text.split('```')[1]
             if result_text.startswith('json'):
                 result_text = result_text[4:]
             result_text = result_text.strip()
-        parsed = json.loads(result_text)
-        return jsonify({'ok': True, 'data': parsed})
-    except Exception as e:
-        # Fallback to basic meta extraction
+        parsed_result = json.loads(result_text)
+        return jsonify({'ok': True, 'data': parsed_result})
+    except Exception:
         return jsonify({
             'ok': True,
             'data': {
@@ -290,60 +202,11 @@ def fetch_url_info():
 @accommodations_bp.route('/api/accommodations/<int:option_id>/status',
                           methods=['PUT'])
 def update_status(option_id):
-    option = AccommodationOption.query.get_or_404(option_id)
     data = request.get_json()
-    new_status = data.get('booking_status')
-    if new_status is not None:
-        try:
-            new_status = validate_booking_status(new_status)
-            validate_document_status(new_status, option.document_id,
-                                     f"accommodation '{option.name}'")
-        except ValueError as e:
-            return jsonify({'ok': False, 'error': str(e)}), 400
-        option.booking_status = new_status
-    option.confirmation_number = data.get('confirmation_number',
-                                          option.confirmation_number)
-    option.user_notes = data.get('user_notes', option.user_notes)
-    if 'booking_url' in data:
-        option.booking_url = data['booking_url'] or None
-    if 'address' in data:
-        option.address = data['address'] or None
-    if 'maps_url' in data:
-        option.maps_url = data['maps_url'] or None
-    if 'check_in_info' in data:
-        option.check_in_info = data['check_in_info'] or None
-    if 'check_out_info' in data:
-        option.check_out_info = data['check_out_info'] or None
-    if 'price_low' in data:
-        try:
-            option.price_low = validate_non_negative(data['price_low'], 'price_low')
-        except ValueError as e:
-            return jsonify({'ok': False, 'error': str(e)}), 400
-    if 'price_high' in data:
-        try:
-            option.price_high = validate_non_negative(data['price_high'], 'price_high')
-        except ValueError as e:
-            return jsonify({'ok': False, 'error': str(e)}), 400
-    # Recalculate totals when price changes
-    if ('price_low' in data or 'price_high' in data) and option.location_id:
-        loc = AccommodationLocation.query.get(option.location_id)
-        if loc and option.price_low:
-            option.total_low = option.price_low * loc.num_nights
-            option.total_high = (option.price_high or option.price_low) * loc.num_nights
-
-    # Sync booking status to linked checklist item
-    if new_status is not None:
-        _sync_checklist_status(option)
-
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('accommodation_updated', {
-        'location_id': option.location_id,
-        'option_id': option.id,
-        'booking_status': option.booking_status,
-    })
-
+    try:
+        accom_svc.update_status(option_id, data)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True})
 
 
@@ -365,7 +228,6 @@ def upload_booking_image(option_id):
     os.makedirs(os.path.join(upload_dir, 'originals'), exist_ok=True)
     file.save(os.path.join(upload_dir, 'originals', filename))
 
-    # Remove old image if exists
     if option.booking_image:
         old_path = os.path.join(upload_dir, 'originals', option.booking_image)
         if os.path.exists(old_path):
@@ -388,28 +250,3 @@ def delete_booking_image(option_id):
         option.booking_image = None
         db.session.commit()
     return jsonify({'ok': True})
-
-
-def _sync_checklist_status(option):
-    """Keep the linked ChecklistItem status in sync with accommodation booking."""
-    cl_item = ChecklistItem.query.filter_by(
-        accommodation_location_id=option.location_id).first()
-    if not cl_item:
-        return
-    status_map = {
-        'booked': 'booked',
-        'confirmed': 'booked',
-        'not_booked': 'pending',
-        'researching': 'researching',
-        'cancelled': 'pending',
-    }
-    new_cl_status = status_map.get(option.booking_status)
-    if new_cl_status and cl_item.status != new_cl_status:
-        cl_item.status = new_cl_status
-        if new_cl_status == 'booked':
-            cl_item.is_completed = True
-            from datetime import datetime
-            cl_item.completed_at = datetime.utcnow()
-        elif cl_item.is_completed:
-            cl_item.is_completed = False
-            cl_item.completed_at = None

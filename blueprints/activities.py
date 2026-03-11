@@ -148,7 +148,7 @@ def add_activity():
     db.session.add(activity)
     db.session.commit()
 
-    from app import socketio
+    from extensions import socketio
     socketio.emit('activity_added', {'day_id': day.id})
 
     return jsonify({'ok': True, 'id': activity.id})

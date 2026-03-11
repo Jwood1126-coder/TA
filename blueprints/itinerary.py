@@ -393,36 +393,16 @@ def day_view(day_number):
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/toggle', methods=['POST'])
 def toggle_activity(activity_id):
-    activity = Activity.query.get_or_404(activity_id)
-    activity.is_completed = not activity.is_completed
-    activity.completed_at = datetime.utcnow() if activity.is_completed else None
-    db.session.commit()
-
-    # Broadcast via socketio
-    from app import socketio
-    socketio.emit('activity_toggled', {
-        'id': activity.id,
-        'is_completed': activity.is_completed,
-        'day_id': activity.day_id,
-    })
-
+    import services.activities as activity_svc
+    activity = activity_svc.toggle(activity_id)
     return jsonify({'ok': True, 'is_completed': activity.is_completed})
 
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/notes', methods=['PUT'])
 def update_activity_notes(activity_id):
-    activity = Activity.query.get_or_404(activity_id)
+    import services.activities as activity_svc
     data = request.get_json()
-    activity.notes = data.get('notes', '')
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('notes_updated', {
-        'type': 'activity',
-        'id': activity.id,
-        'notes': activity.notes,
-    })
-
+    activity_svc.update_notes(activity_id, data.get('notes', ''))
     return jsonify({'ok': True})
 
 
@@ -437,18 +417,9 @@ def update_activity_maps_url(activity_id):
 
 @itinerary_bp.route('/api/days/<int:day_id>/notes', methods=['PUT'])
 def update_day_notes(day_id):
-    day = Day.query.get_or_404(day_id)
+    import services.activities as activity_svc
     data = request.get_json()
-    day.notes = data.get('notes', '')
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('notes_updated', {
-        'type': 'day',
-        'id': day.id,
-        'notes': day.notes,
-    })
-
+    activity_svc.update_day_notes(day_id, data.get('notes', ''))
     return jsonify({'ok': True})
 
 

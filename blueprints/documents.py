@@ -232,7 +232,7 @@ def update_flight_confirmation(flight_id):
                                           flight.confirmation_number)
     db.session.commit()
 
-    from app import socketio
+    from extensions import socketio
     socketio.emit('document_updated', {'type': 'flight', 'id': flight.id})
 
     return jsonify({'ok': True})
@@ -296,7 +296,7 @@ def link_document(doc_id):
         option.document_id = doc.id
         doc.doc_type = 'accommodation_booking'
         db.session.commit()
-        from app import socketio
+        from extensions import socketio
         socketio.emit('document_updated', {'type': 'accommodation', 'id': option.id})
         return jsonify({'ok': True, 'message': f"Linked document to {option.name}"})
 
@@ -305,7 +305,7 @@ def link_document(doc_id):
         flight.document_id = doc.id
         doc.doc_type = 'flight_receipt'
         db.session.commit()
-        from app import socketio
+        from extensions import socketio
         socketio.emit('document_updated', {'type': 'flight', 'id': flight.id})
         return jsonify({'ok': True, 'message': f"Linked document to {flight.flight_number}"})
 

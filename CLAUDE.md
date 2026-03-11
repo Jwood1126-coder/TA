@@ -34,6 +34,7 @@ A Flask + SQLite PWA for planning and managing a Japan trip. Deployed on Railway
 ```
 app.py                  # App factory, auth routes, template filters (~190 lines)
 models.py               # 15 SQLAlchemy models (includes Document model)
+extensions.py           # Shared Flask extensions (socketio) — importable without circular deps
 guardrails.py           # Runtime validation: booking status, document-first rule, date overlaps
 config.py               # Flask config, env vars, production validation
 wsgi.py                 # Gunicorn entry point (imports create_app)
@@ -41,6 +42,12 @@ start.py                # Railway bootstrap: dir setup, DB backup, seed, launch 
 import_markdown.py      # Seed script: copies data/seed.db → data/japan_trip.db
 
 data/seed.db            # Canonical seed database (committed, matches confirmed bookings)
+
+services/               # Domain service layer — canonical mutation pipeline
+  __init__.py            # Package docstring
+  accommodations.py      # select, eliminate, delete, update_status, add_option, reorder
+  activities.py          # toggle, add, update, eliminate, delete, update_notes, update_day_notes
+  checklists.py          # toggle, update_status, create, delete
 
 scripts/
   export_seed.py        # Export current DB as new seed.db (strips chat/photos)
@@ -193,6 +200,29 @@ Runs on every boot, prints warnings (does not block startup):
 4. Overpacked days (>10 activities)
 5. Multiple selected options per location
 6. Document integrity (confirmed without document, conf# without document)
+
+## Service Layer (`services/`)
+
+All mutations to accommodations, activities, and checklists flow through the service layer. This ensures UI routes and AI chat tools share identical validation, cascades, and Socket.IO emits.
+
+### Pipeline per operation
+Each service function owns: **input validation → DB write → cascade side effects → Socket.IO emit**
+
+### What lives in services vs. blueprints
+- **Services**: Domain logic shared by both UI and chat (validation, DB mutation, cascades, emit)
+- **Blueprints**: HTTP concerns (request parsing, response formatting) + chat-specific fuzzy matching
+- **Chat executor**: Fuzzy name/location matching → resolves to an ID → calls the same service function as the UI route
+
+### Key cascades handled by services
+- `accommodations.update_status()`: booking_status validation, document-first rule, price recalculation, checklist sync, Socket.IO emit
+- `accommodations.select()` / `eliminate()`: mutual exclusion enforcement, checklist status sync
+- `checklists.update_status()`: cascades status to linked AccommodationOption
+- `activities.toggle()`: sets `completed_at` timestamp, emits update
+
+### Adding a new mutation
+1. Add the service function in `services/<domain>.py`
+2. Call it from both the blueprint route and `blueprints/chat/executor.py`
+3. Never put shared mutation logic directly in a route handler or chat tool
 
 ## Key Architecture Patterns
 

@@ -4,9 +4,9 @@ import time
 import traceback
 from collections import defaultdict
 from flask import Flask, redirect, url_for, session, request, render_template
-from flask_socketio import SocketIO
 from config import Config
 from models import db
+from extensions import socketio
 
 # Simple in-memory rate limiter for login
 _login_attempts = defaultdict(list)  # ip -> [timestamps]
@@ -29,8 +29,6 @@ def _is_rate_limited(ip):
 
 def _record_attempt(ip):
     _login_attempts[ip].append(time.time())
-
-socketio = SocketIO()
 
 
 def create_app(run_data_migrations=True):

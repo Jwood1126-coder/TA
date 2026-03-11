@@ -156,22 +156,8 @@ def checklists_view():
 
 @checklists_bp.route('/api/checklists/<int:item_id>/toggle', methods=['POST'])
 def toggle_checklist(item_id):
-    item = ChecklistItem.query.get_or_404(item_id)
-    item.is_completed = not item.is_completed
-    item.completed_at = datetime.utcnow() if item.is_completed else None
-    # Keep status in sync
-    if item.is_completed and item.status != 'completed':
-        item.status = 'completed'
-    elif not item.is_completed and item.status == 'completed':
-        item.status = 'pending'
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('checklist_toggled', {
-        'id': item.id,
-        'is_completed': item.is_completed,
-    })
-
+    import services.checklists as checklist_svc
+    item = checklist_svc.toggle(item_id)
     return jsonify({'ok': True, 'is_completed': item.is_completed})
 
 
@@ -182,46 +168,14 @@ VALID_CHECKLIST_STATUSES = {'pending', 'researching', 'decided', 'booked', 'comp
 
 @checklists_bp.route('/api/checklists/<int:item_id>/status', methods=['PUT'])
 def update_checklist_status(item_id):
-    item = ChecklistItem.query.get_or_404(item_id)
+    import services.checklists as checklist_svc
     data = request.get_json()
+    item = ChecklistItem.query.get_or_404(item_id)
     new_status = data.get('status', item.status)
-    if new_status not in VALID_CHECKLIST_STATUSES:
-        return jsonify({'ok': False, 'error': f'Invalid status: {new_status}'}), 400
-    item.status = new_status
-    if item.status == 'completed':
-        item.is_completed = True
-        item.completed_at = datetime.utcnow()
-    elif item.is_completed and item.status != 'completed':
-        item.is_completed = False
-        item.completed_at = None
-
-    # Sync to linked accommodation option's booking_status
-    accom_synced = False
-    if item.accommodation_location_id:
-        selected_opt = AccommodationOption.query.filter_by(
-            location_id=item.accommodation_location_id,
-            is_selected=True
-        ).first()
-        if selected_opt:
-            if new_status in ('booked', 'completed') and \
-               selected_opt.booking_status not in ('booked', 'confirmed'):
-                selected_opt.booking_status = 'booked'
-                accom_synced = True
-            elif new_status in ('pending', 'researching') and \
-                 selected_opt.booking_status == 'booked':
-                selected_opt.booking_status = 'not_booked'
-                accom_synced = True
-
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('checklist_status_changed', {
-        'id': item.id, 'status': item.status,
-    })
-    if accom_synced:
-        socketio.emit('accommodation_updated', {
-            'location_id': item.accommodation_location_id,
-        })
+    try:
+        checklist_svc.update_status(item_id, new_status)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True})
 
 
@@ -233,7 +187,7 @@ def toggle_option_elimination(option_id):
     option.is_eliminated = not option.is_eliminated
     db.session.commit()
 
-    from app import socketio
+    from extensions import socketio
     socketio.emit('checklist_option_updated', {
         'checklist_item_id': option.checklist_item_id,
         'option_id': option.id,
@@ -256,7 +210,7 @@ def select_checklist_option(option_id):
         item.status = 'decided'
     db.session.commit()
 
-    from app import socketio
+    from extensions import socketio
     socketio.emit('checklist_option_updated', {
         'checklist_item_id': option.checklist_item_id,
         'selected_id': option.id,
@@ -279,30 +233,12 @@ ADDABLE_CATEGORIES = {'pre_departure_month', 'packing_essential', 'packing_helpf
 @checklists_bp.route('/api/checklists', methods=['POST'])
 def create_checklist_item():
     """Create a new checklist item (preparation or packing only)."""
+    import services.checklists as checklist_svc
     data = request.get_json()
-    title = (data.get('title') or '').strip()
-    category = data.get('category', 'pre_departure_month')
-    if not title:
-        return jsonify({'ok': False, 'error': 'Title is required'}), 400
-    if category not in ADDABLE_CATEGORIES:
-        return jsonify({'ok': False, 'error': f'Cannot add items to category: {category}'}), 400
-
-    max_order = db.session.query(
-        db.func.max(ChecklistItem.sort_order)
-    ).filter_by(category=category).scalar() or 0
-
-    item = ChecklistItem(
-        category=category,
-        title=title,
-        item_type=data.get('item_type', 'task'),
-        status='pending',
-        sort_order=max_order + 1,
-    )
-    db.session.add(item)
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('checklist_added', {'id': item.id, 'category': item.category})
+    try:
+        item = checklist_svc.create(data)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True, 'id': item.id})
 
 
@@ -312,17 +248,11 @@ DELETABLE_CATEGORIES = {'pre_departure_month', 'packing_essential', 'packing_hel
 @checklists_bp.route('/api/checklists/<int:item_id>', methods=['DELETE'])
 def delete_checklist_item(item_id):
     """Delete a checklist item (preparation or packing only)."""
-    item = ChecklistItem.query.get_or_404(item_id)
-    if item.category not in DELETABLE_CATEGORIES:
-        return jsonify({'ok': False, 'error': 'Cannot delete booking/accommodation items'}), 400
-
-    # Delete child options first
-    ChecklistOption.query.filter_by(checklist_item_id=item.id).delete()
-    db.session.delete(item)
-    db.session.commit()
-
-    from app import socketio
-    socketio.emit('checklist_deleted', {'id': item_id})
+    import services.checklists as checklist_svc
+    try:
+        checklist_svc.delete(item_id)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True})
 
 
