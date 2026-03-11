@@ -95,6 +95,38 @@
 </section>
 {% endif %}
 
+<!-- Flights on this day -->
+{% if day_flights %}
+<section class="day-flights-section">
+    <h3 class="slot-heading">{{ icon_plane(18) }} Flights Today</h3>
+    {% for flight in day_flights %}
+    <div class="flight-card-tripit compact">
+        <div class="flight-card-header">
+            <span class="flight-airline">{{ flight.airline }}</span>
+            <span class="flight-number">{{ flight.flight_number }}</span>
+            {% if flight.confirmation_number %}
+            <span class="booking-badge confirmed">{{ flight.confirmation_number }}</span>
+            {% endif %}
+        </div>
+        <div class="flight-route-visual">
+            <div class="flight-endpoint">
+                <div class="flight-time">{{ flight.depart_time or '--:--' }}</div>
+                <div class="flight-airport">{{ flight.route_from }}</div>
+            </div>
+            <div class="flight-connector">
+                <div class="flight-line"></div>
+                {% if flight.duration %}<div class="flight-duration-label">{{ flight.duration }}</div>{% endif %}
+            </div>
+            <div class="flight-endpoint">
+                <div class="flight-time">{{ flight.arrive_time or '--:--' }}</div>
+                <div class="flight-airport">{{ flight.route_to }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
 <!-- Transport to this location (travel days) -->
 {% if transport_routes %}
 <section class="transport-banner">
@@ -135,38 +167,6 @@
             {% endif %}
         </div>
         {% endif %}
-    </div>
-    {% endfor %}
-</section>
-{% endif %}
-
-<!-- Flights on this day -->
-{% if day_flights %}
-<section class="day-flights-section">
-    <h3 class="slot-heading">{{ icon_plane(18) }} Flights Today</h3>
-    {% for flight in day_flights %}
-    <div class="flight-card-tripit compact">
-        <div class="flight-card-header">
-            <span class="flight-airline">{{ flight.airline }}</span>
-            <span class="flight-number">{{ flight.flight_number }}</span>
-            {% if flight.confirmation_number %}
-            <span class="booking-badge confirmed">{{ flight.confirmation_number }}</span>
-            {% endif %}
-        </div>
-        <div class="flight-route-visual">
-            <div class="flight-endpoint">
-                <div class="flight-time">{{ flight.depart_time or '--:--' }}</div>
-                <div class="flight-airport">{{ flight.route_from }}</div>
-            </div>
-            <div class="flight-connector">
-                <div class="flight-line"></div>
-                {% if flight.duration %}<div class="flight-duration-label">{{ flight.duration }}</div>{% endif %}
-            </div>
-            <div class="flight-endpoint">
-                <div class="flight-time">{{ flight.arrive_time or '--:--' }}</div>
-                <div class="flight-airport">{{ flight.route_to }}</div>
-            </div>
-        </div>
     </div>
     {% endfor %}
 </section>
