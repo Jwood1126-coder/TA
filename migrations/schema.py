@@ -91,12 +91,15 @@ def _migrate_transport_data(cursor, conn):
     """Split Haneda combined route into two cards + enrich all routes with maps_url.
 
     Idempotent: checks current state before each change.
+    Uses content-based lookups (NOT hardcoded IDs — production IDs differ from local).
     """
-    # Check if route 13 still has the old combined transport_type
-    cursor.execute("SELECT id, transport_type FROM transport_route WHERE id = 13")
-    row = cursor.fetchone()
-    if row and 'OR' in (row[1] or ''):
-        # Still the old combined "Keikyu Line + subway OR Limousine Bus" — split it
+    # Find the Haneda combined route by content (any ID)
+    cursor.execute("""
+        SELECT id FROM transport_route
+        WHERE route_from = 'Haneda Airport' AND transport_type LIKE '%OR%'
+    """)
+    haneda_combined = cursor.fetchone()
+    if haneda_combined:
         cursor.execute("""
             UPDATE transport_route SET
                 transport_type = 'Keikyu Line + subway',
@@ -107,8 +110,8 @@ def _migrate_transport_data(cursor, conn):
                 maps_url = 'https://www.google.com/maps/dir/Haneda+Airport+Terminal+3,+Tokyo/Higashi-Shinjuku+Station',
                 url = 'https://www.keikyu.co.jp/en/',
                 sort_order = 1
-            WHERE id = 13
-        """)
+            WHERE id = ?
+        """, (haneda_combined[0],))
 
     # Insert Limousine Bus route if it doesn't exist yet
     cursor.execute("SELECT id FROM transport_route WHERE transport_type = 'Limousine Bus'")
@@ -126,30 +129,34 @@ def _migrate_transport_data(cursor, conn):
             )
         """)
 
-    # Enrich all routes with maps_url where missing
-    _route_data = {
-        1: ('https://www.google.com/maps/dir/Tokyo+Station/Odawara+Station', 'https://www.jreast.co.jp/multi/en/'),
-        2: ('https://www.google.com/maps/dir/Tokyo+Station/Nagoya+Station', 'https://www.jreast.co.jp/multi/en/'),
-        3: ('https://www.google.com/maps/dir/Nagoya+Station/Takayama+Station', 'https://touristpass.jp/en/'),
-        4: ('https://www.google.com/maps/dir/Takayama+Nohi+Bus+Center/Shirakawa-go+Bus+Terminal', None),
-        5: ('https://www.google.com/maps/dir/Shirakawa-go+Bus+Terminal/Kanazawa+Station', None),
-        6: ('https://www.google.com/maps/dir/Kanazawa+Station/Tsuruga+Station', None),
-        7: ('https://www.google.com/maps/dir/Tsuruga+Station/Kyoto+Station', None),
-        8: ('https://www.google.com/maps/dir/Kyoto+Station/Hiroshima+Station', None),
-        9: ('https://www.google.com/maps/dir/Miyajimaguchi+Station/Miyajima+Ferry+Terminal', 'https://www.jr-miyajimaferry.co.jp/en/'),
-        10: ('https://www.google.com/maps/dir/Kyoto+Station/Tokyo+Station', None),
-        12: ('https://www.google.com/maps/dir/Kyoto+Station/Shin-Osaka+Station', None),
-    }
-    for route_id, (maps, url) in _route_data.items():
-        cursor.execute("SELECT maps_url FROM transport_route WHERE id = ?", (route_id,))
+    # Enrich all routes with maps_url where missing — lookup by route_from/route_to (not ID)
+    _route_data = [
+        ('Tokyo', 'Odawara', 'https://www.google.com/maps/dir/Tokyo+Station/Odawara+Station', 'https://www.jreast.co.jp/multi/en/'),
+        ('Tokyo', 'Nagoya', 'https://www.google.com/maps/dir/Tokyo+Station/Nagoya+Station', 'https://www.jreast.co.jp/multi/en/'),
+        ('Nagoya', 'Takayama', 'https://www.google.com/maps/dir/Nagoya+Station/Takayama+Station', 'https://touristpass.jp/en/'),
+        ('Takayama', 'Shirakawa-go', 'https://www.google.com/maps/dir/Takayama+Nohi+Bus+Center/Shirakawa-go+Bus+Terminal', None),
+        ('Shirakawa-go', 'Kanazawa', 'https://www.google.com/maps/dir/Shirakawa-go+Bus+Terminal/Kanazawa+Station', None),
+        ('Kanazawa', 'Tsuruga', 'https://www.google.com/maps/dir/Kanazawa+Station/Tsuruga+Station', None),
+        ('Tsuruga', 'Kyoto', 'https://www.google.com/maps/dir/Tsuruga+Station/Kyoto+Station', None),
+        ('Kyoto', 'Hiroshima', 'https://www.google.com/maps/dir/Kyoto+Station/Hiroshima+Station', None),
+        ('Hiroshima', 'Miyajima', 'https://www.google.com/maps/dir/Miyajimaguchi+Station/Miyajima+Ferry+Terminal', 'https://www.jr-miyajimaferry.co.jp/en/'),
+        ('Kyoto', 'Tokyo', 'https://www.google.com/maps/dir/Kyoto+Station/Tokyo+Station', None),
+        ('Kyoto', 'Osaka', 'https://www.google.com/maps/dir/Kyoto+Station/Shin-Osaka+Station', None),
+        ('Shinagawa', 'Haneda Airport', 'https://www.google.com/maps/dir/Shinagawa+Station/Haneda+Airport+Terminal+3', None),
+    ]
+    for route_from, route_to, maps, url in _route_data:
+        cursor.execute("""
+            SELECT id, maps_url FROM transport_route
+            WHERE route_from LIKE ? AND route_to LIKE ?
+        """, (f'%{route_from}%', f'%{route_to}%'))
         row = cursor.fetchone()
-        if row and not row[0]:
+        if row and not row[1]:
             if url:
                 cursor.execute("UPDATE transport_route SET maps_url = ?, url = ? WHERE id = ?",
-                               (maps, url, route_id))
+                               (maps, url, row[0]))
             else:
                 cursor.execute("UPDATE transport_route SET maps_url = ? WHERE id = ?",
-                               (maps, route_id))
+                               (maps, row[0]))
 
 
 def _migrate_route_groups(cursor, conn):

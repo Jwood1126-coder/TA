@@ -389,12 +389,16 @@ def day_view(day_number):
                 return True
         return False
 
-    # Build transport route names for duplicate detection
+    # Build transport route names + destinations for duplicate detection
     _transport_route_names = set()
+    _transport_destinations = set()
     for r in transport_routes:
         _transport_route_names.add(r.transport_type.lower())
         if r.train_name:
             _transport_route_names.add(r.train_name.lower())
+        # Collect destinations for "Train to X" / "Bus to X" matching
+        if r.route_to:
+            _transport_destinations.add(r.route_to.lower())
     _flight_numbers = set()
     for f in day_flights:
         _flight_numbers.add(f.flight_number.lower())
@@ -419,6 +423,10 @@ def day_view(day_number):
             if len(word) > 3 and word not in _TRANSPORT_STOP_WORDS:
                 _transport_distinct.add(word)
 
+    # Transit-verb prefixes that signal a transport duplicate
+    _TRANSIT_PREFIXES = ('train to ', 'bus to ', 'ferry to ', 'taxi to ',
+                         'subway to ', 'shinkansen to ', 'ride to ', 'transfer to ')
+
     def _is_logistics_duplicate(activity):
         """Return True if activity duplicates a transport/flight/accom card."""
         title = activity.title.lower()
@@ -439,6 +447,12 @@ def day_view(day_number):
         for name in _transport_route_names:
             if name in title:
                 return True
+        # "Train to X" / "Bus to X" where X is a transport route destination
+        for prefix in _TRANSIT_PREFIXES:
+            if title.startswith(prefix):
+                for dest in _transport_destinations:
+                    if dest in title:
+                        return True
         # Match distinctive transport keywords (keikyu, shinkansen, etc.) — short titles only
         if len(title) < 40:
             for kw in _transport_distinct:
