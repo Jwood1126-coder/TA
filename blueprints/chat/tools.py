@@ -1,4 +1,21 @@
-"""Tool definitions for the AI travel agent."""
+"""Tool definitions for the AI travel agent.
+
+Enums are derived from canonical backend sources to prevent drift.
+Do NOT hardcode enum values here — import from guardrails or services.
+"""
+from guardrails import (
+    VALID_BOOKING_STATUSES, VALID_TIME_SLOTS,
+    VALID_CATEGORIES, VALID_TRANSPORT_TYPES,
+)
+from services.checklists import ADDABLE_CATEGORIES, VALID_PRIORITIES
+
+# Sorted lists for deterministic tool schema output
+_booking_statuses = sorted(VALID_BOOKING_STATUSES)
+_time_slots = sorted(VALID_TIME_SLOTS)
+_categories = sorted(VALID_CATEGORIES)
+_transport_types = sorted(VALID_TRANSPORT_TYPES)
+_checklist_categories = sorted(ADDABLE_CATEGORIES)
+_priorities = sorted(VALID_PRIORITIES)
 
 TOOLS = [
     {
@@ -8,7 +25,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "flight_number": {"type": "string", "description": "Flight number e.g. DL123, AA456"},
-                "booking_status": {"type": "string", "enum": ["not_booked", "booked", "confirmed"]},
+                "booking_status": {"type": "string", "enum": _booking_statuses},
                 "confirmation_number": {"type": "string"},
                 "depart_time": {"type": "string"},
                 "arrive_time": {"type": "string"},
@@ -24,7 +41,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Hotel/accommodation name (partial match ok)"},
-                "booking_status": {"type": "string", "enum": ["not_booked", "booked", "confirmed"]},
+                "booking_status": {"type": "string", "enum": _booking_statuses},
                 "confirmation_number": {"type": "string"},
                 "address": {"type": "string"},
                 "user_notes": {"type": "string"},
@@ -90,7 +107,7 @@ TOOLS = [
             "properties": {
                 "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "title": {"type": "string", "description": "Activity title (for matching existing or creating new)"},
-                "time_slot": {"type": "string", "enum": ["morning", "afternoon", "evening", "night"]},
+                "time_slot": {"type": "string", "enum": _time_slots},
                 "start_time": {"type": "string"},
                 "cost_per_person": {"type": "number"},
                 "cost_note": {"type": "string", "description": "Cost description e.g. '¥500 entry'"},
@@ -100,7 +117,7 @@ TOOLS = [
                 "url": {"type": "string", "description": "Official website or booking URL"},
                 "notes": {"type": "string"},
                 "getting_there": {"type": "string", "description": "Transit tip from previous activity"},
-                "category": {"type": "string", "enum": ["temple", "food", "nightlife", "shopping", "nature", "culture", "transit", "logistics", "entertainment"]},
+                "category": {"type": "string", "enum": _categories},
                 "book_ahead": {"type": "boolean", "description": "True if advance tickets/reservation needed"},
                 "book_ahead_note": {"type": "string", "description": "Where/how to book in advance"},
                 "is_optional": {"type": "boolean"},
@@ -116,7 +133,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "title": {"type": "string", "description": "Activity title (partial match ok)"},
                 "completed": {"type": "boolean", "description": "True to mark done, false to unmark"},
             },
@@ -158,9 +175,9 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "The checklist item title"},
-                "category": {"type": "string", "enum": ["pre_trip", "packing", "on_trip"], "description": "Which checklist tab"},
+                "category": {"type": "string", "enum": _checklist_categories, "description": "Which checklist tab"},
                 "description": {"type": "string", "description": "Optional details"},
-                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                "priority": {"type": "string", "enum": _priorities},
                 "url": {"type": "string", "description": "Optional booking or reference URL"},
             },
             "required": ["title", "category"]
@@ -206,7 +223,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "title": {"type": "string", "description": "Activity title (partial match ok)"},
             },
             "required": ["day_number", "title"]
@@ -218,7 +235,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "day_number": {"type": "integer", "description": "Day number (1-15)"},
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "title": {"type": "string", "description": "Activity title (partial match ok)"},
             },
             "required": ["day_number", "title"]
@@ -244,8 +261,8 @@ TOOLS = [
             "properties": {
                 "route_from": {"type": "string", "description": "Origin station/city"},
                 "route_to": {"type": "string", "description": "Destination station/city"},
-                "transport_type": {"type": "string", "description": "e.g. 'Shinkansen', 'Bus', 'JR Express', 'Limited Express', 'Local Train', 'Ferry', 'Subway'"},
-                "day_number": {"type": "integer", "description": "Day number this route is used on"},
+                "transport_type": {"type": "string", "enum": _transport_types, "description": "Transport mode (case-insensitive, aliases like 'bullet train' accepted by backend)"},
+                "day_number": {"type": "integer", "description": "Day number (1-14) this route is used on"},
                 "train_name": {"type": "string", "description": "Specific train service name e.g. 'Hida Limited Express'"},
                 "duration": {"type": "string", "description": "Travel time e.g. '2h 20min'"},
                 "jr_pass_covered": {"type": "boolean", "description": "True if JR Pass covers this route"},
@@ -266,8 +283,8 @@ TOOLS = [
                 "route_to": {"type": "string", "description": "Destination station to match (partial ok)"},
                 "new_route_from": {"type": "string", "description": "New origin (if changing)"},
                 "new_route_to": {"type": "string", "description": "New destination (if changing)"},
-                "transport_type": {"type": "string"},
-                "day_number": {"type": "integer"},
+                "transport_type": {"type": "string", "enum": _transport_types},
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
                 "train_name": {"type": "string"},
                 "duration": {"type": "string"},
                 "jr_pass_covered": {"type": "boolean"},

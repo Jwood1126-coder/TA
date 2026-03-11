@@ -47,7 +47,7 @@
 {% set slot_macros = {'morning': icon_sun, 'afternoon': icon_cloud_sun, 'evening': icon_moon, 'night': icon_stars} %}
 
 {% macro activity_card(activity, compact=false) %}
-<div class="activity-card {% if compact %}compact{% endif %} {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %}"
+<div class="activity-card {% if compact %}compact{% endif %} {% if activity.is_completed %}completed{% endif %} {% if activity.is_optional %}optional{% endif %} {% if activity.is_eliminated %}eliminated{% endif %}"
      data-id="{{ activity.id }}">
     <div class="activity-main">
         <label class="activity-check">
@@ -72,6 +72,9 @@
                 {% endif %}
                 {% if activity.is_optional and compact %}
                 <span class="optional-badge">optional</span>
+                {% endif %}
+                {% if activity.is_eliminated %}
+                <span class="eliminated-badge">ruled out</span>
                 {% endif %}
             </div>
             {% if activity.maps_url or activity.address or activity.url %}

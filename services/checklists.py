@@ -6,6 +6,7 @@ from extensions import socketio
 VALID_STATUSES = {'pending', 'researching', 'decided', 'booked', 'completed'}
 ADDABLE_CATEGORIES = {'pre_departure_month', 'packing_essential', 'packing_helpful'}
 DELETABLE_CATEGORIES = {'pre_departure_month', 'packing_essential', 'packing_helpful'}
+VALID_PRIORITIES = {'high', 'medium', 'low'}
 
 
 def toggle(item_id):

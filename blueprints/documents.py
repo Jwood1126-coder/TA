@@ -355,18 +355,30 @@ def unlink_document(doc_id):
     doc = Document.query.get_or_404(doc_id)
 
     # Find and unlink from accommodations
+    affected_accoms = []
     for opt in doc.accommodations:
         opt.document_id = None
         if opt.booking_status == 'confirmed':
             opt.booking_status = 'booked'
+        affected_accoms.append(opt)
 
     # Find and unlink from flights
+    affected_flights = []
     for flight in doc.flights:
         flight.document_id = None
         if flight.booking_status == 'confirmed':
             flight.booking_status = 'booked'
+        affected_flights.append(flight)
 
     db.session.commit()
+
+    from extensions import socketio
+    for opt in affected_accoms:
+        socketio.emit('accommodation_updated', {'location_id': opt.location_id})
+    for flight in affected_flights:
+        socketio.emit('flight_updated', {'id': flight.id})
+    socketio.emit('document_updated', {'type': 'unlinked', 'id': doc.id})
+
     return jsonify({'ok': True})
 
 
@@ -398,6 +410,10 @@ def delete_document(filename):
     # Remove DB record if it exists
     doc = Document.query.filter_by(filename=filename).first()
     if doc:
+        # Collect affected entities before unlinking
+        affected_accoms = [(opt.id, opt.location_id) for opt in doc.accommodations]
+        affected_flights = [f.id for f in doc.flights]
+
         # Unlink from any bookings first (downgrades confirmed->booked)
         for opt in doc.accommodations:
             opt.document_id = None
@@ -409,6 +425,13 @@ def delete_document(filename):
                 flight.booking_status = 'booked'
         db.session.delete(doc)
         db.session.commit()
+
+        from extensions import socketio
+        for _, loc_id in affected_accoms:
+            socketio.emit('accommodation_updated', {'location_id': loc_id})
+        for fid in affected_flights:
+            socketio.emit('flight_updated', {'id': fid})
+        socketio.emit('document_updated', {'type': 'deleted', 'id': doc.id})
 
     if os.path.exists(filepath):
         os.remove(filepath)

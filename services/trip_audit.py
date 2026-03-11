@@ -72,6 +72,7 @@ def audit_trip():
     _check_overpacked_days(result)
     _check_activity_completeness(result)
     _check_transport_day_linkage(result)
+    _check_day_location_consistency(selected_accoms, result)
 
     return result
 
@@ -490,3 +491,49 @@ def _check_duplicate_locations(result):
                         f'({a.check_in_date}–{a.check_out_date}) and '
                         f'"{b.location_name}" '
                         f'({b.check_in_date}–{b.check_out_date})')
+
+
+# ---------------------------------------------------------------------------
+# Check J: Day-location consistency
+# ---------------------------------------------------------------------------
+
+def _check_day_location_consistency(selected_accoms, result):
+    """Verify each day's location matches the accommodation covering that date.
+
+    The accommodation chain defines which city the traveler is in on each date.
+    If a day's location_id points to a different city, the day view will show
+    wrong weather, vibe, and context for activities on that day.
+
+    Only checks days covered by the accommodation chain (skips travel days
+    before first check-in and after last check-out).
+    """
+    from models import Location
+    if not selected_accoms:
+        return
+
+    # Build date→city map from accommodation chain
+    date_to_city = {}
+    for loc, _ in selected_accoms:
+        if not loc.check_in_date or not loc.check_out_date:
+            continue
+        city = loc.location_name.split('(')[0].split(' Stay')[0].strip().lower()
+        d = loc.check_in_date
+        while d < loc.check_out_date:
+            date_to_city[d] = (city, loc.location_name)
+            d += timedelta(days=1)
+
+    # Check each day's assigned location against the chain
+    days = Day.query.all()
+    for day in days:
+        if not day.date or day.date not in date_to_city:
+            continue
+        expected_city, expected_loc_name = date_to_city[day.date]
+        if day.location_id:
+            location = Location.query.get(day.location_id)
+            if location:
+                day_city = location.name.lower().strip()
+                if day_city != expected_city:
+                    result.warnings.append(
+                        f'Day {day.day_number} ({day.date}): assigned to '
+                        f'{location.name} but accommodation chain says '
+                        f'{expected_loc_name}')

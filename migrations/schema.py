@@ -83,6 +83,8 @@ def run_schema_migrations(app):
     _migrate_transport_data(cursor, conn)
     _migrate_route_groups(cursor, conn)
     _migrate_activity_time_slots(cursor, conn)
+    _migrate_day_location_fixes(cursor, conn)
+    _migrate_departure_day_data(cursor, conn)
 
     conn.commit()
     conn.close()
@@ -210,11 +212,97 @@ def _migrate_activity_time_slots(cursor, conn):
           AND sort_order >= 2
     """)
 
-    # Day 14: Airport activities (sort_order >= 7) happen after transport to Haneda.
-    # Morning activities (shopping, checkout, Keikyu) are pre-transport.
+    # Day 14: Tokyo-specific activities (sort_order 1-4: Tsukiji, shopping, Don Quijote, Uniqlo)
+    # happen AFTER Osaka→Tokyo Shinkansen, so they must be afternoon.
+    # Checkout + Keikyu (sort_order 5-6) stay as morning (pre-transport in Osaka).
+    # Airport activities (sort_order >= 7) also afternoon.
     cursor.execute("""
         UPDATE activity SET time_slot = 'afternoon'
         WHERE day_id = (SELECT id FROM day WHERE day_number = 14)
           AND time_slot = 'morning'
-          AND sort_order >= 7
+          AND (sort_order <= 4 OR sort_order >= 7)
+    """)
+
+
+def _migrate_day_location_fixes(cursor, conn):
+    """Fix day-location assignments that don't match the accommodation chain.
+
+    Idempotent: only changes days that still have the wrong location.
+    """
+    # Day 12 (Apr 16) is Osaka check-in day, not Kyoto.
+    # Activities on this day are Osaka Castle, Kuromon Market, Shinsekai.
+    cursor.execute("""
+        UPDATE day SET location_id = (SELECT id FROM location WHERE name = 'Osaka')
+        WHERE day_number = 12
+          AND location_id = (SELECT id FROM location WHERE name = 'Kyoto')
+    """)
+
+    # Day 12 buffer day activities had NULL time_slot — set to afternoon (post-checkin)
+    cursor.execute("""
+        UPDATE activity SET time_slot = 'afternoon'
+        WHERE day_id = (SELECT id FROM day WHERE day_number = 12)
+          AND (time_slot IS NULL OR time_slot = '')
+    """)
+
+    # Day 13 "Revisit a favorite Tokyo spot" is geographically impossible from Osaka
+    cursor.execute("""
+        UPDATE activity SET is_eliminated = 1
+        WHERE title LIKE '%Revisit a favorite Tokyo spot%'
+          AND is_eliminated = 0
+          AND day_id = (SELECT id FROM day WHERE day_number = 13)
+    """)
+
+    # Byodo-in Temple is in Uji (Kyoto), not Osaka — move from Day 12 to Day 10 afternoon
+    cursor.execute("""
+        SELECT id FROM activity
+        WHERE title LIKE '%Byodo-in%'
+          AND day_id = (SELECT id FROM day WHERE day_number = 12)
+    """)
+    if cursor.fetchone():
+        # Make room: bump Day 10 activities at sort_order >= 8
+        cursor.execute("""
+            UPDATE activity SET sort_order = sort_order + 1
+            WHERE day_id = (SELECT id FROM day WHERE day_number = 10)
+              AND sort_order >= 8
+        """)
+        cursor.execute("""
+            UPDATE activity SET
+                day_id = (SELECT id FROM day WHERE day_number = 10),
+                time_slot = 'afternoon',
+                sort_order = 8
+            WHERE title LIKE '%Byodo-in%'
+              AND day_id = (SELECT id FROM day WHERE day_number = 12)
+        """)
+
+
+def _migrate_departure_day_data(cursor, conn):
+    """Add missing Osaka→Tokyo Shinkansen for departure day (Day 14).
+
+    The return flight departs HND (Tokyo) but the last accommodation is Osaka.
+    The traveler needs a Shinkansen from Shin-Osaka to Tokyo Station.
+
+    Idempotent: checks if route already exists.
+    """
+    cursor.execute("""
+        SELECT id FROM transport_route
+        WHERE route_from = 'Shin-Osaka' AND route_to = 'Tokyo'
+    """)
+    if not cursor.fetchone():
+        cursor.execute("""
+            INSERT INTO transport_route (route_from, route_to, transport_type, train_name,
+                duration, jr_pass_covered, cost_if_not_covered, notes, day_id, sort_order, maps_url)
+            VALUES (
+                'Shin-Osaka', 'Tokyo', 'Shinkansen', 'Nozomi / Hikari',
+                '~2h 15min', 1, '~¥13,870',
+                'Take early Shinkansen from Shin-Osaka to Tokyo Station. Hikari is JR Pass covered; Nozomi requires separate ticket but is 10 min faster. Get ekiben at station!',
+                (SELECT id FROM day WHERE day_number = 14), 1,
+                'https://www.google.com/maps/dir/Shin-Osaka+Station/Tokyo+Station'
+            )
+        """)
+
+    # Ensure Shinagawa→Haneda sorts after the Shinkansen arrival
+    cursor.execute("""
+        UPDATE transport_route SET sort_order = 2
+        WHERE route_from = 'Shinagawa' AND route_to LIKE '%Haneda%'
+          AND sort_order != 2
     """)

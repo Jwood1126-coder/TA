@@ -149,6 +149,7 @@ class AccommodationOption(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'location_id': self.location_id,
             'rank': self.rank,
             'name': self.name,
             'property_type': self.property_type,
@@ -162,8 +163,12 @@ class AccommodationOption(db.Model):
             'booking_url': self.booking_url,
             'alt_booking_url': self.alt_booking_url,
             'is_selected': self.is_selected,
+            'is_eliminated': self.is_eliminated,
             'booking_status': self.booking_status,
             'confirmation_number': self.confirmation_number,
+            'address': self.address,
+            'maps_url': self.maps_url,
+            'phone': self.phone,
             'check_in_info': self.check_in_info,
             'check_out_info': self.check_out_info,
             'user_notes': self.user_notes,

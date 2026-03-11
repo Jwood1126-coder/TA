@@ -134,6 +134,24 @@
     font-style: italic;
 }
 
+.eliminated-badge {
+    font-size: 0.65rem;
+    color: var(--pico-del-color, #c62828);
+    border: 1px solid var(--pico-del-color, #c62828);
+    padding: 0 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.activity-card.eliminated {
+    opacity: 0.45;
+}
+
+.activity-card.eliminated .activity-title {
+    text-decoration: line-through;
+}
+
 .time-badge {
     font-size: 0.75rem;
     color: var(--pico-muted-color);
@@ -236,19 +254,6 @@
     z-index: 100;
 }
 
-/* Flights */
-
-.flight-card {
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    border-radius: 10px;
-    border: 1px solid var(--pico-muted-border-color);
-}
-
-.flight-route {
-    font-size: 1.1rem;
-}
-
 /* TripIt-Style Flight Cards */
 
 .flight-group-title {
@@ -341,8 +346,6 @@
     border: 1px solid var(--sakura);
 }
 
-.transport-details { flex: 1; min-width: 0; }
-
 .transport-route-text { font-weight: 600; font-size: 0.9rem; }
 
 /* Activity Start Times & Cost Badges */
@@ -417,17 +420,6 @@
 }
 
 .transport-arrow { color: var(--pico-muted-color); }
-
-.transport-details {
-    font-size: 0.8rem;
-    color: var(--pico-muted-color);
-    margin-top: 0.2rem;
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.transport-details svg { vertical-align: -2px; }
 
 /* Why/reasoning tip in day view */
 
