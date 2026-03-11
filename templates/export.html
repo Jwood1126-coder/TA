@@ -98,6 +98,20 @@
     .option-chip a { text-decoration: none; margin: 0 2px; }
     .act-optional { color: var(--muted); font-style: italic; }
     .act-optional::after { content: ' (optional)'; font-size: 8pt; color: #aaa; }
+    .act-stale { opacity: 0.5; text-decoration: line-through; }
+    .act-stale::after { content: ' (stale reference)'; font-size: 7pt; color: #dc2626; font-style: italic; text-decoration: none; }
+    .audit-banner {
+        background: #fffbeb;
+        border: 1px solid #f59e0b;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-bottom: 16px;
+        font-size: 9pt;
+        color: #92400e;
+    }
+    .audit-banner strong { color: #b45309; }
+    .audit-banner ul { margin: 4px 0 0 16px; }
+    .audit-banner li { margin-bottom: 2px; }
 
     /* Accommodation table */
     .accom-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 8px; }
@@ -204,6 +218,16 @@
     &nbsp;&middot;&nbsp; {{ trip.num_people }} travelers
 </p>
 
+{% if audit and (audit.warnings or audit.blockers) %}
+<div class="audit-banner">
+    <strong>Trip Audit: {{ audit.warnings|length }} warning(s){% if audit.blockers %}, {{ audit.blockers|length }} blocker(s){% endif %}</strong>
+    <ul>
+    {% for w in audit.blockers %}<li style="color:#dc2626;">{{ w }}</li>{% endfor %}
+    {% for w in audit.warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <!-- ===== FLIGHTS ===== -->
 <h2>Flights</h2>
 {% for f in flights %}
@@ -282,7 +306,7 @@
     {% if dd.activities %}
     <ul class="activity-list">
         {% for act in dd.activities %}
-        <li{% if act.is_optional %} class="act-optional"{% endif %}>
+        <li{% if audit and act.id in audit.stale_refs %} class="act-stale"{% elif act.is_optional %} class="act-optional"{% endif %}>
             <span class="time-slot">{{ act.time_slot or '' }}</span>
             {{ act.title }}
             {% if act.jr_pass_covered %}<span class="jr-badge">JR</span>{% endif %}

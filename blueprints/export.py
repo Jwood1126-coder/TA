@@ -1,12 +1,28 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, jsonify, request
 from models import (Trip, Day, Activity, Flight, AccommodationLocation,
-                    AccommodationOption, TransportRoute, Location)
+                    TransportRoute, Location)
+from services.trip_audit import audit_trip
 
 export_bp = Blueprint('export', __name__)
 
 
+@export_bp.route('/api/trip/audit')
+def trip_audit_api():
+    """Return trip audit results as JSON."""
+    result = audit_trip()
+    return jsonify(result.to_dict())
+
+
 @export_bp.route('/export')
 def export_view():
+    # Run audit before rendering
+    audit = audit_trip()
+
+    # If blockers exist and force not requested, show audit page instead
+    force = request.args.get('force') == '1'
+    if not audit.exportable and not force:
+        return render_template('export_blocked.html', audit=audit)
+
     trip = Trip.query.first()
     days = Day.query.order_by(Day.day_number).all()
     flights = Flight.query.order_by(Flight.direction, Flight.leg_number).all()
@@ -39,4 +55,5 @@ def export_view():
                            flights=flights,
                            accommodations=accommodations,
                            transport=transport,
-                           locations=locations)
+                           locations=locations,
+                           audit=audit)

@@ -521,3 +521,130 @@ class TestParityActivityCompletion:
             event_chat = m2.emit.call_args[0][0]
 
         assert event_ui == event_chat == 'activity_toggled'
+
+
+# ---- Trip Audit Tests ----
+
+class TestTripAudit:
+    """Test the pre-export trip audit service."""
+
+    def test_audit_returns_result(self, ctx):
+        from services.trip_audit import audit_trip
+        result = audit_trip()
+        assert hasattr(result, 'blockers')
+        assert hasattr(result, 'warnings')
+        assert hasattr(result, 'stale_refs')
+        assert isinstance(result.blockers, list)
+        assert isinstance(result.warnings, list)
+        assert isinstance(result.stale_refs, set)
+
+    def test_audit_exportable_with_clean_data(self, ctx):
+        """Current seed should be exportable (no blockers)."""
+        from services.trip_audit import audit_trip
+        result = audit_trip()
+        assert result.exportable is True
+        assert result.ok is True
+        assert len(result.blockers) == 0
+
+    def test_audit_detects_multi_select(self, ctx):
+        """Selecting a second option at a location should produce a blocker."""
+        from services.trip_audit import audit_trip
+        # Find a location with a selected option and an eliminated one
+        loc = AccommodationLocation.query.first()
+        elim_opt = AccommodationOption.query.filter_by(
+            location_id=loc.id, is_eliminated=True).first()
+        if not elim_opt:
+            pytest.skip('No eliminated option to test with')
+        # Temporarily un-eliminate and select it
+        elim_opt.is_eliminated = False
+        elim_opt.is_selected = True
+        db.session.flush()
+
+        result = audit_trip()
+        has_multi = any('selected options' in b for b in result.blockers)
+        assert has_multi, 'Should detect multiple selected options'
+
+        # Restore
+        elim_opt.is_eliminated = True
+        elim_opt.is_selected = False
+        db.session.commit()
+
+    def test_audit_detects_stale_hotel_reference(self, ctx):
+        """Activity mentioning an eliminated hotel brand should be flagged."""
+        from services.trip_audit import audit_trip
+        # Create a test activity referencing an eliminated hotel
+        day = Day.query.first()
+        test_act = Activity(
+            day_id=day.id, title='Walk to Dormy Inn for breakfast',
+            sort_order=999, is_eliminated=False, is_substitute=False)
+        db.session.add(test_act)
+        db.session.flush()
+
+        result = audit_trip()
+        assert test_act.id in result.stale_refs
+
+        # Cleanup
+        db.session.delete(test_act)
+        db.session.commit()
+
+    def test_audit_no_false_positive_for_selected_hotel(self, ctx):
+        """Activity mentioning the selected hotel should NOT be flagged."""
+        from services.trip_audit import audit_trip
+        day = Day.query.first()
+        test_act = Activity(
+            day_id=day.id, title='Check into Sotetsu Fresa Inn',
+            sort_order=999, is_eliminated=False, is_substitute=False)
+        db.session.add(test_act)
+        db.session.flush()
+
+        result = audit_trip()
+        assert test_act.id not in result.stale_refs
+
+        db.session.delete(test_act)
+        db.session.commit()
+
+    def test_audit_to_dict(self, ctx):
+        from services.trip_audit import audit_trip
+        result = audit_trip()
+        d = result.to_dict()
+        assert 'exportable' in d
+        assert 'blockers' in d
+        assert 'warnings' in d
+        assert 'stale_activity_ids' in d
+        assert d['exportable'] is True
+
+    def test_brand_extraction(self, ctx):
+        from services.trip_audit import _extract_brand
+        assert _extract_brand('Dormy Inn Asakusa') == 'Dormy'
+        assert _extract_brand('CITAN Hostel') == 'CITAN'
+        assert _extract_brand('Nui. Hostel & Bar Lounge') == 'Nui.'
+        assert _extract_brand('Airbnb machiya') == 'Airbnb machiya'
+        # Common English words should return empty
+        assert _extract_brand('THE GATE HOTEL Kaminarimon') == ''
+        assert _extract_brand('Piece Hostel Sanjo') == ''
+
+
+class TestTripAuditExportRoute:
+    """Test the export route respects audit results."""
+
+    def test_export_includes_audit(self, ctx):
+        """Export page should include audit data."""
+        from app import create_app
+        app = create_app(run_data_migrations=False)
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            resp = client.get('/export')
+            assert resp.status_code == 200
+
+    def test_audit_api_endpoint(self, ctx):
+        """The /api/trip/audit endpoint should return JSON."""
+        from app import create_app
+        app = create_app(run_data_migrations=False)
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            resp = client.get('/api/trip/audit')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert 'exportable' in data
+            assert 'blockers' in data
+            assert 'warnings' in data

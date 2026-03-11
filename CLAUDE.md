@@ -48,6 +48,7 @@ services/               # Domain service layer — canonical mutation pipeline
   accommodations.py      # select, eliminate, delete, update_status, add_option, reorder
   activities.py          # toggle, add, update, eliminate, delete, update_notes, update_day_notes
   checklists.py          # toggle, update_status, create, delete
+  trip_audit.py          # Pre-export audit: accommodation chain, route chain, narrative staleness
 
 scripts/
   export_seed.py        # Export current DB as new seed.db (strips chat/photos)
@@ -55,7 +56,7 @@ scripts/
 
 tests/
   test_smoke.py         # 29 smoke tests: seed integrity, routes, export quality
-  test_services.py      # 19 service layer tests: mutations, cascades, validation
+  test_services.py      # 39 service+parity+audit tests: mutations, cascades, validation, trip audit
   conftest.py           # Restores DB from seed after test runs
 
 migrations/
@@ -194,14 +195,28 @@ Days get their city from the accommodation covering that date. Transport routes 
 - `validate_non_negative()` — rejects negative prices/costs
 - `check_accom_date_overlap()` — detects overlapping accommodation dates
 
+### Trip Audit Service (`services/trip_audit.py`)
+Pre-export reconciliation that compares canonical structured facts against narrative content. Returns `AuditResult` with blockers (block export), warnings (show in export), and stale_refs (activity IDs with stale hotel references).
+
+**Blockers** (prevent trusted export):
+- Accommodation chain gaps or overlaps
+- Multiple selected options per location
+- Confirmed bookings without linked documents
+
+**Warnings** (surfaced in export banner):
+- Night count mismatches
+- Departure day schedule conflicts
+- Overpacked days (>10 activities)
+- Stale narrative references (activity text mentioning eliminated hotels)
+
+**Narrative reference detection**: Extracts brand names from eliminated hotel options and scans active activity titles/descriptions. Uses word-boundary matching and filters common English words to avoid false positives.
+
+**Export gating**: `/export` runs the audit first. If blockers exist, renders `export_blocked.html` instead of the export. Append `?force=1` to override. Warnings and stale refs are shown inline in the normal export.
+
+**API**: `GET /api/trip/audit` returns the full audit result as JSON.
+
 ### Boot-time Validation (`migrations/validate.py`)
-Runs on every boot, prints warnings (does not block startup):
-1. Accommodation date chain gaps/overlaps
-2. Accommodation num_nights consistency
-3. Departure day activity conflicts
-4. Overpacked days (>10 activities)
-5. Multiple selected options per location
-6. Document integrity (confirmed without document, conf# without document)
+Delegates to the trip audit service. Runs on every boot, prints warnings (does not block startup). Also auto-fixes eliminated options that still claim booked/confirmed status.
 
 ## Service Layer (`services/`)
 
