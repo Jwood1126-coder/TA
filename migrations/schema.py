@@ -82,6 +82,7 @@ def run_schema_migrations(app):
     # --- One-shot data migrations (idempotent, safe to re-run) ---
     _migrate_transport_data(cursor, conn)
     _migrate_route_groups(cursor, conn)
+    _migrate_activity_time_slots(cursor, conn)
 
     conn.commit()
     conn.close()
@@ -170,4 +171,50 @@ def _migrate_route_groups(cursor, conn):
         WHERE route_from = 'Haneda Airport'
           AND route_group IS NULL
           AND day_id = (SELECT id FROM day WHERE day_number = 2)
+    """)
+
+
+def _migrate_activity_time_slots(cursor, conn):
+    """Fix activity time_slots so they appear in the correct position relative to transport.
+
+    Template flow: Checkout → Morning → Flights → Transport → Check-in → Afternoon → Evening
+    Activities BEFORE transport need time_slot='morning'.
+    Activities AFTER transport need time_slot='afternoon' or later.
+
+    Idempotent: only changes activities that still have the wrong slot.
+    """
+    # Day 2: "Pick up Welcome Suica IC card" happens at airport BEFORE transport
+    cursor.execute("""
+        UPDATE activity SET time_slot = 'morning'
+        WHERE title LIKE '%Welcome Suica%'
+          AND time_slot = 'afternoon'
+          AND day_id = (SELECT id FROM day WHERE day_number = 2)
+    """)
+
+    # Day 5: Post-arrival Takayama activities were incorrectly slotted as morning.
+    # sort_order >= 4 are activities after the train ride (scenic description, check-in,
+    # exploration, sake, crafts, Jinya). They should appear AFTER the transport section.
+    cursor.execute("""
+        UPDATE activity SET time_slot = 'afternoon'
+        WHERE day_id = (SELECT id FROM day WHERE day_number = 5)
+          AND time_slot = 'morning'
+          AND sort_order >= 4 AND sort_order <= 9
+    """)
+
+    # Day 7: Shirakawa-go activities + Kanazawa Castle happen after bus legs.
+    # Only checkout (sort_order 1) is truly pre-transport.
+    cursor.execute("""
+        UPDATE activity SET time_slot = 'afternoon'
+        WHERE day_id = (SELECT id FROM day WHERE day_number = 7)
+          AND time_slot = 'morning'
+          AND sort_order >= 2
+    """)
+
+    # Day 14: Airport activities (sort_order >= 7) happen after transport to Haneda.
+    # Morning activities (shopping, checkout, Keikyu) are pre-transport.
+    cursor.execute("""
+        UPDATE activity SET time_slot = 'afternoon'
+        WHERE day_id = (SELECT id FROM day WHERE day_number = 14)
+          AND time_slot = 'morning'
+          AND sort_order >= 7
     """)
