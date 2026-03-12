@@ -403,17 +403,39 @@
     font-weight: 300;
 }
 
-.loc-group-accom.pending {
+/* --- Stay card at bottom of location group --- */
+
+.loc-group-stay {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-top: 1px solid var(--pico-muted-border-color, #e2e8f0);
+    font-size: 0.78rem;
     color: var(--pico-muted-color);
 }
 
-.loc-accom-icon {
-    font-size: 0.85rem;
+.loc-group-stay.stay-locked {
+    background: rgba(34, 197, 94, 0.06);
+    border-left: 3px solid #22c55e;
 }
 
-.loc-accom-name {
-    flex: 1;
-    font-weight: 500;
+.stay-check {
+    flex-shrink: 0;
+    color: #22c55e;
+    line-height: 0;
+}
+
+.stay-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.loc-group-stay.stay-pending {
+    border-left: 3px solid #eab308;
+    background: rgba(234, 179, 8, 0.06);
 }
 
 /* Back to overview link */

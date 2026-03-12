@@ -21,34 +21,7 @@
 }
 .accom-integrity-banner.warning strong { color: #b45309; }
 
-/* Accommodation status in location group */
-
-.loc-group-accom {
-    display: flex;
-    align-items: center;
-    gap: 6px 8px;
-    padding: 10px 14px;
-    border-top: 1px solid var(--pico-muted-border-color, #e2e8f0);
-    font-size: 0.82rem;
-    overflow: hidden;
-}
-
-.loc-group-accom .loc-accom-icon {
-    flex-shrink: 0;
-}
-
-.loc-group-accom .loc-accom-name {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-}
-
-.loc-group-accom .booking-badge {
-    flex-shrink: 0;
-    margin-left: auto;
-}
+/* Accommodation status in location group (stays page uses .loc-group-accom via pending class) */
 
 /* Accommodations */
 

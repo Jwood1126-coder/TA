@@ -133,22 +133,15 @@
         {% endfor %}
 
         {% if group.accom_name %}
-        <div class="loc-group-accom {% if group.accom_doc_backed %}doc-backed{% elif group.accom_status in ('booked', 'confirmed') %}doc-planned{% endif %}">
-            <span class="loc-accom-icon">{{ icon_hotel(16) }}</span>
-            <span class="loc-accom-name">{{ group.accom_name }}</span>
-            {% if group.accom_status and group.accom_status != 'not_booked' %}
-            <span class="booking-badge {{ group.accom_status }}">
-                {% if group.accom_status == 'confirmed' %}Confirmed
-                {% elif group.accom_status == 'booked' %}Reserved
-                {% elif group.accom_status == 'researching' %}Looking into
-                {% else %}{{ group.accom_status | replace('_', ' ') | title }}{% endif %}
-            </span>
+        <div class="loc-group-stay {% if group.accom_status in ('confirmed', 'booked') %}stay-locked{% endif %}">
+            {% if group.accom_status in ('confirmed', 'booked') %}
+            <span class="stay-check">{{ icon_check(12) }}</span>
             {% endif %}
+            <span class="stay-name">{{ group.accom_name }}</span>
         </div>
         {% elif group.accom_pending_count > 0 %}
-        <div class="loc-group-accom pending">
-            <span class="loc-accom-icon">{{ icon_hotel(16) }}</span>
-            <span class="loc-accom-name">Not booked &middot; {{ group.accom_pending_count }} option{{ 's' if group.accom_pending_count != 1 }}</span>
+        <div class="loc-group-stay stay-pending">
+            <span class="stay-name">{{ group.accom_pending_count }} option{{ 's' if group.accom_pending_count != 1 }} &middot; not booked</span>
         </div>
         {% endif %}
     </section>

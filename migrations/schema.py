@@ -90,6 +90,7 @@ def run_schema_migrations(app):
     _migrate_checklist_simplify(cursor, conn)
     _migrate_production_ready(cursor, conn)
     _migrate_url_integrity(cursor, conn)
+    _migrate_fix_eliminated_booking_status(cursor, conn)
 
     conn.commit()
     conn.close()
@@ -1289,3 +1290,23 @@ def _migrate_url_integrity(cursor, conn):
         """, (url, from_pat, to_pat))
 
     conn.commit()
+
+
+def _migrate_fix_eliminated_booking_status(cursor, conn):
+    """Downgrade eliminated accommodation options that still have active booking status.
+
+    If an option is eliminated (is_eliminated=1) but still has booking_status
+    'booked' or 'confirmed', it triggers false "multiple options booked" warnings.
+    Downgrade to 'cancelled' since the option was ruled out.
+
+    Idempotent: only affects eliminated options with active booking status.
+    """
+    cursor.execute("""
+        UPDATE accommodation_option
+        SET booking_status = 'cancelled'
+        WHERE is_eliminated = 1
+          AND booking_status IN ('booked', 'confirmed')
+    """)
+    affected = cursor.rowcount
+    if affected:
+        print(f'  Fixed {affected} eliminated option(s) with active booking status → cancelled')
