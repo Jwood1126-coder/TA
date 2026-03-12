@@ -883,11 +883,11 @@ class TestTransportDayLinkage:
 
 class TestAuditActivityTransport:
 
-    def test_audit_warns_about_missing_categories(self, ctx):
+    def test_audit_no_missing_categories(self, ctx):
         from services.trip_audit import audit_trip
         result = audit_trip()
         cat_warnings = [w for w in result.warnings if 'missing category' in w]
-        assert len(cat_warnings) > 0  # Seed has 0 categories populated
+        assert len(cat_warnings) == 0  # All seed activities now have categories
 
     def test_audit_warns_about_unlinked_routes(self, ctx):
         from services.trip_audit import audit_trip

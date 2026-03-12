@@ -88,6 +88,7 @@ def run_schema_migrations(app):
     _migrate_itinerary_refinement(cursor, conn)
     _migrate_remove_daytrip_transport(cursor, conn)
     _migrate_checklist_simplify(cursor, conn)
+    _migrate_production_ready(cursor, conn)
 
     conn.commit()
     conn.close()
@@ -856,5 +857,356 @@ def _migrate_checklist_simplify(cursor, conn):
     rows = cursor.fetchall()
     for i, (item_id,) in enumerate(rows):
         cursor.execute("UPDATE checklist_item SET sort_order = ? WHERE id = ?", (i + 1, item_id))
+
+    conn.commit()
+
+
+def _migrate_production_ready(cursor, conn):
+    """Production-ready itinerary cleanup: fix trust-breaking errors, eliminate stale
+    alternates, clean up note-like activities, add categories and maps.
+
+    Idempotent: all operations check current state before mutating.
+    Uses content-based lookups (NOT hardcoded IDs).
+    """
+
+    # ---- PHASE 1: Trust-breaking data errors ----
+
+    # 1a. Move Kyoto→Osaka transport from Day 13 to Day 12
+    day12_id = _day_id(cursor, 12)
+    day13_id = _day_id(cursor, 13)
+    if day12_id and day13_id:
+        cursor.execute("""
+            UPDATE transport_route SET day_id = ?
+            WHERE route_from LIKE '%Kyoto%' AND route_to LIKE '%Osaka%' AND day_id = ?
+        """, (day12_id, day13_id))
+
+    # 1b. Fix Leben check-in title (remove wrong night count)
+    if day12_id:
+        cursor.execute("""
+            UPDATE activity SET title = 'Check into Hotel The Leben Osaka'
+            WHERE title LIKE '%Check into Hotel%Leben%1 night%' AND day_id = ?
+        """, (day12_id,))
+
+    # 1c-d. Delete stale Shinkansen tips from Day 12 (Mt. Fuji tip + ekiben — wrong for 15-min Kyoto→Osaka)
+    if day12_id:
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Sit on the RIGHT side%' AND day_id = ?", (day12_id,))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Buy an ekiben%' AND day_id = ?", (day12_id,))
+
+    # 1e. Fix Day 14 logistics flow
+    day14_id = _day_id(cursor, 14)
+    if day14_id:
+        # Fix checkout title
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'Check out of Hotel The Leben Osaka',
+                description = 'Early checkout. Store luggage at hotel or use station lockers if doing optional Tokyo time.',
+                time_slot = 'morning', sort_order = 1
+            WHERE title LIKE '%Return to hotel%check out%' AND day_id = ?
+        """, (day14_id,))
+
+        # Fix Keikyu with flight time
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'Keikyu Line Shinagawa → Haneda Terminal 3',
+                description = '~15 min, ~¥500. Allow 2+ hours before departure (flight UA876 departs 3:50 PM).'
+            WHERE title LIKE '%Keikyu Line%' AND day_id = ?
+        """, (day14_id,))
+
+        # Fix Haneda with arrival time
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'Haneda Airport — arrive by 1:50 PM',
+                description = 'International terminal (Terminal 3). Check in, immigration, duty-free shopping.'
+            WHERE title LIKE '%Haneda Airport%' AND day_id = ? AND title NOT LIKE '%omiyage%'
+        """, (day14_id,))
+
+        # Fix flights with real times
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'UA876 HND→SFO (departs 3:50 PM) → UA1470 SFO→CLE',
+                description = 'Arrive SFO 9:35 AM same day. Layover. UA1470 departs 2:20 PM, arrive CLE 10:13 PM.'
+            WHERE title LIKE '%Flights home%' AND day_id = ?
+        """, (day14_id,))
+        # Also match if already partially updated
+        cursor.execute("""
+            UPDATE activity SET
+                description = 'Arrive SFO 9:35 AM same day. Layover. UA1470 departs 2:20 PM, arrive CLE 10:13 PM.'
+            WHERE title LIKE '%UA876%' AND day_id = ? AND description LIKE '%UA876 HND%SFO%layover%'
+        """, (day14_id,))
+
+        # Fix Tsukiji conditional
+        cursor.execute("""
+            UPDATE activity SET
+                description = 'Only if taking early Shinkansen from Osaka (arrive Tokyo ~9 AM). Farewell sushi/seafood.'
+            WHERE title LIKE '%Tsukiji%' AND day_id = ?
+        """, (day14_id,))
+
+        # Fix omiyage
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'Airport omiyage shops',
+                description = 'Haneda Terminal 3 has excellent souvenir shops — Tokyo Banana, Royce chocolate, Kit Kat flavors, wagashi. Tax-free with passport.'
+            WHERE title LIKE '%omiyage%' AND day_id = ?
+        """, (day14_id,))
+
+    # 1f. Fix Senso-ji geography (not near hotel — hotel is in Higashi-Shinjuku)
+    day3_id = _day_id(cursor, 3)
+    if day3_id:
+        cursor.execute("""
+            UPDATE activity SET
+                description = 'Tokyo''s oldest temple (founded 628 AD). Nakamise-dori: 250m of traditional shops leading to the temple. ~30 min by subway from Higashi-Shinjuku (Toei Oedo to Asakusa).'
+            WHERE title LIKE '%Senso-ji%' AND day_id = ? AND description LIKE '%right near%'
+        """, (day3_id,))
+
+    # 1g. Fix Day 2 evening walk neighborhood
+    day2_id = _day_id(cursor, 2)
+    if day2_id:
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'Evening walk around Higashi-Shinjuku',
+                description = 'Explore the neighborhood around the hotel — Kabukicho, Shinjuku Gyoen area.'
+            WHERE title LIKE '%Evening walk%explore%' AND day_id = ?
+        """, (day2_id,))
+
+        # Fix Senso-ji night walk distance
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'Senso-ji Temple at night',
+                description = 'Beautifully illuminated, almost empty, completely different atmosphere than daytime. ~30 min subway from hotel (Toei Oedo to Asakusa). Only if you have real energy left.'
+            WHERE title LIKE '%Senso-ji%night%' AND day_id = ?
+        """, (day2_id,))
+
+        # Fix late-night ramen
+        cursor.execute("""
+            UPDATE activity SET
+                description = 'Plenty of ramen shops near Shinjuku stay open late. Budget ~¥900-1,200.'
+            WHERE title LIKE '%Late-night ramen%' AND day_id = ?
+        """, (day2_id,))
+
+    conn.commit()
+
+    # ---- PHASE 2: Eliminate stale alternates ----
+
+    day4_id = _day_id(cursor, 4)
+    day7_id = _day_id(cursor, 7)
+    day11_id = _day_id(cursor, 11)
+
+    if day4_id:
+        cursor.execute("UPDATE activity SET is_eliminated = 1 WHERE title LIKE '%NIKKO%' AND day_id = ? AND is_eliminated = 0", (day4_id,))
+    if day11_id:
+        cursor.execute("UPDATE activity SET is_eliminated = 1 WHERE title LIKE '%HIMEJI%NARA%' AND day_id = ? AND is_eliminated = 0", (day11_id,))
+    if day7_id:
+        cursor.execute("UPDATE activity SET is_eliminated = 1 WHERE title LIKE '%SKIP KANAZAWA%' AND day_id = ? AND is_eliminated = 0", (day7_id,))
+
+    conn.commit()
+
+    # ---- PHASE 3: Delete notes masquerading as activities ----
+
+    if day2_id:
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Keikyu Line%' AND day_id = ? AND title NOT LIKE '%Shinagawa%'", (day2_id,))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%PRIORITY%SLEEP%' AND day_id = ?", (day2_id,))
+
+    day8_id = _day_id(cursor, 8)
+    if day8_id:
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Hakutaka%' AND day_id = ?", (day8_id,))
+
+    day9_id = _day_id(cursor, 9)
+    if day9_id:
+        # Fold Keihan Line info into Fushimi Inari
+        cursor.execute("SELECT id, description FROM activity WHERE title LIKE '%Fushimi Inari%' AND day_id = ?", (day9_id,))
+        row = cursor.fetchone()
+        if row and 'Keihan' not in (row[1] or ''):
+            cursor.execute("""
+                UPDATE activity SET
+                    description = 'Thousands of vermilion torii gates winding up the mountainside. Go early (~6:30 AM) to beat crowds. Getting there: Keihan Line from Sanjo to Fushimi-Inari Station (~6 min, ~¥220).'
+                WHERE id = ?
+            """, (row[0],))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Keihan Line%' AND day_id = ?", (day9_id,))
+
+        # Fold respectful note into Hanamikoji
+        cursor.execute("SELECT id, description FROM activity WHERE title LIKE '%Hanamikoji%' AND day_id = ?", (day9_id,))
+        row = cursor.fetchone()
+        if row and 'respectful' not in (row[1] or '').lower():
+            cursor.execute("""
+                UPDATE activity SET
+                    description = 'Best time: 5:30-7:00 PM as geiko/maiko walk to engagements. Be respectful — do not chase, block, or photograph them up close. They are working professionals.'
+                WHERE id = ?
+            """, (row[0],))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Be respectful%' AND day_id = ?", (day9_id,))
+
+    if day13_id:
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%quiet ramen shop%' AND day_id = ?", (day13_id,))
+
+    day6_id = _day_id(cursor, 6)
+    if day6_id:
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Breakfast%Included at ryokan%' AND day_id = ?", (day6_id,))
+
+    conn.commit()
+
+    # ---- PHASE 4: Fold sub-notes into parent descriptions ----
+
+    # Black eggs → Hakone Loop
+    if day4_id:
+        cursor.execute("SELECT id, description FROM activity WHERE title LIKE '%Hakone Loop%' AND day_id = ?", (day4_id,))
+        row = cursor.fetchone()
+        if row and 'black' not in (row[1] or '').lower():
+            cursor.execute("""
+                UPDATE activity SET description = description || ' Try the black sulfur eggs at Owakudani — cooked in volcanic steam, supposedly add 7 years to your life!'
+                WHERE id = ?
+            """, (row[0],))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%black sulfur eggs%' AND day_id = ?", (day4_id,))
+
+    # Apple butter → morning market
+    if day6_id:
+        cursor.execute("SELECT id, description FROM activity WHERE title LIKE '%Miyagawa Morning Market%' AND day_id = ?", (day6_id,))
+        row = cursor.fetchone()
+        if row and 'apple' not in (row[1] or '').lower():
+            cursor.execute("""
+                UPDATE activity SET description = 'Opens 6 AM, runs until noon. Try apple butter, mountain vegetable pickles, handmade crafts from local artisans.'
+                WHERE id = ?
+            """, (row[0],))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%apple butter%' AND day_id = ?", (day6_id,))
+
+    # Walk farmhouses + Wada House → Shirakawa-go
+    if day7_id:
+        cursor.execute("SELECT id, description FROM activity WHERE title LIKE '%Shirakawa-go%Village%' AND day_id = ?", (day7_id,))
+        row = cursor.fetchone()
+        if row and 'farmhouses' not in (row[1] or '').lower():
+            cursor.execute("""
+                UPDATE activity SET description = 'Explore 2-3 hours. Walk among gassho-zukuri farmhouses — steep thatched roofs built 250+ years ago. Visit Wada House (largest preserved farmhouse, ~¥300).'
+                WHERE id = ?
+            """, (row[0],))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Walk among gassho%' AND day_id = ?", (day7_id,))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%Wada House%' AND day_id = ?", (day7_id,))
+
+    # Teahouse note → Higashi Chaya
+    if day7_id:
+        cursor.execute("SELECT id, description FROM activity WHERE title LIKE '%Higashi Chaya%' AND day_id = ?", (day7_id,))
+        row = cursor.fetchone()
+        if row and 'open to visitors' not in (row[1] or '').lower():
+            cursor.execute("""
+                UPDATE activity SET description = 'Atmospheric wooden teahouses lit by warm lanterns at dusk. Some teahouses are open to visitors during the day; at night, just walk and absorb the atmosphere.'
+                WHERE id = ?
+            """, (row[0],))
+        cursor.execute("DELETE FROM activity WHERE title LIKE '%teahouses are open%' AND day_id = ?", (day7_id,))
+
+    conn.commit()
+
+    # ---- PHASE 5: Fix incorrect data ----
+
+    # Rename "Off the beaten path" to "D.T. Suzuki Museum"
+    if day8_id:
+        cursor.execute("""
+            UPDATE activity SET
+                title = 'D.T. Suzuki Museum',
+                description = 'Serene, minimalist museum of Zen Buddhism with a stunning reflective water garden. Perfect for quiet contemplation. One of the most beautiful small museums in Japan.'
+            WHERE title LIKE '%Off the beaten path%' AND day_id = ?
+        """, (day8_id,))
+
+    # Fix check-in/out not optional
+    if day8_id:
+        cursor.execute("UPDATE activity SET is_optional = 0 WHERE title LIKE '%Check into Tsukiya%' AND day_id = ? AND is_optional = 1", (day8_id,))
+    if day7_id:
+        cursor.execute("UPDATE activity SET is_optional = 0 WHERE title LIKE '%Check out of TAKANOYU%' AND day_id = ? AND is_optional = 1", (day7_id,))
+
+    # Fix teamLab URL
+    cursor.execute("""
+        UPDATE activity SET
+            url = 'https://www.teamlab.art/e/kyoto/',
+            maps_url = 'https://www.google.com/maps/search/?api=1&query=teamLab+Biovortex+Kyoto',
+            notes = 'Book at teamlab.art/e/kyoto/ — timed entry, sells out. Allow 2.5-3 hours. Extended April hours: open until 9:30 PM.'
+        WHERE title LIKE '%teamLab%Biovortex%' AND (url LIKE '%planets%' OR url IS NULL)
+    """)
+
+    conn.commit()
+
+    # ---- PHASE 6: Add categories to all activities ----
+    category_rules = [
+        ('logistics', ['%Arrive DTW%', '%Get up and walk%', '%Welcome Suica%', '%Check into%', '%Check out%',
+                        '%Haneda Airport%', '%UA876%', '%K%s House%', '%Kaname Inn%']),
+        ('food', ['%dinner%', '%ramen%', '%Lunch%', '%okonomiyaki%', '%kaisendon%', '%Omicho Market%dinner%',
+                  '%kaiseki%', '%Hida beef sushi%', '%Golden Gai%', '%Omoide Yokocho%', '%Pontocho%',
+                  '%Kyoto dinner%', '%Gion area restaurant%', '%Kuromon Market%', '%Dotonbori%',
+                  '%Nishiki Market%', '%gold leaf ice cream%', '%Tsukiji%', '%omiyage%']),
+        ('temple', ['%Senso-ji%', '%Meiji Shrine%', '%Fushimi Inari%', '%Kiyomizu-dera%', '%Byodo-in%',
+                     '%Kinkaku-ji%', '%Tenryu-ji%', '%Itsukushima%', '%NIKKO%']),
+        ('nature', ['%Hakone Loop%', '%onsen%', '%Tenzan Tohji%', '%Bamboo Grove%', '%Togetsukyo%',
+                     '%Monkey Park%', '%Philosopher%Path%', '%Kamo River%', '%Sai River%',
+                     '%observation deck%']),
+        ('culture', ['%Shibuya Crossing%', '%Tokyo Skytree%', '%Hida Folk Village%', '%Sanmachi%',
+                      '%Takayama Jinya%', '%old streets at night%', '%Shirakawa-go%Village%',
+                      '%Kanazawa Castle%', '%Higashi Chaya%', '%21st Century Museum%', '%D.T. Suzuki%',
+                      '%Orientation walk%', '%Hiroshima Peace%', '%Osaka Castle%', '%Shinsekai%',
+                      '%Kimono%', '%Evening walk%', '%Hanamikoji%', '%Sleep in%', '%HIMEJI%',
+                      '%explore%Shinjuku%']),
+        ('shopping', ['%Harajuku%', '%Sannenzaka%', '%Craft shops%', '%Quick shopping%',
+                       '%Don Quijote%', '%Uniqlo%', '%Miyagawa Morning Market%', '%Itsukushima Shrine%']),
+        ('nightlife', ['%Golden Gai%']),
+        ('transit', ['%Shinkansen%', '%Hida Limited Express%', '%Keikyu Line%Shinagawa%', '%SKIP KANAZAWA%']),
+        ('entertainment', ['%teamLab%']),
+    ]
+    for cat, patterns in category_rules:
+        for pat in patterns:
+            cursor.execute("UPDATE activity SET category = ? WHERE title LIKE ? AND (category IS NULL OR category = '')", (cat, pat))
+
+    conn.commit()
+
+    # ---- PHASE 7: Add maps_url to key activities ----
+    maps_rules = [
+        ('%Senso-ji%', 'Senso-ji+Temple+Asakusa+Tokyo'),
+        ('%Meiji Shrine%', 'Meiji+Shrine+Shibuya+Tokyo'),
+        ('%Harajuku%', 'Takeshita+Street+Harajuku+Tokyo'),
+        ('%Shibuya Crossing%', 'Shibuya+Crossing+Tokyo'),
+        ('%Golden Gai%', 'Golden+Gai+Shinjuku+Tokyo'),
+        ('%Omoide Yokocho%', 'Omoide+Yokocho+Shinjuku+Tokyo'),
+        ('%Tenzan Tohji%', 'Tenzan+Tohji-kyo+Hakone'),
+        ('%Miyagawa Morning Market%', 'Miyagawa+Morning+Market+Takayama'),
+        ('%Hida Folk Village%', 'Hida+no+Sato+Takayama'),
+        ('%Sanmachi Suji%', 'Sanmachi+Suji+Takayama'),
+        ('%Takayama Jinya%', 'Takayama+Jinya'),
+        ('%Shirakawa-go%Village%', 'Shirakawa-go+Village'),
+        ('%observation deck%', 'Shirakawa-go+Observation+Deck'),
+        ('%Higashi Chaya%', 'Higashi+Chaya+District+Kanazawa'),
+        ('%21st Century Museum%', '21st+Century+Museum+Contemporary+Art+Kanazawa'),
+        ('%D.T. Suzuki Museum%', 'D.T.+Suzuki+Museum+Kanazawa'),
+        ('%Kamo River%', 'Kamo+River+Sanjo+Kyoto'),
+        ('%Pontocho Alley%', 'Pontocho+Alley+Kyoto'),
+        ('%Fushimi Inari%', 'Fushimi+Inari+Taisha+Kyoto'),
+        ('%Byodo-in%', 'Byodo-in+Temple+Uji+Kyoto'),
+        ('%Kiyomizu-dera%', 'Kiyomizu-dera+Temple+Kyoto'),
+        ('%Hanamikoji%', 'Hanamikoji+Street+Gion+Kyoto'),
+        ('%Kinkaku-ji%', 'Kinkaku-ji+Golden+Pavilion+Kyoto'),
+        ('%Bamboo Grove%', 'Arashiyama+Bamboo+Grove+Kyoto'),
+        ('%Tenryu-ji%', 'Tenryu-ji+Temple+Arashiyama+Kyoto'),
+        ('%Nishiki Market%', 'Nishiki+Market+Kyoto'),
+        ('%Hiroshima Peace%', 'Hiroshima+Peace+Memorial+Park'),
+        ('%Itsukushima Torii%', 'Itsukushima+Shrine+Miyajima'),
+        ('%Osaka Castle%', 'Osaka+Castle+Park'),
+        ('%Kuromon Market%', 'Kuromon+Market+Osaka'),
+        ('%Shinsekai%', 'Shinsekai+Osaka'),
+        ('%Dotonbori%', 'Dotonbori+Osaka'),
+    ]
+    for title_pat, query in maps_rules:
+        maps_url = f'https://www.google.com/maps/search/?api=1&query={query}'
+        cursor.execute("UPDATE activity SET maps_url = ? WHERE title LIKE ? AND (maps_url IS NULL OR maps_url = '')",
+                       (maps_url, title_pat))
+
+    conn.commit()
+
+    # ---- PHASE 8: Re-sort activities per day ----
+    for day_num in range(1, 15):
+        did = _day_id(cursor, day_num)
+        if not did:
+            continue
+        cursor.execute("""
+            SELECT id FROM activity WHERE day_id = ?
+            ORDER BY
+                CASE time_slot WHEN 'morning' THEN 1 WHEN 'afternoon' THEN 2
+                               WHEN 'evening' THEN 3 WHEN 'night' THEN 4 ELSE 5 END,
+                sort_order
+        """, (did,))
+        rows = cursor.fetchall()
+        for i, (aid,) in enumerate(rows):
+            cursor.execute("UPDATE activity SET sort_order = ? WHERE id = ?", (i + 1, aid))
 
     conn.commit()
