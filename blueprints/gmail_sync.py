@@ -139,10 +139,11 @@ def approve_all():
     return jsonify({'ok': True, 'results': results, 'count': len(results)})
 
 
-def start_auto_sync(app, interval_hours=6):
+def start_auto_sync(app, interval_hours=2):
     """Start background auto-sync thread.
 
-    Called from app factory. Runs every interval_hours.
+    Called from app factory. Syncs every interval_hours (default 2h).
+    Frequency is high enough to catch boarding passes (sent ~24h before flight).
     """
     import time
 

@@ -19,8 +19,11 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 # Search queries for travel-related emails
 TRAVEL_QUERIES = [
-    # Flights
+    # Flights — receipts, itineraries, confirmations
     'subject:(flight receipt OR eTicket OR itinerary) (Delta OR United OR "DL275" OR "DL5392" OR "UA876" OR "UA1470" OR "HBPF75" OR "I91ZHJ") after:2025/06/01',
+    # Boarding passes & check-in
+    'subject:(boarding pass OR "check-in" OR "checked in" OR "mobile boarding" OR "your trip") (Delta OR United OR "DL275" OR "DL5392" OR "UA876" OR "UA1470") after:2026/03/01',
+    'from:(delta.com OR united.com) subject:(boarding OR "check in" OR "ready to go" OR "trip is coming") after:2026/03/01',
     # Accommodations
     'subject:(booking confirmation OR reservation confirmed OR "your receipt") (Agoda OR Airbnb) after:2025/06/01',
     # Broader travel bookings
@@ -30,22 +33,39 @@ TRAVEL_QUERIES = [
     # Cancellations
     'subject:(cancelled OR canceled OR cancellation) (airbnb OR agoda OR hotel OR flight) after:2025/06/01',
     # JR Pass, activities, tickets
-    'subject:(order confirmation OR booking confirmation OR e-ticket) (JR Pass OR Japan Rail OR klook OR viator OR GetYourGuide) after:2025/06/01',
+    'subject:(order confirmation OR booking confirmation OR e-ticket) (JR Pass OR "Japan Rail" OR klook OR viator OR GetYourGuide) after:2025/06/01',
     # Train reservations
-    'subject:(reservation OR seat reservation OR ticket) (shinkansen OR "bullet train" OR "japan rail" OR JR) after:2025/06/01',
+    'subject:(reservation OR "seat reservation" OR ticket) (shinkansen OR "bullet train" OR "japan rail" OR JR) after:2025/06/01',
+    # Restaurant reservations
+    'subject:(reservation OR booking OR "your table") (restaurant OR omakase OR izakaya OR ramen OR sushi OR kaiseki OR yakitori) Japan after:2025/06/01',
+    '(from:tablecheck OR from:tabelog OR from:toreta OR from:opentable) subject:(reservation OR confirmation) after:2025/06/01',
+    # Activity & experience bookings
+    '(from:klook OR from:viator OR from:getyourguide OR from:airbnb.com) subject:(experience OR activity OR tour OR ticket OR booking) Japan after:2025/06/01',
+    'subject:(order confirmation OR booking confirmation OR e-ticket) (tea ceremony OR kimono OR cooking class OR sumo OR shrine OR temple OR onsen) after:2025/06/01',
+    # General Japan travel
+    'subject:(confirmation OR reservation OR receipt OR ticket) Japan (Tokyo OR Kyoto OR Osaka OR Takayama OR Hiroshima OR Hakone OR Miyajima) after:2025/06/01',
 ]
 
 # Extraction prompt for Claude
-EXTRACTION_PROMPT_TEMPLATE = """You are a travel booking data extractor. Analyze this email and extract structured booking data.
+EXTRACTION_PROMPT_TEMPLATE = """You are a travel booking data extractor for a Japan trip (April 5-18, 2026).
+Analyze this email and extract structured booking data.
+
+Context — these are the confirmed bookings to match against:
+- Flights: DL5392 CLE->DTW, DL275 DTW->HND (Apr 5, conf HBPF75), UA876 HND->SFO, UA1470 SFO->CLE (Apr 18, conf I91ZHJ)
+- Tokyo: Sotetsu Fresa Inn, Apr 6-9, Agoda #976558450
+- Takayama: TAKANOYU, Apr 9-12, Airbnb #HMDDRX4NFX
+- Kyoto Stay 1: Tsukiya-Mikazuki, Apr 12-14, Airbnb #HMXTP9H2Z9
+- Kyoto Stay 2: KumoMachiya KOSUGI, Apr 14-16, Airbnb #HMYR9JPSN4
+- Osaka: Hotel The Leben, Apr 16-18, Agoda #976698966
 
 Return a JSON object with these fields (omit fields that aren't present):
 
 ```
-"type": "accommodation" | "flight" | "cancellation" | "activity_ticket" | "transport_ticket" | "other"
-"action": "new_booking" | "update" | "cancellation" | "confirmation" | "info"
+"type": one of: "boarding_pass", "flight", "accommodation", "restaurant", "activity_ticket", "transport_ticket", "cancellation", "other"
+"action": "new_booking" | "update" | "cancellation" | "confirmation" | "check_in" | "boarding_pass" | "info"
 "property_name": "hotel/property name"
 "confirmation_number": "booking reference"
-"platform": "Airbnb" | "Agoda" | "Booking.com" | "Priceline" | etc
+"platform": "Airbnb" | "Agoda" | "Delta" | "United" | etc
 "check_in_date": "YYYY-MM-DD"
 "check_out_date": "YYYY-MM-DD"
 "check_in_time": "e.g. 4:00 PM"
@@ -65,20 +85,34 @@ Return a JSON object with these fields (omit fields that aren't present):
 "departure_date": "YYYY-MM-DD"
 "departure_time": "HH:MM"
 "arrival_time": "HH:MM"
+"gate": "gate number if shown"
+"seat": "seat assignment if shown"
+"boarding_group": "boarding group/zone"
 "passenger_name": "name on booking"
-"activity_name": "activity/tour name"
+"activity_name": "activity/tour/experience name"
 "activity_date": "YYYY-MM-DD"
 "activity_time": "HH:MM"
-"venue": "venue name"
+"activity_duration": "e.g. 2 hours"
+"venue": "venue/restaurant name"
+"restaurant_name": "restaurant name"
+"party_size": number of diners
 "special_instructions": "any check-in instructions, door codes, luggage rules, etc."
 "house_rules": "quiet hours, max guests, etc."
-"notes": "any other important details"
+"notes": "any other important details (gate changes, delays, special requests, dietary notes)"
+"has_attachment": true if email has PDF/image attachments worth saving
 "cancelled_property": "name of cancelled property if this is a cancellation"
 "cancelled_confirmation": "confirmation # of cancelled booking"
 ```
 
-Only include fields that are clearly stated in the email. Do not guess or infer missing data.
-Return valid JSON only. If this email is not travel-related, return: {"type": "other", "action": "info"}
+IMPORTANT RULES:
+- Only include fields clearly stated in the email. Do not guess.
+- Boarding passes: extract gate, seat, boarding group, and departure time. Set type="boarding_pass".
+- Restaurant reservations: extract restaurant_name, activity_date, activity_time, party_size, address. Set type="restaurant".
+- Activity/experience bookings: extract activity_name, activity_date, activity_time, venue, confirmation_number. Set type="activity_ticket".
+- If the email has PDF attachments (boarding pass PDFs, tickets, receipts), set "has_attachment": true.
+- Match flights by flight number (DL5392, DL275, UA876, UA1470) when possible.
+- Match accommodations by confirmation number or property name.
+- Return valid JSON only. If not travel-related: {"type": "other", "action": "info"}
 
 EMAIL SUBJECT: <<SUBJECT>>
 EMAIL FROM: <<SENDER>>
@@ -438,27 +472,201 @@ def diff_against_db(extracted, db_state):
                         'current': current,
                     })
 
-    elif etype == 'activity_ticket':
-        activity_name = extracted.get('activity_name', '')
+    elif etype == 'boarding_pass':
+        flight_num = extracted.get('flight_number', '')
+        for fl in db_state.get('flights', []):
+            if flight_num and flight_num.upper() in fl['flight_number'].upper():
+                # Build notes with boarding pass details
+                bp_parts = []
+                if extracted.get('gate'):
+                    bp_parts.append(f"Gate: {extracted['gate']}")
+                if extracted.get('seat'):
+                    bp_parts.append(f"Seat: {extracted['seat']}")
+                if extracted.get('boarding_group'):
+                    bp_parts.append(f"Group: {extracted['boarding_group']}")
+                if extracted.get('departure_time'):
+                    bp_parts.append(f"Departs: {extracted['departure_time']}")
+                bp_info = ' | '.join(bp_parts) if bp_parts else 'Boarding pass received'
+
+                changes.append({
+                    'change_type': 'update',
+                    'entity_type': 'flight',
+                    'entity_id': fl['id'],
+                    'description': f"Boarding pass for {fl['flight_number']}: {bp_info}",
+                    'fields': {
+                        'notes': bp_info,
+                        **(({'depart_time': extracted['departure_time']}
+                            if extracted.get('departure_time') and
+                            extracted['departure_time'] != fl.get('depart_time') else {})),
+                    },
+                    'current': {'notes': fl.get('notes', '')},
+                })
+                # Flag that attachments should be saved
+                if extracted.get('has_attachment'):
+                    changes.append({
+                        'change_type': 'upload',
+                        'entity_type': 'document',
+                        'entity_id': fl['id'],
+                        'description': f"Save boarding pass PDF for {fl['flight_number']}",
+                        'fields': {'doc_type': 'boarding_pass', 'linked_flight_id': fl['id']},
+                        'current': {},
+                    })
+                break
+
+    elif etype == 'restaurant':
+        restaurant_name = extracted.get('restaurant_name') or extracted.get('venue', '')
         activity_date = extracted.get('activity_date', '')
-        if activity_name:
+        activity_time = extracted.get('activity_time', '')
+        party_size = extracted.get('party_size', '')
+        if restaurant_name:
+            notes_parts = []
+            if extracted.get('confirmation_number'):
+                notes_parts.append(f"Conf: {extracted['confirmation_number']}")
+            if party_size:
+                notes_parts.append(f"Party of {party_size}")
+            if extracted.get('notes'):
+                notes_parts.append(extracted['notes'])
             changes.append({
                 'change_type': 'create',
                 'entity_type': 'activity',
                 'entity_id': None,
-                'description': f"New ticketed activity: {activity_name} on {activity_date or '?'}",
+                'description': f"Restaurant reservation: {restaurant_name} on {activity_date or '?'} at {activity_time or '?'}",
                 'fields': {
-                    'title': activity_name,
+                    'title': f"Dinner: {restaurant_name}" if not restaurant_name.startswith('Dinner') else restaurant_name,
                     'date': activity_date,
-                    'time': extracted.get('activity_time'),
-                    'venue': extracted.get('venue'),
+                    'time': activity_time,
+                    'category': 'food',
+                    'address': extracted.get('address'),
+                    'venue': restaurant_name,
                     'confirmation_number': extracted.get('confirmation_number'),
-                    'notes': extracted.get('notes'),
+                    'notes': ' | '.join(notes_parts) if notes_parts else None,
+                    'book_ahead': True,
+                    'book_ahead_note': f"Reserved via {extracted.get('platform', 'restaurant')}"
+                                       + (f", conf {extracted['confirmation_number']}" if extracted.get('confirmation_number') else ''),
                 },
                 'current': {},
             })
 
+    elif etype == 'activity_ticket':
+        activity_name = extracted.get('activity_name', '')
+        activity_date = extracted.get('activity_date', '')
+        if activity_name:
+            notes_parts = []
+            if extracted.get('confirmation_number'):
+                notes_parts.append(f"Conf: {extracted['confirmation_number']}")
+            if extracted.get('activity_duration'):
+                notes_parts.append(f"Duration: {extracted['activity_duration']}")
+            if extracted.get('notes'):
+                notes_parts.append(extracted['notes'])
+            changes.append({
+                'change_type': 'create',
+                'entity_type': 'activity',
+                'entity_id': None,
+                'description': f"New activity: {activity_name} on {activity_date or '?'}",
+                'fields': {
+                    'title': activity_name,
+                    'date': activity_date,
+                    'time': extracted.get('activity_time'),
+                    'address': extracted.get('address'),
+                    'venue': extracted.get('venue'),
+                    'confirmation_number': extracted.get('confirmation_number'),
+                    'notes': ' | '.join(notes_parts) if notes_parts else None,
+                    'book_ahead': True,
+                    'book_ahead_note': f"Booked via {extracted.get('platform', 'online')}"
+                                       + (f", conf {extracted['confirmation_number']}" if extracted.get('confirmation_number') else ''),
+                },
+                'current': {},
+            })
+
+    elif etype == 'transport_ticket':
+        notes_parts = []
+        if extracted.get('confirmation_number'):
+            notes_parts.append(f"Conf: {extracted['confirmation_number']}")
+        if extracted.get('notes'):
+            notes_parts.append(extracted['notes'])
+        train_name = extracted.get('activity_name') or extracted.get('notes', '')
+        changes.append({
+            'change_type': 'create',
+            'entity_type': 'transport',
+            'entity_id': None,
+            'description': f"Transport ticket: {train_name or 'train'} on {extracted.get('activity_date', '?')}",
+            'fields': {
+                'name': train_name,
+                'date': extracted.get('activity_date'),
+                'time': extracted.get('activity_time'),
+                'confirmation_number': extracted.get('confirmation_number'),
+                'notes': ' | '.join(notes_parts) if notes_parts else None,
+            },
+            'current': {},
+        })
+
     return changes
+
+
+def download_and_upload_attachments(service, content, extracted, app):
+    """Download email attachments and upload them to the app's document system.
+
+    Returns list of uploaded document IDs.
+    """
+    if not extracted.get('has_attachment') or not content.get('attachments'):
+        return []
+
+    from models import db, Document
+    import uuid
+    from werkzeug.utils import secure_filename
+
+    uploaded_ids = []
+    docs_folder = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), 'documents')
+    os.makedirs(docs_folder, exist_ok=True)
+
+    # Determine doc_type from extracted type
+    type_map = {
+        'boarding_pass': 'flight_receipt',
+        'flight': 'flight_receipt',
+        'accommodation': 'accommodation_booking',
+        'restaurant': 'activity_ticket',
+        'activity_ticket': 'activity_ticket',
+        'transport_ticket': 'transport_ticket',
+    }
+    doc_type = type_map.get(extracted.get('type', ''), 'other')
+
+    for att in content['attachments']:
+        fname = att.get('filename', '')
+        # Only download PDFs and images
+        ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
+        if ext not in ('pdf', 'png', 'jpg', 'jpeg', 'webp'):
+            continue
+
+        try:
+            result = service.users().messages().attachments().get(
+                userId='me',
+                messageId=content['id'],
+                id=att['attachment_id'],
+            ).execute()
+            data = base64.urlsafe_b64decode(result['data'])
+
+            safe_name = secure_filename(fname)
+            unique_name = f"{uuid.uuid4().hex[:8]}__{safe_name}"
+            filepath = os.path.join(docs_folder, unique_name)
+
+            with open(filepath, 'wb') as f:
+                f.write(data)
+
+            doc = Document(
+                filename=unique_name,
+                original_name=safe_name,
+                file_type=ext,
+                file_size=len(data),
+                doc_type=doc_type,
+                notes=f"Auto-imported from Gmail: {content.get('subject', '')[:200]}",
+            )
+            db.session.add(doc)
+            db.session.commit()
+            uploaded_ids.append(doc.id)
+        except Exception:
+            continue
+
+    return uploaded_ids
 
 
 def get_db_state():
@@ -494,6 +702,7 @@ def get_db_state():
             'confirmation_number': fl.confirmation_number,
             'depart_time': fl.depart_time,
             'arrive_time': fl.arrive_time,
+            'notes': fl.notes,
             'document_id': fl.document_id,
         })
 
@@ -557,7 +766,18 @@ def run_sync(app):
                         db.session.add(skip)
                         continue
 
+                    # Download and upload attachments if the email has them
+                    uploaded_doc_ids = []
+                    if extracted.get('has_attachment') and content.get('attachments'):
+                        uploaded_doc_ids = download_and_upload_attachments(
+                            service, content, extracted, app)
+
                     proposed = diff_against_db(extracted, db_state)
+
+                    # For upload-type changes, attach the uploaded doc IDs
+                    for change in proposed:
+                        if change.get('change_type') == 'upload' and uploaded_doc_ids:
+                            change['fields']['uploaded_doc_ids'] = uploaded_doc_ids
 
                     if not proposed:
                         # Email is travel-related but no changes needed
