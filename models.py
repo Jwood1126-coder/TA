@@ -334,6 +334,36 @@ class ChatMessage(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class GmailSyncLog(db.Model):
+    """Log of Gmail sync runs."""
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    status = db.Column(db.String(20), default='running')  # running, completed, failed
+    emails_found = db.Column(db.Integer, default=0)
+    changes_detected = db.Column(db.Integer, default=0)
+    errors = db.Column(db.Text)
+
+
+class PendingGmailChange(db.Model):
+    """A proposed change detected from a Gmail email, awaiting user review."""
+    id = db.Column(db.Integer, primary_key=True)
+    gmail_message_id = db.Column(db.String(100), nullable=False)
+    email_subject = db.Column(db.String(500))
+    email_from = db.Column(db.String(200))
+    email_date = db.Column(db.String(100))
+    change_type = db.Column(db.String(20), nullable=False)  # create, update, cancel, none
+    entity_type = db.Column(db.String(30), nullable=False)  # accommodation, flight, activity, transport, other
+    entity_id = db.Column(db.Integer)  # FK to the record being updated (null for creates)
+    description = db.Column(db.String(500), nullable=False)
+    proposed_data = db.Column(db.Text)  # JSON of proposed field values
+    current_data = db.Column(db.Text)   # JSON of current field values (for comparison)
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected, skipped, failed
+    detected_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime)
+    errors = db.Column(db.Text)
+
+
 class ReferenceContent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     section = db.Column(db.String(100), nullable=False)

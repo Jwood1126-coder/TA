@@ -53,6 +53,7 @@ def create_app(run_data_migrations=True):
     from blueprints.export import export_bp
     from blueprints.bookahead import bookahead_bp
     from blueprints.calendar import calendar_bp
+    from blueprints.gmail_sync import gmail_sync_bp
 
     app.register_blueprint(itinerary_bp)
     app.register_blueprint(accommodations_bp)
@@ -66,12 +67,21 @@ def create_app(run_data_migrations=True):
     app.register_blueprint(export_bp)
     app.register_blueprint(bookahead_bp)
     app.register_blueprint(calendar_bp)
+    app.register_blueprint(gmail_sync_bp)
 
     # --- Template filters ---
     @app.template_filter('maps_link')
     def maps_link_filter(address):
         from urllib.parse import quote
         return f"https://www.google.com/maps/search/?api=1&query={quote(address)}"
+
+    @app.template_filter('from_json')
+    def from_json_filter(s):
+        import json
+        try:
+            return json.loads(s) if s else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
 
     @app.template_filter('translate_link')
     def translate_link_filter(url):
@@ -193,6 +203,14 @@ def create_app(run_data_migrations=True):
             except Exception as e:
                 print(f"ERROR: document seeding failed: {e}")
                 traceback.print_exc()
+
+    # --- Start Gmail auto-sync (every 6 hours, background thread) ---
+    if run_data_migrations:
+        try:
+            from blueprints.gmail_sync import start_auto_sync
+            start_auto_sync(app, interval_hours=6)
+        except Exception:
+            pass  # Gmail sync is optional — don't block startup
 
     return app
 

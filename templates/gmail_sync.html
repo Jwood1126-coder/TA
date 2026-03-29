@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Gmail Sync — Japan 2026{% endblock %}
+
+{% block page_css %}
+<style>
+.sync-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.sync-header h2 { margin:0; font-size:1.3rem; }
+.sync-status { font-size:0.85rem; color:var(--pico-muted-color); }
+.sync-status .connected { color:#2a9d2a; }
+.sync-status .disconnected { color:#d32f2f; }
+.sync-btn { padding:8px 16px; border-radius:8px; border:none; cursor:pointer; font-size:0.9rem; font-weight:600; }
+.sync-btn-primary { background:var(--accent, #e8a0b4); color:#fff; }
+.sync-btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+.sync-btn-sm { padding:6px 12px; font-size:0.8rem; border-radius:6px; }
+.sync-btn-approve { background:#2a9d2a; color:#fff; border:none; cursor:pointer; }
+.sync-btn-reject { background:#d32f2f; color:#fff; border:none; cursor:pointer; }
+.sync-btn-approve-all { background:#1976d2; color:#fff; border:none; cursor:pointer; }
+
+.change-card { background:var(--pico-card-background-color); border-radius:10px; padding:14px; margin-bottom:10px;
+    border-left:4px solid var(--accent, #e8a0b4); }
+.change-card.type-update { border-left-color:#1976d2; }
+.change-card.type-cancel { border-left-color:#d32f2f; }
+.change-card.type-create { border-left-color:#2a9d2a; }
+.change-card.approved { opacity:0.6; border-left-color:#888; }
+
+.change-meta { font-size:0.78rem; color:var(--pico-muted-color); margin-bottom:6px; }
+.change-desc { font-size:0.95rem; font-weight:600; margin-bottom:8px; }
+.change-detail { font-size:0.82rem; color:var(--pico-muted-color); margin-bottom:8px; }
+.change-detail code { background:var(--pico-code-background-color); padding:1px 4px; border-radius:3px; font-size:0.78rem; }
+.change-actions { display:flex; gap:8px; }
+
+.section-label { font-size:0.85rem; font-weight:600; color:var(--pico-muted-color); text-transform:uppercase; letter-spacing:0.5px;
+    margin:20px 0 8px; padding-bottom:4px; border-bottom:1px solid var(--pico-muted-border-color); }
+
+.empty-state { text-align:center; padding:30px 16px; color:var(--pico-muted-color); font-size:0.9rem; }
+
+.sync-spinner { display:inline-block; width:16px; height:16px; border:2px solid #fff; border-top-color:transparent;
+    border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:6px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.72rem; font-weight:600; }
+.badge-pending { background:#fff3cd; color:#856404; }
+.badge-approved { background:#d4edda; color:#155724; }
+.badge-rejected { background:#f8d7da; color:#721c24; }
+.badge-skipped { background:#e2e3e5; color:#383d41; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sync-header">
+    <div>
+        <h2>Gmail Sync</h2>
+        <div class="sync-status">
+            {% if gmail_connected %}
+                <span class="connected">Connected</span>
+            {% else %}
+                <span class="disconnected">Not connected</span> — set GMAIL_TOKEN_JSON env var
+            {% endif %}
+            {% if last_sync %}
+                &middot; Last sync: {{ last_sync.started_at.strftime('%b %d, %H:%M') if last_sync.started_at else 'never' }}
+                ({{ last_sync.emails_found or 0 }} emails, {{ last_sync.changes_detected or 0 }} changes)
+            {% endif %}
+        </div>
+    </div>
+    <div style="display:flex; gap:8px;">
+        {% if pending|length > 1 %}
+        <button class="sync-btn sync-btn-sm sync-btn-approve-all" onclick="approveAll()">Approve All ({{ pending|length }})</button>
+        {% endif %}
+        <button class="sync-btn sync-btn-primary" id="syncBtn" onclick="triggerSync()" {% if not gmail_connected %}disabled{% endif %}>
+            Sync Now
+        </button>
+    </div>
+</div>
+
+{% if pending %}
+<div class="section-label">Pending Review ({{ pending|length }})</div>
+{% for change in pending %}
+<div class="change-card type-{{ change.change_type }}" id="change-{{ change.id }}">
+    <div class="change-meta">
+        {{ change.email_subject[:60] }}{% if change.email_subject|length > 60 %}...{% endif %}
+        &middot; {{ change.email_date[:20] if change.email_date else '' }}
+        <span class="badge badge-pending">{{ change.change_type }}</span>
+        <span class="badge" style="background:#e3f2fd; color:#0d47a1;">{{ change.entity_type }}</span>
+    </div>
+    <div class="change-desc">{{ change.description }}</div>
+    {% if change.proposed_data %}
+    <div class="change-detail">
+        <strong>Proposed:</strong>
+        {% for key, val in (change.proposed_data | from_json).items() %}
+            {% if val %}<code>{{ key }}={{ val }}</code> {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if change.current_data and change.current_data != '{}' %}
+    <div class="change-detail">
+        <strong>Current:</strong>
+        {% for key, val in (change.current_data | from_json).items() %}
+            <code>{{ key }}={{ val if val else 'empty' }}</code>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="change-actions">
+        <button class="sync-btn sync-btn-sm sync-btn-approve" onclick="approveChange({{ change.id }})">Approve</button>
+        <button class="sync-btn sync-btn-sm sync-btn-reject" onclick="rejectChange({{ change.id }})">Reject</button>
+    </div>
+</div>
+{% endfor %}
+
+{% elif gmail_connected %}
+<div class="empty-state">
+    No pending changes. Hit "Sync Now" to check Gmail for new bookings.
+</div>
+{% else %}
+<div class="empty-state">
+    Gmail is not connected. Add your OAuth token to Railway env vars to enable sync.
+</div>
+{% endif %}
+
+{% if recent_approved %}
+<div class="section-label">Recently Applied</div>
+{% for change in recent_approved %}
+<div class="change-card approved">
+    <div class="change-meta">
+        {{ change.email_subject[:60] }}{% if change.email_subject|length > 60 %}...{% endif %}
+        <span class="badge badge-approved">approved</span>
+    </div>
+    <div class="change-desc">{{ change.description }}</div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if recent_skipped %}
+<div class="section-label">Skipped (no changes needed)</div>
+{% for change in recent_skipped %}
+<div class="change-card" style="border-left-color:#ccc; opacity:0.5;">
+    <div class="change-meta">{{ change.email_subject[:60] }}{% if change.email_subject|length > 60 %}...{% endif %}</div>
+    <div class="change-desc" style="font-weight:400; font-size:0.85rem;">{{ change.description }}</div>
+</div>
+{% endfor %}
+{% endif %}
+
+<script>
+async function triggerSync() {
+    const btn = document.getElementById('syncBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="sync-spinner"></span> Syncing...';
+    try {
+        const resp = await fetch('/api/gmail/sync', { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            btn.innerHTML = 'Syncing...';
+            // Wait a moment then reload to show results
+            setTimeout(() => location.reload(), 3000);
+        } else {
+            btn.textContent = 'Error: ' + (data.error || 'unknown');
+            setTimeout(() => { btn.textContent = 'Sync Now'; btn.disabled = false; }, 3000);
+        }
+    } catch (e) {
+        btn.textContent = 'Connection error';
+        setTimeout(() => { btn.textContent = 'Sync Now'; btn.disabled = false; }, 3000);
+    }
+}
+
+async function approveChange(id) {
+    const card = document.getElementById('change-' + id);
+    try {
+        const resp = await fetch('/api/gmail/approve/' + id, { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            card.classList.add('approved');
+            card.querySelector('.change-actions').innerHTML = '<span class="badge badge-approved">Applied</span>';
+        } else {
+            alert('Error: ' + (data.error || 'unknown'));
+        }
+    } catch (e) { alert('Connection error'); }
+}
+
+async function rejectChange(id) {
+    const card = document.getElementById('change-' + id);
+    try {
+        const resp = await fetch('/api/gmail/reject/' + id, { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            card.style.display = 'none';
+        } else {
+            alert('Error: ' + (data.error || 'unknown'));
+        }
+    } catch (e) { alert('Connection error'); }
+}
+
+async function approveAll() {
+    if (!confirm('Apply all pending changes?')) return;
+    try {
+        const resp = await fetch('/api/gmail/approve-all', { method: 'POST' });
+        const data = await resp.json();
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'unknown'));
+        }
+    } catch (e) { alert('Connection error'); }
+}
+
+// Listen for sync completion via Socket.IO
+if (typeof io !== 'undefined') {
+    const socket = io();
+    socket.on('gmail_sync_complete', function(data) {
+        if (data.changes_proposed > 0) {
+            location.reload();
+        } else {
+            const btn = document.getElementById('syncBtn');
+            btn.textContent = 'No new changes';
+            setTimeout(() => { btn.textContent = 'Sync Now'; btn.disabled = false; }, 2000);
+        }
+    });
+}
+</script>
+{% endblock %}

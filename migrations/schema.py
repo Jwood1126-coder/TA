@@ -93,6 +93,38 @@ def run_schema_migrations(app):
     _migrate_fix_eliminated_booking_status(cursor, conn)
     _migrate_cancel_kyotofish(cursor, conn)
 
+    # --- Gmail sync tables ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS gmail_sync_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            status TEXT DEFAULT 'running',
+            emails_found INTEGER DEFAULT 0,
+            changes_detected INTEGER DEFAULT 0,
+            errors TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pending_gmail_change (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gmail_message_id TEXT NOT NULL,
+            email_subject TEXT,
+            email_from TEXT,
+            email_date TEXT,
+            change_type TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER,
+            description TEXT NOT NULL,
+            proposed_data TEXT,
+            current_data TEXT,
+            status TEXT DEFAULT 'pending',
+            detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            errors TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
