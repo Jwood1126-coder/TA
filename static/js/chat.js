@@ -4,6 +4,7 @@ const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 let selectedImages = [];
 let selectedModel = localStorage.getItem('chatModel') || 'balanced';
+let lastUserMessage = null; // Track last message for retry
 
 // Session history — persists across page navigations, clears on New Chat or tab close
 let sessionHistory = JSON.parse(sessionStorage.getItem('chatHistory') || '[]');
@@ -72,6 +73,37 @@ function addBubble(role, text, imageUrls) {
     return content;
 }
 
+function addRetryButton() {
+    const retryDiv = document.createElement('div');
+    retryDiv.className = 'chat-retry';
+    retryDiv.innerHTML = '<button class="retry-btn" onclick="retryLastMessage()">Retry</button>';
+    chatMessages.appendChild(retryDiv);
+    scrollToBottom();
+}
+
+function retryLastMessage() {
+    if (!lastUserMessage) return;
+    // Remove the retry button
+    const retryBtns = document.querySelectorAll('.chat-retry');
+    retryBtns.forEach(el => el.remove());
+    // Remove the last error bubble
+    const bubbles = document.querySelectorAll('.chat-bubble.assistant');
+    if (bubbles.length > 0) {
+        const last = bubbles[bubbles.length - 1];
+        const content = last.querySelector('.bubble-content');
+        if (content && content.textContent.startsWith('Error:')) {
+            last.remove();
+        }
+    }
+    // Remove the last user message from session history (it will be re-added)
+    if (sessionHistory.length > 0 && sessionHistory[sessionHistory.length - 1].role === 'user') {
+        sessionHistory.pop();
+        saveSessionHistory();
+    }
+    chatInput.value = lastUserMessage;
+    sendMessage();
+}
+
 function sendQuickPrompt(btn) {
     chatInput.value = btn.textContent;
     sendMessage();
@@ -120,6 +152,7 @@ async function sendMessage() {
     const text = chatInput.value.trim();
     if (!text && selectedImages.length === 0) return;
 
+    lastUserMessage = text; // Save for retry
     chatInput.value = '';
     sessionStorage.removeItem('chatDraft');
     chatInput.style.height = 'auto';
@@ -191,6 +224,24 @@ async function sendMessage() {
             });
         }
 
+        // Check response status before reading stream
+        if (!response.ok) {
+            thinking.remove();
+            let errorMsg = `Server error (${response.status})`;
+            try {
+                const errData = await response.json();
+                if (errData.error) errorMsg = errData.error;
+            } catch (e) { /* ignore parse failure */ }
+            assistantContent = addBubble('assistant', '');
+            assistantContent.textContent = 'Error: ' + errorMsg;
+            addRetryButton();
+            document.removeEventListener('visibilitychange', visHandler);
+            chatInput.disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            chatInput.focus();
+            return;
+        }
+
         // Track user message in session
         sessionHistory.push({ role: 'user', content: text });
         saveSessionHistory();
@@ -235,6 +286,7 @@ async function sendMessage() {
                                 assistantContent = addBubble('assistant', '');
                             }
                             assistantContent.textContent = 'Error: ' + data.error;
+                            addRetryButton();
                         }
                         if (data.done) {
                             document.querySelectorAll('.processing-indicator').forEach(el => el.remove());
@@ -260,6 +312,7 @@ async function sendMessage() {
             }
             assistantContent.textContent = 'Connection error. Please try again.';
         }
+        addRetryButton();
     }
 
     document.removeEventListener('visibilitychange', visHandler);
@@ -291,6 +344,18 @@ if (sessionHistory.length > 0) {
     for (const m of sessionHistory) {
         addBubble(m.role, m.content);
     }
+} else {
+    // Fallback: fetch from server if session is empty (e.g. tab was killed on mobile)
+    fetch('/api/chat/history').then(r => r.json()).then(messages => {
+        if (messages.length > 0) {
+            const welcome = document.querySelector('.chat-welcome');
+            if (welcome) welcome.remove();
+            for (const m of messages) {
+                addBubble(m.role, m.content);
+            }
+            // Don't add to sessionHistory — this is historical, not active context
+        }
+    }).catch(() => { /* silently ignore fetch errors */ });
 }
 
 // Scroll to bottom on load

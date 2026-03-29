@@ -13,6 +13,34 @@ import services.flights as flight_svc
 import services.budget as budget_svc
 
 
+def _fuzzy_find(model_class, name_field, search_term, filters=None):
+    """Find a record by name: exact match first, then ilike contains.
+
+    Returns (match, error_message). error_message is None on success.
+    If multiple matches found, returns (None, error listing matches).
+    """
+    col = getattr(model_class, name_field)
+    base_query = model_class.query
+    if filters:
+        for f in filters:
+            base_query = base_query.filter(f)
+
+    # 1. Try exact match (case-insensitive)
+    exact = base_query.filter(col.ilike(search_term)).first()
+    if exact:
+        return exact, None
+
+    # 2. Try contains match
+    matches = base_query.filter(col.ilike(f"%{search_term}%")).all()
+    if len(matches) == 1:
+        return matches[0], None
+    if len(matches) == 0:
+        return None, None  # caller handles "not found" message
+    # Multiple matches — return error with list
+    names = [getattr(m, name_field) for m in matches]
+    return None, f"Multiple matches for '{search_term}': {', '.join(names)}. Please be more specific."
+
+
 def execute_tool(tool_name, tool_input):
     """Execute a tool call from Claude and return the result."""
     try:
@@ -36,9 +64,9 @@ def execute_tool(tool_name, tool_input):
 
         elif tool_name == "update_accommodation":
             name = tool_input['name']
-            option = AccommodationOption.query.filter(
-                AccommodationOption.name.ilike(f"%{name}%")
-            ).first()
+            option, err = _fuzzy_find(AccommodationOption, 'name', name)
+            if err:
+                return {"success": False, "error": err}
             if not option:
                 return {"success": False, "error": f"Accommodation '{name}' not found"}
             # Build fields dict for the service
@@ -75,9 +103,9 @@ def execute_tool(tool_name, tool_input):
         elif tool_name == "select_accommodation":
             name = tool_input['name']
             select = tool_input.get('select', True)
-            option = AccommodationOption.query.filter(
-                AccommodationOption.name.ilike(f"%{name}%")
-            ).first()
+            option, err = _fuzzy_find(AccommodationOption, 'name', name)
+            if err:
+                return {"success": False, "error": err}
             if not option:
                 return {"success": False, "error": f"Accommodation '{name}' not found"}
             if select:
@@ -90,9 +118,9 @@ def execute_tool(tool_name, tool_input):
 
         elif tool_name == "eliminate_accommodation":
             name = tool_input['name']
-            option = AccommodationOption.query.filter(
-                AccommodationOption.name.ilike(f"%{name}%")
-            ).first()
+            option, err = _fuzzy_find(AccommodationOption, 'name', name)
+            if err:
+                return {"success": False, "error": err}
             if not option:
                 return {"success": False, "error": f"Accommodation '{name}' not found"}
             try:
@@ -117,10 +145,12 @@ def execute_tool(tool_name, tool_input):
                     return {"success": False, "error": str(e)}
                 return {"success": True, "message": f"Added '{activity.title}' to Day {day.day_number}"}
             else:
-                activity = Activity.query.filter(
-                    Activity.day_id == day.id,
-                    Activity.title.ilike(f"%{tool_input['title']}%")
-                ).first()
+                activity, err = _fuzzy_find(
+                    Activity, 'title', tool_input['title'],
+                    filters=[Activity.day_id == day.id]
+                )
+                if err:
+                    return {"success": False, "error": err}
                 if not activity:
                     return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
                 fields = {k: v for k, v in tool_input.items()
@@ -135,10 +165,12 @@ def execute_tool(tool_name, tool_input):
             day = Day.query.filter_by(day_number=tool_input['day_number']).first()
             if not day:
                 return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
-            activity = Activity.query.filter(
-                Activity.day_id == day.id,
-                Activity.title.ilike(f"%{tool_input['title']}%")
-            ).first()
+            activity, err = _fuzzy_find(
+                Activity, 'title', tool_input['title'],
+                filters=[Activity.day_id == day.id]
+            )
+            if err:
+                return {"success": False, "error": err}
             if not activity:
                 return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
             activity = activity_svc.set_completed(activity.id, tool_input['completed'])
@@ -198,9 +230,9 @@ def execute_tool(tool_name, tool_input):
 
         elif tool_name == "delete_accommodation":
             name = tool_input['name']
-            option = AccommodationOption.query.filter(
-                AccommodationOption.name.ilike(f"%{name}%")
-            ).first()
+            option, err = _fuzzy_find(AccommodationOption, 'name', name)
+            if err:
+                return {"success": False, "error": err}
             if not option:
                 return {"success": False, "error": f"Accommodation '{name}' not found"}
             loc = AccommodationLocation.query.get(option.location_id)
@@ -211,10 +243,12 @@ def execute_tool(tool_name, tool_input):
             day = Day.query.filter_by(day_number=tool_input['day_number']).first()
             if not day:
                 return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
-            activity = Activity.query.filter(
-                Activity.day_id == day.id,
-                Activity.title.ilike(f"%{tool_input['title']}%")
-            ).first()
+            activity, err = _fuzzy_find(
+                Activity, 'title', tool_input['title'],
+                filters=[Activity.day_id == day.id]
+            )
+            if err:
+                return {"success": False, "error": err}
             if not activity:
                 return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
             activity_svc.eliminate(activity.id)
@@ -225,10 +259,12 @@ def execute_tool(tool_name, tool_input):
             day = Day.query.filter_by(day_number=tool_input['day_number']).first()
             if not day:
                 return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
-            activity = Activity.query.filter(
-                Activity.day_id == day.id,
-                Activity.title.ilike(f"%{tool_input['title']}%")
-            ).first()
+            activity, err = _fuzzy_find(
+                Activity, 'title', tool_input['title'],
+                filters=[Activity.day_id == day.id]
+            )
+            if err:
+                return {"success": False, "error": err}
             if not activity:
                 return {"success": False, "error": f"Activity '{tool_input['title']}' not found on Day {day.day_number}"}
             title, day_id = activity_svc.delete(activity.id)

@@ -5,6 +5,25 @@ from models import (db, Day, Trip, Activity, AccommodationOption,
                     AccommodationLocation, Flight, TransportRoute, BudgetItem)
 
 
+def _format_activity(a, include_details=False):
+    """Format a single activity line, optionally with address/transit details."""
+    status = '[DONE]' if a.is_completed else '[RULED OUT]' if a.is_eliminated else '[ ]'
+    time_info = f" @ {a.start_time}" if a.start_time else f" ({a.time_slot})" if a.time_slot else ""
+    line = f"  {status} {a.title}{time_info}"
+
+    if include_details:
+        if getattr(a, 'address', None):
+            line += f"\n      Address: {a.address}"
+        if getattr(a, 'getting_there', None):
+            line += f"\n      Getting there: {a.getting_there}"
+        if getattr(a, 'notes', None):
+            line += f"\n      Notes: {a.notes}"
+        if getattr(a, 'maps_url', None):
+            line += f"\n      Map: {a.maps_url}"
+
+    return line
+
+
 def build_context():
     """Build dynamic context about the current trip state."""
     parts = []
@@ -29,9 +48,7 @@ def build_context():
         for a in current_day.activities:
             if a.is_substitute:
                 continue
-            status = '[DONE]' if a.is_completed else '[RULED OUT]' if a.is_eliminated else '[ ]'
-            time_info = f" @ {a.start_time}" if a.start_time else f" ({a.time_slot})" if a.time_slot else ""
-            parts.append(f"  {status} {a.title}{time_info}")
+            parts.append(_format_activity(a, include_details=True))
 
     tomorrow = today + timedelta(days=1)
     next_day = Day.query.filter(Day.date == tomorrow).first()
@@ -40,8 +57,7 @@ def build_context():
         for a in next_day.activities:
             if a.is_substitute:
                 continue
-            time_info = f" @ {a.start_time}" if a.start_time else f" ({a.time_slot})" if a.time_slot else ""
-            parts.append(f"  {a.title}{time_info}")
+            parts.append(_format_activity(a, include_details=True))
 
     # Full itinerary summary (so chat can reference any day)
     all_days = Day.query.order_by(Day.day_number).all()

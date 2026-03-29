@@ -1,6 +1,7 @@
 """Flask routes for the AI chat feature."""
 
 import json
+import time
 import base64
 from flask import (Blueprint, render_template, jsonify, request, Response,
                    current_app)
@@ -12,6 +13,28 @@ from .executor import execute_tool
 from .context import build_context
 
 chat_bp = Blueprint('chat', __name__)
+
+MAX_TOOL_ROUNDS = 3
+
+
+def _api_call_with_retry(client, **kwargs):
+    """Make an Anthropic API call with one retry on transient errors."""
+    import anthropic
+    transient = (
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+        anthropic.RateLimitError,
+    )
+    try:
+        return client.messages.create(**kwargs)
+    except transient:
+        time.sleep(2)
+        return client.messages.create(**kwargs)
+    except anthropic.APIStatusError as e:
+        if e.status_code == 529:
+            time.sleep(2)
+            return client.messages.create(**kwargs)
+        raise
 
 
 @chat_bp.route('/chat')
@@ -155,45 +178,50 @@ def send_message():
             # Combine user-defined and server-side tools
             all_tools = TOOLS + SERVER_TOOLS
 
-            # First call: non-streaming to detect tool use
-            api_kwargs = dict(
+            base_kwargs = dict(
                 model=model_id,
                 max_tokens=max_tokens,
                 system=system,
-                messages=messages,
                 tools=all_tools,
             )
             if use_thinking:
-                api_kwargs['thinking'] = {"type": "adaptive"}
+                base_kwargs['thinking'] = {"type": "adaptive"}
 
-            response = client.messages.create(**api_kwargs)
-
-            # Process response blocks — extract text and execute client-side tools
-            # Server-side tools (web_search) are executed by Anthropic automatically;
-            # their results appear inline and don't need client-side handling.
+            # Multi-round tool loop: up to MAX_TOOL_ROUNDS rounds of tool use
             tool_results = []
             text_parts = []
-            has_server_tool = False
-            for block in response.content:
-                if block.type == 'tool_use':
-                    yield f"data: {json.dumps({'processing': f'Updating: {block.name}...'})}\n\n"
-                    with app.app_context():
-                        result = execute_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result),
-                    })
-                elif block.type == 'server_tool_use':
-                    has_server_tool = True
-                    yield f"data: {json.dumps({'processing': f'Searching the web...'})}\n\n"
-                elif block.type == 'text':
-                    text_parts.append(block.text)
-                elif block.type == 'thinking':
-                    yield f"data: {json.dumps({'processing': 'Thinking...'})}\n\n"
 
-            if tool_results:
-                # Follow-up call: stream the final response after client tool execution
+            for _round in range(MAX_TOOL_ROUNDS):
+                api_kwargs = dict(base_kwargs, messages=messages)
+                response = _api_call_with_retry(client, **api_kwargs)
+
+                # Process response blocks
+                tool_results = []
+                text_parts = []
+                for block in response.content:
+                    if block.type == 'tool_use':
+                        yield f"data: {json.dumps({'processing': f'Updating: {block.name}...'})}\n\n"
+                        with app.app_context():
+                            result = execute_tool(block.name, block.input)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        })
+                    elif block.type == 'server_tool_use':
+                        yield f"data: {json.dumps({'processing': 'Searching the web...'})}\n\n"
+                    elif block.type == 'text':
+                        text_parts.append(block.text)
+                    elif block.type == 'thinking':
+                        yield f"data: {json.dumps({'processing': 'Thinking...'})}\n\n"
+
+                if not tool_results:
+                    # Final response — no more tools needed
+                    full_response = ''.join(text_parts)
+                    yield f"data: {json.dumps({'text': full_response})}\n\n"
+                    break
+
+                # Append assistant content + tool results, continue loop
                 assistant_content = []
                 for block in response.content:
                     if block.type == 'text':
@@ -213,22 +241,22 @@ def send_message():
                         })
                 messages.append({"role": "assistant", "content": assistant_content})
                 messages.append({"role": "user", "content": tool_results})
-                followup_kwargs = dict(
-                    model=model_id,
-                    max_tokens=max_tokens,
-                    system=system,
-                    messages=messages,
-                    tools=all_tools,
-                )
-                if use_thinking:
-                    followup_kwargs['thinking'] = {"type": "adaptive"}
+
+                yield f"data: {json.dumps({'processing': 'Processing results...'})}\n\n"
+            else:
+                # Exhausted all rounds but last round still had tool calls
+                # Yield any text we collected from the last round
+                if text_parts:
+                    full_response = ''.join(text_parts)
+                    yield f"data: {json.dumps({'text': full_response})}\n\n"
+
+            # If the last round had tool results, do one final streaming call for summary
+            if tool_results:
+                followup_kwargs = dict(base_kwargs, messages=messages)
                 with client.messages.stream(**followup_kwargs) as stream:
                     for text in stream.text_stream:
                         full_response += text
                         yield f"data: {json.dumps({'text': text})}\n\n"
-            else:
-                full_response = ''.join(text_parts)
-                yield f"data: {json.dumps({'text': full_response})}\n\n"
 
             # Save assistant response
             with app.app_context():
