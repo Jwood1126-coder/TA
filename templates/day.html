@@ -273,10 +273,7 @@
 </section>
 {% endif %}
 
-{# 2. Morning activities (before travel) #}
-{{ render_slot('morning', morning_acts) }}
-
-{# 3. Flights #}
+{# 2. Flights (render before morning activities — departure prep comes first) #}
 {% if day_flights %}
 <section class="day-flights-section">
     <h3 class="slot-heading">{{ icon_plane(18) }} Flights</h3>
@@ -312,6 +309,9 @@
     {% endfor %}
 </section>
 {% endif %}
+
+{# 3. Morning activities (after flights — local sightseeing at destination) #}
+{{ render_slot('morning', morning_acts) }}
 
 {# ===== Transport card macro (reused for primary + alternates) ===== #}
 {% macro transport_card(route, is_alternate=false) %}

@@ -117,6 +117,22 @@ TRANSPORT ROUTE ASSIGNMENT RULE:
 - A route's origin city should match where the traveler is staying on that day. If it doesn't, \
   double-check the day assignment — it's probably wrong.
 
+DAY VIEW RENDERING ORDER (how users see the schedule):
+The app displays each day's sections in this exact order, top to bottom:
+  1. Checkout card (if checking out of accommodation)
+  2. Flights (departure info, always shown before other activities)
+  3. Morning activities (time_slot='morning')
+  4. Transport routes (inter-city travel cards)
+  5. Check-in card (if checking into accommodation)
+  6. Afternoon activities (time_slot='afternoon')
+  7. Evening activities (time_slot='evening')
+  8. Night activities (time_slot='night')
+When assigning time_slot to activities, follow this logic:
+- Pre-flight activities (getting to airport) → 'morning'
+- Post-arrival sightseeing → 'afternoon' or 'evening' depending on arrival time
+- Travel days: keep morning slot light since flights/trains dominate the schedule
+- Don't stack too many activities in one slot — 2-3 per slot is realistic
+
 SCHEDULE INTELLIGENCE:
 - When they ask to add/move/change activities, think about logistics:
   - What's nearby? Group activities by area to minimize transit
