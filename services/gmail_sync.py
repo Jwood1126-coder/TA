@@ -319,16 +319,25 @@ def get_gmail_service(app=None):
     return build_gmail('gmail', 'v1', credentials=creds)
 
 
-def search_travel_emails(service, since_message_id=None, custom_query=None):
-    """Search Gmail for travel-related emails."""
+def search_travel_emails(service, since_date=None, custom_query=None):
+    """Search Gmail for travel-related emails.
+
+    Args:
+        since_date: Optional date string (YYYY/MM/DD) to narrow queries.
+                    Replaces the hardcoded after: dates for incremental syncs.
+    """
     seen_ids = set()
     results = []
 
     queries = [custom_query] if custom_query else TRAVEL_QUERIES
     for query in queries:
+        q = query
+        # For incremental syncs, replace the hardcoded after: date with a recent one
+        if since_date and not custom_query:
+            q = re.sub(r'after:\d{4}/\d{2}/\d{2}', f'after:{since_date}', q)
         try:
             resp = service.users().messages().list(
-                userId='me', q=query, maxResults=50).execute()
+                userId='me', q=q, maxResults=50).execute()
             for m in resp.get('messages', []):
                 if m['id'] not in seen_ids:
                     seen_ids.add(m['id'])
@@ -711,7 +720,19 @@ def run_sync(app):
                     PendingGmailChange.gmail_message_id).all()
             }
 
-            email_stubs = search_travel_emails(service)
+            # Use last successful sync date for incremental search
+            # (first sync uses the hardcoded dates in TRAVEL_QUERIES)
+            since_date = None
+            last_completed = GmailSyncLog.query.filter_by(
+                status='completed').order_by(
+                GmailSyncLog.completed_at.desc()).first()
+            if last_completed and last_completed.completed_at:
+                # Go back 7 days from last sync for safety margin
+                from datetime import timedelta
+                lookback = last_completed.completed_at - timedelta(days=7)
+                since_date = lookback.strftime('%Y/%m/%d')
+
+            email_stubs = search_travel_emails(service, since_date=since_date)
             log.emails_found = len(email_stubs)
 
             new_stubs = [s for s in email_stubs
