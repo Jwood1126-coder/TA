@@ -94,6 +94,7 @@ def run_schema_migrations(app):
     _migrate_cancel_kyotofish(cursor, conn)
     _migrate_book_kumomachiya(cursor, conn)
     _migrate_apps_reference(cursor, conn)
+    _migrate_checklist_cleanup_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -1593,3 +1594,78 @@ def _migrate_apps_reference(cursor, conn):
 
     conn.commit()
     print(f'  Added {len(records)} reference items for Essential Apps & Connectivity')
+
+
+def _migrate_checklist_cleanup_v1(cursor, conn):
+    """Clean up checklist data: fix eSIM item for T-Mobile, fix redundant text, set priorities."""
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__checklist_cleanup_v1' in row[0]:
+        return
+
+    # 1. Update eSIM item to reflect T-Mobile plan
+    cursor.execute("""
+        UPDATE checklist_item
+        SET title = 'Set up T-Mobile international data (or buy eSIM backup)',
+            description = 'T-Mobile Go5G Plus includes 5GB free international data. Buy 30-Day International Pass ($50/phone) in T-Life app for 15GB high-speed. See Reference Guide > Apps & Connectivity for details. Alt backup: Ubigi eSIM ~$15 for 10GB.',
+            url = 'https://www.t-mobile.com/cell-phone-plans/international-roaming-plans/results/japan'
+        WHERE title LIKE '%Reserve pocket WiFi or purchase eSIM%'
+    """)
+    if cursor.rowcount:
+        print('  Updated eSIM checklist item to T-Mobile plan')
+
+    # 2. Fix redundant "2 nights" text
+    cursor.execute("""
+        UPDATE checklist_item
+        SET title = 'Book Kyoto Stay 2 (Apr 14-16, 2 nights)'
+        WHERE title LIKE '%Book Kyoto Stay 2 (2 nights) (2 nights%'
+    """)
+    if cursor.rowcount:
+        print('  Fixed redundant Kyoto Stay 2 text')
+
+    # 3. Set high priority on critical items that are still pending
+    high_priority_patterns = [
+        '%JR Pass%',
+        '%Visit Japan Web%',
+        '%passport validity%',
+        '%Check in online%Delta%',
+        '%Check in online%United%',
+        '%T-Mobile%eSIM%',
+        '%yen before departure%',
+    ]
+    for pattern in high_priority_patterns:
+        cursor.execute("""
+            UPDATE checklist_item SET priority = 'high'
+            WHERE title LIKE ? AND is_completed = 0 AND category IN ('preparation', 'pre_departure_month', 'pre_departure_week', 'pre_departure_today')
+        """, (pattern,))
+
+    # 4. Set high priority on booking items still pending
+    cursor.execute("""
+        UPDATE checklist_item SET priority = 'high'
+        WHERE title LIKE '%Reserve Nohi Bus%' AND is_completed = 0
+    """)
+    cursor.execute("""
+        UPDATE checklist_item SET priority = 'high'
+        WHERE title LIKE '%Shirakawa-go%Kanazawa bus%' AND is_completed = 0
+    """)
+    cursor.execute("""
+        UPDATE checklist_item SET priority = 'high'
+        WHERE title LIKE '%TeamLab%' AND is_completed = 0
+    """)
+    cursor.execute("""
+        UPDATE checklist_item SET priority = 'high'
+        WHERE title LIKE '%Arashio Stable%' AND is_completed = 0
+    """)
+    cursor.execute("""
+        UPDATE checklist_item SET priority = 'high'
+        WHERE title LIKE '%shinkansen seats%Day 14%' AND is_completed = 0
+    """)
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __checklist_cleanup_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__checklist_cleanup_v1%')
+    """)
+
+    conn.commit()
+    print('  Checklist cleanup v1 complete')

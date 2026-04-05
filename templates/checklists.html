@@ -5,13 +5,16 @@
 {% from "icons.html" import icon_check, icon_link, icon_delete, icon_pin, icon %}
 
 {% macro render_checklist_item(item, deletable=false) %}
-<div class="checklist-item {% if item.is_completed %}completed{% endif %}"
+<div class="checklist-item {% if item.is_completed %}completed{% endif %} priority-{{ item.priority or 'medium' }}"
      data-id="{{ item.id }}">
     <div class="checklist-item-header">
         <label class="check-label">
             <input type="checkbox" {% if item.is_completed %}checked{% endif %}
                    onchange="toggleChecklist({{ item.id }})">
             <span class="checkmark"></span>
+            {% if not item.is_completed and item.priority == 'high' %}
+            <span class="priority-dot high" title="High priority"></span>
+            {% endif %}
             <span class="check-text">{{ item.title }}</span>
         </label>
         {% if item.description %}
@@ -71,15 +74,62 @@
             <span class="subgroup-name">{{ subgroup.name }}</span>
             <span class="subgroup-count">{{ subgroup.entries | length }}</span>
         </div>
-        {% for item in subgroup.entries %}
+        {# Show incomplete items first #}
+        {% set pending_items = subgroup.entries | selectattr('is_completed', 'false') | list %}
+        {% set done_items = subgroup.entries | selectattr('is_completed') | list %}
+        {% for item in pending_items %}
             {{ render_checklist_item(item, deletable=deletable) }}
         {% endfor %}
+        {% if done_items %}
+        <details class="completed-group">
+            <summary class="completed-toggle">{{ done_items | length }} completed</summary>
+            {% for item in done_items %}
+                {{ render_checklist_item(item, deletable=deletable) }}
+            {% endfor %}
+        </details>
+        {% endif %}
     </div>
     {% endfor %}
     {% else %}
-    {% for item in section.entries %}
-        {{ render_checklist_item(item, deletable=deletable) }}
-    {% endfor %}
+    {# Show incomplete items first, high priority at top #}
+    {% set pending_items = section.entries | selectattr('is_completed', 'false') | list %}
+    {% set done_items = section.entries | selectattr('is_completed') | list %}
+    {% set high_pending = pending_items | selectattr('priority', 'equalto', 'high') | list %}
+    {% set other_pending = pending_items | rejectattr('priority', 'equalto', 'high') | list %}
+
+    {% if high_pending %}
+    <div class="checklist-subgroup">
+        <div class="checklist-subgroup-header priority-header-high">
+            <span class="priority-dot high"></span>
+            <span class="subgroup-name">Needs Attention</span>
+            <span class="subgroup-count">{{ high_pending | length }}</span>
+        </div>
+        {% for item in high_pending %}
+            {{ render_checklist_item(item, deletable=deletable) }}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if other_pending %}
+    <div class="checklist-subgroup">
+        <div class="checklist-subgroup-header">
+            <span class="subgroup-name">{{ 'To Do' if high_pending else '' }}</span>
+            {% if high_pending %}<span class="subgroup-count">{{ other_pending | length }}</span>{% endif %}
+        </div>
+        {% for item in other_pending %}
+            {{ render_checklist_item(item, deletable=deletable) }}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if done_items %}
+    <details class="completed-group">
+        <summary class="completed-toggle">{{ done_items | length }} completed</summary>
+        {% for item in done_items %}
+            {{ render_checklist_item(item, deletable=deletable) }}
+        {% endfor %}
+    </details>
+    {% endif %}
     {% endif %}
 
     {% if section.key in ('preparation', 'packing') %}
@@ -90,11 +140,11 @@
 
 {% elif tab == 'on_trip' and upcoming %}
 <!-- On-Trip: dynamic upcoming logistics -->
-{% set current_date = [None] %}
+{% set ns = namespace(current_date=None) %}
 {% for event in upcoming %}
 
-{% if event.date != current_date[0] %}
-{% if current_date.append(event.date) %}{% endif %}
+{% if event.date != ns.current_date %}
+{% set ns.current_date = event.date %}
 <h3 class="upcoming-date-heading">{{ event.date.strftime('%A, %B %d') }}</h3>
 {% endif %}
 

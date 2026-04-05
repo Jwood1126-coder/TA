@@ -28,6 +28,8 @@ def _build_pretip_sections(items):
     packing_essential = []
     packing_helpful = []
 
+    PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
+
     for item in items:
         group = CATEGORY_MAP.get(item.category, 'preparation')
 
@@ -38,6 +40,13 @@ def _build_pretip_sections(items):
                 packing_helpful.append(item)
         else:
             preparation.append(item)
+
+    # Sort preparation: incomplete first (high priority at top), then completed
+    preparation.sort(key=lambda i: (
+        i.is_completed,  # False (0) before True (1)
+        PRIORITY_ORDER.get(i.priority or 'medium', 1),
+        i.sort_order or 999
+    ))
 
     sections = []
 

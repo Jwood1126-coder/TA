@@ -250,3 +250,61 @@
 .confirmed-fill {
     background: var(--sakura) !important;
 }
+
+/* ===== Priority indicators ===== */
+
+.priority-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 2px;
+}
+
+.priority-dot.high {
+    background: #ef4444;
+}
+
+.priority-header-high {
+    border-left: 3px solid #ef4444;
+}
+
+/* ===== Completed items collapse ===== */
+
+.completed-group {
+    margin-top: 8px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.completed-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    cursor: pointer;
+    background: rgba(76, 175, 80, 0.06);
+    border-radius: 8px;
+    list-style: none;
+    user-select: none;
+}
+
+.completed-toggle::-webkit-details-marker { display: none; }
+
+.completed-toggle::before {
+    content: '\2713';
+    color: #4CAF50;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.completed-group[open] .completed-toggle {
+    border-radius: 8px 8px 0 0;
+}
+
+.completed-group .checklist-item {
+    opacity: 0.6;
+}
