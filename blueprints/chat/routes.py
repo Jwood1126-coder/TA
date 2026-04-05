@@ -285,3 +285,11 @@ def chat_history():
         'image_filename': m.image_filename,
         'created_at': m.created_at.isoformat() if m.created_at else None,
     } for m in messages])
+
+
+@chat_bp.route('/api/chat/history', methods=['DELETE'])
+def clear_chat_history():
+    """Clear all chat messages from the server."""
+    ChatMessage.query.delete()
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Chat history cleared'})

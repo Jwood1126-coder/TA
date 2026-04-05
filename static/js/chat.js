@@ -350,6 +350,8 @@ async function sendMessage() {
 function clearChat() {
     sessionHistory = [];
     sessionStorage.removeItem('chatHistory');
+    // Also clear server-side chat history so old messages don't come back
+    fetch('/api/chat/history', { method: 'DELETE' }).catch(() => {});
     chatMessages.innerHTML = `
         <div class="chat-welcome">
             <p>Ask me anything about your Japan trip!</p>
