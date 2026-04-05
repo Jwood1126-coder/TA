@@ -1,5 +1,28 @@
 // Itinerary-specific JS
 
+function toggleCardExpand(titleRow) {
+    const card = titleRow.closest('.activity-card');
+    const wasExpanded = card.classList.contains('expanded');
+
+    // Collapse all other cards first (one-at-a-time accordion)
+    document.querySelectorAll('.activity-card.expanded').forEach(c => {
+        if (c !== card) c.classList.remove('expanded');
+    });
+
+    // Toggle this card
+    card.classList.toggle('expanded', !wasExpanded);
+
+    // If expanding, scroll into view if partially hidden
+    if (!wasExpanded) {
+        setTimeout(() => {
+            const rect = card.getBoundingClientRect();
+            if (rect.top < 0 || rect.bottom > window.innerHeight) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }, 50);
+    }
+}
+
 async function toggleActivity(activityId) {
     const card = document.querySelector(`[data-id="${activityId}"]`);
     try {

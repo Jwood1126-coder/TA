@@ -163,6 +163,32 @@
     border-left: 4px solid #9ca3af;  /* completed overrides confirmed */
 }
 
+/* === Collapsible cards === */
+.activity-card .activity-collapse-body {
+    display: none;
+    margin-top: 6px;
+}
+
+.activity-card.expanded .activity-collapse-body {
+    display: block;
+}
+
+.activity-card .activity-title-row {
+    cursor: pointer;
+}
+
+.activity-card .expand-indicator {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--pico-muted-color);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.activity-card.expanded .expand-indicator {
+    transform: rotate(180deg);
+}
+
 .optional-badge {
     font-size: 0.65rem;
     color: var(--accent, #d4789c);
