@@ -71,6 +71,22 @@ function closeMore() {
     document.getElementById('moreMenu').classList.remove('open');
 }
 
+// Chat context injection — pass current page context to chat
+document.addEventListener('click', function(e) {
+    const chatLink = e.target.closest('a[href*="/chat"]');
+    if (!chatLink) return;
+
+    const dayHeader = document.querySelector('.day-header[data-day-number]');
+    if (dayHeader) {
+        const dayNum = dayHeader.getAttribute('data-day-number');
+        const dayTitle = dayHeader.getAttribute('data-day-title');
+        const location = dayHeader.getAttribute('data-day-location');
+        const contextParam = encodeURIComponent(`Day ${dayNum}: ${dayTitle} (${location})`);
+        e.preventDefault();
+        window.location.href = `/chat?context=${contextParam}`;
+    }
+});
+
 // Dark mode
 function toggleTheme() {
     const html = document.documentElement;
