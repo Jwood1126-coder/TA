@@ -1783,10 +1783,7 @@ def _migrate_transport_audit_v1(cursor, conn):
             transport_type = 'Shinkansen + Limited Express',
             train_name = 'Hokuriku Shinkansen → Thunderbird (transfer at Tsuruga)',
             duration = '~2h (45min + 55min + transfer)',
-            notes = 'Since March 2024, no direct Kanazawa-Kyoto train. '
-                    'Take Hokuriku Shinkansen Kanazawa→Tsuruga (~45 min), '
-                    'transfer at Tsuruga Station to Limited Express Thunderbird→Kyoto (~55 min). '
-                    'Both legs covered by JR Pass. Follow signs for transfer at Tsuruga — same building, ~5 min walk.',
+            notes = 'Since March 2024, no direct Kanazawa-Kyoto train. Take Hokuriku Shinkansen Kanazawa→Tsuruga (~45 min), transfer at Tsuruga Station to Limited Express Thunderbird→Kyoto (~55 min). Both legs covered by JR Pass. Follow signs for transfer at Tsuruga — same building, ~5 min walk.',
             url = 'https://www.westjr.co.jp/global/en/ticket/pass/'
         WHERE route_from LIKE '%Kanazawa%' AND route_to LIKE '%Kyoto%'
     """)
@@ -1801,10 +1798,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     cursor.execute("""
         UPDATE transport_route
         SET url = 'https://www.keikyu.co.jp/en/',
-            notes = 'Keikyu Line to Shinagawa (~18 min), transfer to JR Yamanote or Toei Oedo Line to Higashi-Shinjuku. '
-                    'Use Suica/IC card. ~¥800 total. '
-                    'TIP: With heavy luggage after a 13h flight, consider Airport Limousine Bus (direct, no transfers, ¥1,300) '
-                    'or GO Taxi app (~¥8,000-10,000, 45 min door-to-door, no hassle).'
+            notes = 'Keikyu Line to Shinagawa (~18 min), transfer to JR Yamanote or Toei Oedo Line to Higashi-Shinjuku. Use Suica/IC card. ~¥800 total. TIP: With heavy luggage after a 13h flight, consider Airport Limousine Bus (direct, no transfers, ¥1,300) or GO Taxi app (~¥8,000-10,000, 45 min door-to-door, no hassle).'
         WHERE route_from LIKE '%Haneda%' AND route_to LIKE '%Higashi-Shinjuku%'
     """)
     if cursor.rowcount:
@@ -1814,8 +1808,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     cursor.execute("""
         UPDATE transport_route
         SET url = 'https://smart-ex.jp/en/',
-            notes = 'JR Pass covers Hikari (not Nozomi). Reserve seats at JR ticket office or via SmartEX app. '
-                    'Depart from Tokyo Station Tokaido Shinkansen platform.'
+            notes = 'JR Pass covers Hikari (not Nozomi). Reserve seats at JR ticket office or via SmartEX app. Depart from Tokyo Station Tokaido Shinkansen platform.'
         WHERE route_from = 'Tokyo' AND route_to = 'Nagoya' AND transport_type LIKE '%Shinkansen%'
     """)
     if cursor.rowcount:
@@ -1825,8 +1818,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     cursor.execute("""
         UPDATE transport_route
         SET url = 'https://www.jreast.co.jp/multi/en/jrp/',
-            notes = 'JR Pass covers Hida Limited Express. ~4 trains/day. Reserve seats at Nagoya Station JR ticket office. '
-                    'Scenic route through the Japanese Alps — sit on the left side for best views.'
+            notes = 'JR Pass covers Hida Limited Express. ~4 trains/day. Reserve seats at Nagoya Station JR ticket office. Scenic route through the Japanese Alps — sit on the left side for best views.'
         WHERE route_from LIKE '%Nagoya%' AND route_to LIKE '%Takayama%'
     """)
     if cursor.rowcount:
@@ -1837,9 +1829,7 @@ def _migrate_transport_audit_v1(cursor, conn):
         UPDATE transport_route
         SET route_from = 'Shin-Osaka',
             route_to = 'Shinagawa',
-            notes = 'Hikari Shinkansen (JR Pass covered, NOT Nozomi). ~2.5 hours. '
-                    'Reserve seat at JR ticket office the day before. '
-                    'Shinagawa Station: transfer to Keikyu Line for Haneda Airport.'
+            notes = 'Hikari Shinkansen (JR Pass covered, NOT Nozomi). ~2.5 hours. Reserve seat at JR ticket office the day before. Shinagawa Station: transfer to Keikyu Line for Haneda Airport.'
         WHERE route_from LIKE '%Osaka%' AND route_to LIKE '%Shinagawa%' AND transport_type LIKE '%Shinkansen%'
     """)
     if cursor.rowcount:
@@ -1848,8 +1838,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     # Hotel Leben→Shin-Osaka: add taxi tip for departure day luggage
     cursor.execute("""
         UPDATE transport_route
-        SET notes = 'Shinsaibashi → Shin-Osaka direct (7 stops). ¥280. Leave hotel by 9:15 AM for buffer. '
-                    'TIP: With all your luggage on departure day, consider GO Taxi app instead (~¥2,500, 15 min, no stairs/transfers).',
+        SET notes = 'Shinsaibashi → Shin-Osaka direct (7 stops). ¥280. Leave hotel by 9:15 AM for buffer. TIP: With all your luggage on departure day, consider GO Taxi app instead (~¥2,500, 15 min, no stairs/transfers).',
             url = 'https://subway.osakametro.co.jp/en/'
         WHERE route_from LIKE '%Hotel Leben%' AND route_to LIKE '%Shin-Osaka%'
     """)
@@ -1859,9 +1848,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     # Limousine Bus: update notes with GO Taxi alternative
     cursor.execute("""
         UPDATE transport_route
-        SET notes = 'Direct bus from Haneda to Shinjuku Bus Terminal (Busta Shinjuku). No transfers. '
-                    'Runs every 20-30 min. Luggage stored underneath. Then 10 min walk to hotel. '
-                    'BEST OPTION for jet-lagged arrival with luggage. Buy ticket at bus counter in arrivals.'
+        SET notes = 'Direct bus from Haneda to Shinjuku Bus Terminal (Busta Shinjuku). No transfers. Runs every 20-30 min. Luggage stored underneath. Then 10 min walk to hotel. BEST OPTION for jet-lagged arrival with luggage. Buy ticket at bus counter in arrivals.'
         WHERE route_from LIKE '%Haneda%' AND route_to LIKE '%Shinjuku%' AND transport_type LIKE '%Limousine%'
     """)
     if cursor.rowcount:
@@ -1871,8 +1858,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     cursor.execute("""
         UPDATE transport_route
         SET url = 'https://www.hiroden.co.jp/en/',
-            notes = 'Hiroden streetcar Line 2 or 6 to Genbaku-Dome mae stop. ¥220 flat fare. IC card (Suica) accepted. '
-                    'Runs every 5-10 min.'
+            notes = 'Hiroden streetcar Line 2 or 6 to Genbaku-Dome mae stop. ¥220 flat fare. IC card (Suica) accepted. Runs every 5-10 min.'
         WHERE route_from LIKE '%Hiroshima Station%' AND route_to LIKE '%Peace Park%'
     """)
     if cursor.rowcount:
@@ -1882,9 +1868,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     cursor.execute("""
         UPDATE transport_route
         SET url = 'https://www.westjr.co.jp/global/en/',
-            notes = 'DEADLINE: Last useful return Shinkansen ~8:30 PM to arrive Kyoto ~10:15 PM. '
-                    'Aim for 6:30-7 PM departure. Hikari or Sakura (both JR Pass covered). '
-                    'NOT Nozomi or Mizuho (need separate surcharge ticket with JR Pass).'
+            notes = 'DEADLINE: Last useful return Shinkansen ~8:30 PM to arrive Kyoto ~10:15 PM. Aim for 6:30-7 PM departure. Hikari or Sakura (both JR Pass covered). NOT Nozomi or Mizuho (need separate surcharge ticket with JR Pass).'
         WHERE route_from LIKE '%Hiroshima%' AND route_to LIKE '%Kyoto%' AND transport_type LIKE '%Shinkansen%'
     """)
     if cursor.rowcount:
@@ -1893,9 +1877,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     # Shinagawa→Haneda: add notes
     cursor.execute("""
         UPDATE transport_route
-        SET notes = 'Keikyu Line Airport Express to Haneda Terminal 3 (International). ~15 min, ¥300. '
-                    'Trains every 10 min. Follow blue signs for International Terminal. '
-                    'Alternative: GO Taxi from Shinagawa ~¥5,000 (but train is fast and easy here).'
+        SET notes = 'Keikyu Line Airport Express to Haneda Terminal 3 (International). ~15 min, ¥300. Trains every 10 min. Follow blue signs for International Terminal. Alternative: GO Taxi from Shinagawa ~¥5,000 (but train is fast and easy here).'
         WHERE route_from LIKE '%Shinagawa%' AND route_to LIKE '%Haneda%'
     """)
     if cursor.rowcount:
@@ -1904,9 +1886,7 @@ def _migrate_transport_audit_v1(cursor, conn):
     # Kyoto→Fushimi Inari: add Keihan alternative
     cursor.execute("""
         UPDATE transport_route
-        SET notes = 'JR Nara Line: Kyoto Station→Inari Station (5 min, 2 stops, JR Pass covered). '
-                    'Shrine entrance is right at station exit. Go by 6:30 AM to beat crowds. '
-                    'Alternative from downtown: Keihan Line to Fushimi-Inari (not JR Pass, ¥220).',
+        SET notes = 'JR Nara Line: Kyoto Station→Inari Station (5 min, 2 stops, JR Pass covered). Shrine entrance is right at station exit. Go by 6:30 AM to beat crowds. Alternative from downtown: Keihan Line to Fushimi-Inari (not JR Pass, ¥220).',
             url = 'https://www.westjr.co.jp/global/en/'
         WHERE route_from LIKE '%Kyoto Station%' AND route_to LIKE '%Fushimi Inari%'
     """)
