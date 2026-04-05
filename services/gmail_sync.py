@@ -268,8 +268,8 @@ def get_gmail_credentials(app=None):
             try:
                 creds = Credentials.from_authorized_user_info(
                     json.loads(token_json), SCOPES)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f'  Gmail token from env var failed: {e}')
 
     if not creds:
         return None
@@ -277,9 +277,14 @@ def get_gmail_credentials(app=None):
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(GoogleRequest())
-            _save_token(creds, token_paths[0])
-        except Exception:
+        except Exception as e:
+            print(f'  Gmail token refresh failed: {e}')
             return None
+        # Save refreshed token (best-effort — don't kill creds if save fails)
+        try:
+            _save_token(creds, token_paths[0])
+        except Exception as e:
+            print(f'  Gmail token save failed (non-fatal): {e}')
 
     return creds
 
