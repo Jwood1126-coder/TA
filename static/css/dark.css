@@ -507,3 +507,4 @@
 [data-theme="dark"] .activity-card.confirmed { border-left-color: #34d399; }
 [data-theme="dark"] .activity-card.optional { border-left-color: #fbbf24; }
 [data-theme="dark"] .activity-card.book-ahead-card { border-left-color: #f87171; }
+[data-theme="dark"] .completed-summary { background: var(--completed-bg); }

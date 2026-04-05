@@ -152,20 +152,53 @@
             {% if minor.append(activity) %}{% endif %}
         {% endif %}
     {% endfor %}
+    {# Separate completed from active #}
+    {% set active_major = [] %}
+    {% set done_major = [] %}
     {% for activity in major %}
+        {% if activity.is_completed %}
+            {% if done_major.append(activity) %}{% endif %}
+        {% else %}
+            {% if active_major.append(activity) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% set active_minor = [] %}
+    {% set done_minor = [] %}
+    {% for activity in minor %}
+        {% if activity.is_completed %}
+            {% if done_minor.append(activity) %}{% endif %}
+        {% else %}
+            {% if active_minor.append(activity) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {# Show active (uncompleted) cards first #}
+    {% for activity in active_major %}
     {{ activity_card(activity) }}
     {% endfor %}
-    {% if minor %}
-    {% if major %}
+    {% if active_minor %}
+    {% if active_major %}
     <details class="minor-activities">
-        <summary>{{ minor|length }} more activit{{ 'y' if minor|length == 1 else 'ies' }}</summary>
+        <summary>{{ active_minor|length }} more activit{{ 'y' if active_minor|length == 1 else 'ies' }}</summary>
     {% endif %}
-        {% for activity in minor %}
+        {% for activity in active_minor %}
         {{ activity_card(activity, compact=true) }}
         {% endfor %}
-    {% if major %}
+    {% if active_major %}
     </details>
     {% endif %}
+    {% endif %}
+    {# Completed items collapsed into summary #}
+    {% set total_done = done_major|length + done_minor|length %}
+    {% if total_done > 0 %}
+    <details class="completed-summary">
+        <summary class="completed-summary-label">&#x2705; {{ total_done }} completed</summary>
+        {% for activity in done_major %}
+        {{ activity_card(activity) }}
+        {% endfor %}
+        {% for activity in done_minor %}
+        {{ activity_card(activity, compact=true) }}
+        {% endfor %}
+    </details>
     {% endif %}
 </section>
 {% endif %}

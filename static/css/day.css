@@ -189,6 +189,37 @@
     transform: rotate(180deg);
 }
 
+/* === Completed items summary === */
+.completed-summary {
+    margin-top: 8px;
+    border-radius: 8px;
+    background: var(--completed-bg, #f0fdf4);
+    padding: 2px 8px;
+}
+
+.completed-summary-label {
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--completed-text, #6b7280);
+    padding: 8px 4px;
+    list-style: none;
+}
+
+.completed-summary-label::-webkit-details-marker {
+    display: none;
+}
+
+.completed-summary-label::before {
+    content: '\25B6 ';
+    font-size: 0.6rem;
+    vertical-align: middle;
+}
+
+.completed-summary[open] .completed-summary-label::before {
+    content: '\25BC ';
+}
+
 .optional-badge {
     font-size: 0.65rem;
     color: var(--accent, #d4789c);
