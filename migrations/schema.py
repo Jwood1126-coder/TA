@@ -1388,8 +1388,8 @@ def _migrate_cancel_kyotofish(cursor, conn):
 
     One-shot: uses sentinel to ensure this only runs once.
     """
-    # Sentinel check — skip if already applied
-    cursor.execute("SELECT quick_notes FROM accommodation_location WHERE location_name LIKE '%Kyoto%Stay 2%'")
+    # Sentinel check — use trip.notes (not quick_notes which this migration overwrites)
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
     row = cursor.fetchone()
     if row and row[0] and '__kyotofish_cancelled_v1' in row[0]:
         return
@@ -1414,12 +1414,18 @@ def _migrate_cancel_kyotofish(cursor, conn):
               AND is_eliminated = 1
         """)
 
-    # Clean up quick_notes and set sentinel
+    # Clean up quick_notes
     cursor.execute("""
         UPDATE accommodation_location
-        SET quick_notes = 'Second half of Kyoto. Private teahouse in Miyagawacho geisha district. __kyotofish_cancelled_v1'
+        SET quick_notes = 'Second half of Kyoto. Private teahouse in Miyagawacho geisha district.'
         WHERE location_name LIKE '%Kyoto%Stay 2%'
-          AND quick_notes NOT LIKE '%__kyotofish_cancelled_v1%'
+          AND quick_notes LIKE '%BOOKED%Kyotofish%'
     """)
     if cursor.rowcount:
         print(f'  Cleaned Kyoto Stay 2 quick_notes (removed cancelled booking reference)')
+
+    # Set sentinel so this never runs again
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __kyotofish_cancelled_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__kyotofish_cancelled_v1%')
+    """)
