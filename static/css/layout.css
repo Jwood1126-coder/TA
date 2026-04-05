@@ -188,8 +188,8 @@
     }
 }
 
-/* iPhone safe areas for landscape / notch */
-@media (max-width: 414px) {
+/* iPhone safe areas for landscape / Dynamic Island */
+@media (max-width: 440px) {
     .app-main {
         padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
         padding-right: max(0.75rem, env(safe-area-inset-right, 0px));

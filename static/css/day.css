@@ -1096,8 +1096,8 @@
     line-height: 1.4;
 }
 
-/* ===== iPhone optimizations (375px and below) ===== */
-@media (max-width: 414px) {
+/* ===== iPhone optimizations (430px = iPhone 16/17 Pro Max) ===== */
+@media (max-width: 440px) {
     .activity-card {
         padding: 0.65rem 0.6rem;
         gap: 6px;
