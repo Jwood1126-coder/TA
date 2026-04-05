@@ -94,6 +94,7 @@ def add(day_id, fields):
         book_ahead=bool(fields.get('book_ahead', False)),
         book_ahead_note=_strip_or_none(fields.get('book_ahead_note')),
         is_optional=fields.get('is_optional', False),
+        is_confirmed=bool(fields.get('is_confirmed', False)),
         sort_order=max_order + 1,
     )
     db.session.add(activity)
@@ -126,7 +127,7 @@ def update(activity_id, fields):
             setattr(activity, field, _strip_or_none(fields[field]))
 
     # Boolean fields
-    for field in ('is_optional', 'book_ahead', 'jr_pass_covered'):
+    for field in ('is_optional', 'book_ahead', 'jr_pass_covered', 'is_confirmed'):
         if field in fields and fields[field] is not None:
             setattr(activity, field, bool(fields[field]))
 

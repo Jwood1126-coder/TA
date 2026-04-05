@@ -1,7 +1,9 @@
-"""Gmail sync service — fetches travel emails and extracts booking data.
+"""Gmail sync service — two-stage pipeline for syncing travel bookings from Gmail.
 
-Uses Google Gmail API to search for travel-related emails, then uses
-Claude API to extract structured booking data from email content.
+Stage 1 (Haiku): Fast, cheap extraction of structured data from each email.
+Stage 2 (Opus): Intelligent analysis of all extractions as a batch — deduplication,
+    geographic filtering, supplementary info consolidation, and clear consequence mapping.
+
 Proposed changes are stored for user review before applying.
 """
 import base64
@@ -12,10 +14,22 @@ from datetime import datetime
 
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build as build_gmail
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+
+# Hard geographic filter — only these cities are valid for this trip
+JAPAN_TRIP_CITIES = {
+    'tokyo', 'shinjuku', 'shibuya', 'asakusa', 'akihabara', 'ginza', 'roppongi',
+    'takayama', 'shirakawa-go', 'shirakawa',
+    'kanazawa',
+    'kyoto', 'gion', 'arashiyama', 'fushimi',
+    'osaka', 'dotonbori', 'namba', 'umeda', 'shinsekai',
+    'hakone', 'hiroshima', 'miyajima',
+    'narita', 'haneda',
+    # Allow blanks (flights, general Japan emails)
+    'japan', '',
+}
 
 # Search queries for travel-related emails
 TRAVEL_QUERIES = [
@@ -28,17 +42,22 @@ TRAVEL_QUERIES = [
     'subject:(booking confirmation OR reservation confirmed OR "your receipt") (Agoda OR Airbnb) after:2025/06/01',
     # Broader travel bookings
     'subject:(booking OR confirmation OR reservation OR receipt) (hotel OR ryokan OR hostel OR machiya) after:2025/06/01',
+    # Airbnb — catch ALL booking-related emails (confirmations, reminders, check-in, host messages, receipts)
+    'from:airbnb.com subject:(reservation OR confirmed OR confirmation OR receipt OR "your trip" OR "check-in" OR "getting ready" OR "your stay" OR "your home") after:2025/06/01',
+    'from:airbnb.com subject:(itinerary OR "door code" OR "house rules" OR "house manual" OR "directions" OR "arriving" OR "welcome") after:2025/06/01',
+    # Airbnb host messages (often contain check-in instructions, wifi, door codes)
+    'from:airbnb.com subject:(message from OR "sent you a message" OR "new message") after:2025/06/01',
     # Specific known bookings
-    '"Sotetsu Fresa" OR "TAKANOYU" OR "Tsukiya-Mikazuki" OR "Kyotofish" OR "Leben Osaka" OR "KumoMachiya" after:2025/06/01',
+    '"Sotetsu Fresa" OR "TAKANOYU" OR "Tsukiya-Mikazuki" OR "Kyotofish" OR "Leben Osaka" OR "KumoMachiya" OR "Kumo Machiya" after:2025/06/01',
     # Cancellations
     'subject:(cancelled OR canceled OR cancellation) (airbnb OR agoda OR hotel OR flight) after:2025/06/01',
     # JR Pass, activities, tickets
     'subject:(order confirmation OR booking confirmation OR e-ticket) (JR Pass OR "Japan Rail" OR klook OR viator OR GetYourGuide) after:2025/06/01',
     # Train reservations
     'subject:(reservation OR "seat reservation" OR ticket) (shinkansen OR "bullet train" OR "japan rail" OR JR) after:2025/06/01',
-    # Restaurant reservations
+    # Restaurant reservations — Japan-specific only
     'subject:(reservation OR booking OR "your table") (restaurant OR omakase OR izakaya OR ramen OR sushi OR kaiseki OR yakitori) Japan after:2025/06/01',
-    '(from:tablecheck OR from:tabelog OR from:toreta OR from:opentable) subject:(reservation OR confirmation) after:2025/06/01',
+    '(from:tablecheck OR from:tabelog OR from:toreta) subject:(reservation OR confirmation) after:2025/06/01',
     # Activity & experience bookings
     '(from:klook OR from:viator OR from:getyourguide OR from:airbnb.com) subject:(experience OR activity OR tour OR ticket OR booking) Japan after:2025/06/01',
     'subject:(order confirmation OR booking confirmation OR e-ticket) (tea ceremony OR kimono OR cooking class OR sumo OR shrine OR temple OR onsen) after:2025/06/01',
@@ -46,8 +65,8 @@ TRAVEL_QUERIES = [
     'subject:(confirmation OR reservation OR receipt OR ticket) Japan (Tokyo OR Kyoto OR Osaka OR Takayama OR Hiroshima OR Hakone OR Miyajima) after:2025/06/01',
 ]
 
-# Extraction prompt for Claude
-EXTRACTION_PROMPT_TEMPLATE = """You are a travel booking data extractor for a Japan trip (April 5-18, 2026).
+# Stage 1: Haiku extraction prompt (per-email, fast/cheap)
+EXTRACTION_PROMPT = """You are a travel booking data extractor for a Japan trip (April 5-18, 2026).
 Analyze this email and extract structured booking data.
 
 Context — these are the confirmed bookings to match against:
@@ -62,7 +81,7 @@ Return a JSON object with these fields (omit fields that aren't present):
 
 ```
 "type": one of: "boarding_pass", "flight", "accommodation", "restaurant", "activity_ticket", "transport_ticket", "cancellation", "other"
-"action": "new_booking" | "update" | "cancellation" | "confirmation" | "check_in" | "boarding_pass" | "info"
+"action": "new_booking" | "update" | "cancellation" | "confirmation" | "check_in" | "boarding_pass" | "info" | "supplementary"
 "property_name": "hotel/property name"
 "confirmation_number": "booking reference"
 "platform": "Airbnb" | "Agoda" | "Delta" | "United" | etc
@@ -72,12 +91,15 @@ Return a JSON object with these fields (omit fields that aren't present):
 "check_out_time": "e.g. 11:00 AM"
 "address": "full address"
 "city": "city name"
+"country": "country name"
 "guests": number
 "price_total": number
 "price_per_night": number
 "currency": "USD" or "JPY"
 "host_name": "host name if applicable"
 "host_phone": "phone if provided"
+"wifi_info": "wifi network/password if provided"
+"door_code": "access code if provided"
 "flight_number": "e.g. DL275"
 "airline": "airline name"
 "departure_airport": "code"
@@ -98,7 +120,8 @@ Return a JSON object with these fields (omit fields that aren't present):
 "party_size": number of diners
 "special_instructions": "any check-in instructions, door codes, luggage rules, etc."
 "house_rules": "quiet hours, max guests, etc."
-"notes": "any other important details (gate changes, delays, special requests, dietary notes)"
+"neighborhood_tips": "nearby stations, restaurants, convenience stores mentioned by host"
+"notes": "any other important details"
 "has_attachment": true if email has PDF/image attachments worth saving
 "cancelled_property": "name of cancelled property if this is a cancellation"
 "cancelled_confirmation": "confirmation # of cancelled booking"
@@ -106,12 +129,14 @@ Return a JSON object with these fields (omit fields that aren't present):
 
 IMPORTANT RULES:
 - Only include fields clearly stated in the email. Do not guess.
+- If the email contains helpful info about an EXISTING booking (check-in instructions, house rules, neighborhood guide, wifi info, door codes), set action="supplementary".
 - Boarding passes: extract gate, seat, boarding group, and departure time. Set type="boarding_pass".
-- Restaurant reservations: extract restaurant_name, activity_date, activity_time, party_size, address. Set type="restaurant".
+- Restaurant reservations: extract restaurant_name, activity_date, activity_time, party_size, address, city, country. Set type="restaurant".
 - Activity/experience bookings: extract activity_name, activity_date, activity_time, venue, confirmation_number. Set type="activity_ticket".
 - If the email has PDF attachments (boarding pass PDFs, tickets, receipts), set "has_attachment": true.
 - Match flights by flight number (DL5392, DL275, UA876, UA1470) when possible.
 - Match accommodations by confirmation number or property name.
+- ALWAYS include "city" and "country" fields when they can be determined from the email.
 - Return valid JSON only. If not travel-related: {"type": "other", "action": "info"}
 
 EMAIL SUBJECT: <<SUBJECT>>
@@ -122,27 +147,113 @@ EMAIL BODY:
 <<BODY>>"""
 
 
-def get_gmail_credentials(app=None):
-    """Get Gmail API credentials from token storage.
+# Stage 2: Opus analyst prompt (batch analysis, one call per sync)
+OPUS_ANALYST_PROMPT = """You are an expert travel analyst for a Japan trip planning app. You've been given a batch of extracted email data (from a fast first-pass scan) along with the current database state.
 
-    Priority:
-    1. Persistent volume token file (Railway production)
-    2. GMAIL_TOKEN_JSON env var (initial Railway setup)
-    3. Local config file (~/.config/japan-travel-app/token.json)
-    """
+Your job is to produce a CURATED, DEDUPLICATED list of meaningful changes to propose to the user.
+
+## THE TRIP
+- **Dates:** April 5-18, 2026 (14 days, fly in Apr 5, fly out Apr 18)
+- **Travelers:** 2 people
+- **Route:** Cleveland → Tokyo → Takayama → Kyoto → Osaka → Cleveland
+
+## CONFIRMED BOOKINGS (current DB state)
+<<DB_STATE>>
+
+## WHAT YOU MUST DO
+
+For each extracted email, decide ONE of:
+1. **SKIP** — not relevant to this Japan trip (wrong country, duplicate of already-processed info, marketing email)
+2. **UPDATE** — updates an existing record with new/better information
+3. **CREATE** — creates a new record (new restaurant reservation, new activity ticket, etc.)
+4. **CANCEL** — cancels an existing booking
+
+## CRITICAL RULES
+
+### Geographic Filter
+- This is a JAPAN trip. Any booking for a restaurant, hotel, or activity NOT in Japan must be SKIPPED.
+- US restaurants (Pier W, etc.), US hotels, non-Japan activities = SKIP with reason "Not related to Japan trip"
+
+### Deduplication
+- Multiple emails about the same booking (confirmation + reminder + receipt) = ONE change, not three
+- Use confirmation numbers and property names to identify duplicates
+- Pick the email with the MOST complete/recent information
+
+### Supplementary Info (VERY IMPORTANT)
+- Airbnb/hosts often send follow-up emails with check-in instructions, house rules, wifi passwords, door codes, neighborhood tips
+- These are NOT new bookings — they are UPDATES to existing accommodation records
+- Map them to the correct accommodation by confirmation number or property name
+- Specify exactly which fields to update:
+  - check_in_info: check-in time and method (e.g. "3:00 PM, lockbox code 1234")
+  - check_out_info: check-out time and instructions
+  - user_notes: house rules, wifi info, door codes, neighborhood tips, luggage storage, etc.
+  - phone: host phone number
+  - address: full address if more specific than what we have
+- APPEND to existing user_notes (don't replace) — format as "\\n--- From [platform] [date] ---\\n[new info]"
+
+### Consequence Clarity
+For EVERY proposed change, you MUST specify:
+- **consequence**: Exactly what happens in the app when the user approves this. Be specific:
+  - "Will update Sotetsu Fresa Inn check_in_info from '3:00 PM' to '3:00 PM, self check-in at lobby kiosk'"
+  - "Will add new activity 'Tea Ceremony at Camellia Garden' to Day 8 (Apr 12) afternoon slot"
+  - "Will cancel TAKANOYU booking and set status to 'cancelled'"
+- **confidence**: "high" (exact match on confirmation # or flight #), "medium" (name match, likely correct), "low" (fuzzy match, user should verify)
+
+### What NOT To Change
+- NEVER propose changing booking_status to "confirmed" (requires uploaded document — iron rule)
+- NEVER propose overriding data from uploaded PDF documents
+- NEVER create duplicate activities that already exist in the itinerary
+- NEVER modify flight data that came from PDF booking confirmations unless the email has clearly newer info (gate changes, time changes)
+
+## ACTIVITY PLACEMENT
+When creating new activities (restaurants, tours, tickets), you must specify:
+- **day_id**: Match the activity date to the correct day (Day 1=Apr 5, Day 2=Apr 6, ..., Day 14=Apr 18)
+- **time_slot**: morning, afternoon, evening, or night
+- **category**: temple, food, nightlife, shopping, nature, culture, transit, logistics, entertainment
+- For restaurants, always use category="food" and time_slot based on meal time
+
+## OUTPUT FORMAT
+Return a JSON array. Each item:
+```json
+{
+  "action": "skip" | "update" | "create" | "cancel",
+  "email_index": 0,
+  "reason": "why this action (especially important for skips)",
+  "entity_type": "accommodation" | "flight" | "activity" | "transport" | "other",
+  "entity_id": 123,
+  "description": "short summary shown to user",
+  "consequence": "exactly what happens when approved — be specific about field changes",
+  "confidence": "high" | "medium" | "low",
+  "reasoning": "your analysis of why this is the right action",
+  "fields": {
+    "field_name": "new_value"
+  },
+  "current": {
+    "field_name": "current_value"
+  }
+}
+```
+
+For "skip" actions, only include: action, email_index, reason.
+
+IMPORTANT: Return ONLY the JSON array. No markdown, no explanation outside the JSON.
+
+## EXTRACTED EMAILS (from first-pass scan)
+<<EXTRACTIONS>>"""
+
+
+def get_gmail_credentials(app=None):
+    """Get Gmail API credentials from token storage."""
     creds = None
     token_paths = []
 
-    # Railway persistent volume
     vol = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH')
     if vol:
         token_paths.append(os.path.join(vol, 'gmail_token.json'))
 
-    # Local config
     token_paths.append(os.path.join(os.path.expanduser('~'),
                                      '.config', 'japan-travel-app', 'token.json'))
 
-    # Try loading from file
     for path in token_paths:
         if os.path.exists(path):
             try:
@@ -151,7 +262,6 @@ def get_gmail_credentials(app=None):
             except Exception:
                 continue
 
-    # Try env var (initial Railway setup)
     if not creds:
         token_json = os.environ.get('GMAIL_TOKEN_JSON')
         if token_json:
@@ -164,11 +274,9 @@ def get_gmail_credentials(app=None):
     if not creds:
         return None
 
-    # Refresh if expired
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(GoogleRequest())
-            # Save refreshed token back
             _save_token(creds, token_paths[0])
         except Exception:
             return None
@@ -192,11 +300,7 @@ def get_gmail_service(app=None):
 
 
 def search_travel_emails(service, since_message_id=None, custom_query=None):
-    """Search Gmail for travel-related emails.
-
-    Returns list of {id, subject, from, date, snippet, has_attachments}.
-    Deduplicates across multiple query results.
-    """
+    """Search Gmail for travel-related emails."""
     seen_ids = set()
     results = []
 
@@ -271,24 +375,22 @@ def _find_attachments(payload, msg_id):
     return attachments
 
 
-def extract_booking_data(email_content, api_key):
-    """Use Claude API to extract structured booking data from email.
+# ---------------------------------------------------------------------------
+# Stage 1: Haiku extraction (per email)
+# ---------------------------------------------------------------------------
 
-    Returns parsed JSON dict or None on failure.
-    """
+def extract_booking_data(email_content, api_key):
+    """Use Claude Haiku to extract structured booking data from one email."""
     import anthropic
 
-    # Clean body — remove excessive whitespace from HTML emails
     body = email_content.get('body', '')
-    # Strip invisible chars and collapse whitespace
     body = re.sub(r'[\u200b\u00ad\u034f]+', '', body)
     body = re.sub(r'\s*\u034f\s*', '', body)
     body = re.sub(r'\n\s*\n\s*\n+', '\n\n', body)
-    # Truncate very long emails
     if len(body) > 8000:
         body = body[:8000] + '\n...[truncated]'
 
-    prompt = (EXTRACTION_PROMPT_TEMPLATE
+    prompt = (EXTRACTION_PROMPT
               .replace('<<SUBJECT>>', email_content.get('subject', ''))
               .replace('<<SENDER>>', email_content.get('from', ''))
               .replace('<<DATE>>', email_content.get('date', ''))
@@ -303,311 +405,203 @@ def extract_booking_data(email_content, api_key):
         )
         text = response.content[0].text
 
-        # Extract JSON from response (handle markdown code blocks)
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(1))
-        # Try parsing the whole response as JSON
         return json.loads(text)
     except Exception:
         return None
 
 
-def diff_against_db(extracted, db_state):
-    """Compare extracted email data against current DB state.
+def _passes_geographic_filter(extracted):
+    """Hard geographic filter — reject non-Japan bookings before Opus stage.
 
-    Returns a list of proposed changes, each being a dict:
-    {
-        'change_type': 'create' | 'update' | 'cancel',
-        'entity_type': 'accommodation' | 'flight' | 'activity' | 'transport',
-        'entity_id': int or None,
-        'description': 'human-readable summary',
-        'fields': {field: new_value, ...},
-        'current': {field: current_value, ...},
-    }
+    Returns True if the extraction should be passed to Opus for analysis.
+    Flights are always passed through (they connect to Japan).
+    Bookings with no city are passed through (let Opus decide).
     """
-    if not extracted:
+    etype = extracted.get('type', 'other')
+
+    # Always pass flights and boarding passes
+    if etype in ('flight', 'boarding_pass', 'cancellation', 'other'):
+        return True
+
+    # Check country if available
+    country = (extracted.get('country') or '').strip().lower()
+    if country and country not in ('japan', 'jp', ''):
+        return False
+
+    # Check city
+    city = (extracted.get('city') or '').strip().lower()
+    if not city:
+        return True  # no city info, let Opus decide
+
+    return city in JAPAN_TRIP_CITIES
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: Opus analyst (batch analysis)
+# ---------------------------------------------------------------------------
+
+def _format_db_state_for_opus(db_state):
+    """Format current DB state as readable text for the Opus prompt."""
+    lines = []
+
+    lines.append("### Accommodations")
+    for opt in db_state.get('accommodations', []):
+        status = opt['booking_status']
+        selected = " [SELECTED]" if opt.get('is_selected') else ""
+        eliminated = " [ELIMINATED]" if opt.get('is_eliminated') else ""
+        doc = " [HAS DOCUMENT]" if opt.get('document_id') else ""
+        lines.append(
+            f"- ID {opt['id']}: {opt['name']} @ {opt['location_name']} "
+            f"| status={status}{selected}{eliminated}{doc}"
+            f" | conf={opt.get('confirmation_number', 'none')}"
+            f" | check_in_info={opt.get('check_in_info', 'none')}"
+            f" | check_out_info={opt.get('check_out_info', 'none')}"
+            f" | phone={opt.get('phone', 'none')}"
+            f" | address={opt.get('address', 'none')}"
+            f" | user_notes={opt.get('user_notes', 'none')[:200] if opt.get('user_notes') else 'none'}"
+        )
+
+    lines.append("\n### Flights")
+    for fl in db_state.get('flights', []):
+        doc = " [HAS DOCUMENT]" if fl.get('document_id') else ""
+        lines.append(
+            f"- ID {fl['id']}: {fl['flight_number']} ({fl['airline']}) "
+            f"| status={fl['booking_status']}{doc}"
+            f" | conf={fl.get('confirmation_number', 'none')}"
+            f" | depart={fl.get('depart_time', '?')} arrive={fl.get('arrive_time', '?')}"
+            f" | notes={fl.get('notes', 'none')[:100] if fl.get('notes') else 'none'}"
+        )
+
+    lines.append("\n### Activities (recent/relevant)")
+    for act in db_state.get('activities', []):
+        lines.append(
+            f"- ID {act['id']}: \"{act['title']}\" Day {act['day_id']} "
+            f"| {act.get('time_slot', '?')} | category={act.get('category', '?')}"
+            f" | book_ahead={act.get('book_ahead', False)}"
+        )
+
+    return '\n'.join(lines)
+
+
+def analyze_with_opus(extractions, db_state, api_key):
+    """Stage 2: Send all Haiku extractions to Opus for intelligent analysis.
+
+    Returns a list of curated, deduplicated change proposals with consequences.
+    """
+    import anthropic
+
+    db_text = _format_db_state_for_opus(db_state)
+
+    # Format extractions for the prompt
+    extraction_lines = []
+    for i, (content, extracted) in enumerate(extractions):
+        extraction_lines.append(json.dumps({
+            'index': i,
+            'email_subject': content.get('subject', ''),
+            'email_from': content.get('from', ''),
+            'email_date': content.get('date', ''),
+            'extracted_data': extracted,
+        }, indent=2))
+
+    extractions_text = '\n---\n'.join(extraction_lines)
+
+    prompt = (OPUS_ANALYST_PROMPT
+              .replace('<<DB_STATE>>', db_text)
+              .replace('<<EXTRACTIONS>>', extractions_text))
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model='claude-opus-4-6',
+            max_tokens=8192,
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+        text = response.content[0].text
+
+        # Extract JSON array from response
+        json_match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(1))
+        # Try parsing whole response as JSON
+        return json.loads(text)
+    except Exception as e:
+        # If Opus fails, return empty — don't crash the sync
         return []
 
-    changes = []
-    etype = extracted.get('type', 'other')
-    action = extracted.get('action', 'info')
 
-    if etype == 'cancellation' or action == 'cancellation':
-        cancelled_name = extracted.get('cancelled_property', '')
-        cancelled_conf = extracted.get('cancelled_confirmation', '')
-        if cancelled_name or cancelled_conf:
-            # Find matching accommodation
-            for opt in db_state.get('accommodations', []):
-                name_match = (cancelled_name and
-                              cancelled_name.lower() in opt['name'].lower())
-                conf_match = (cancelled_conf and
-                              opt.get('confirmation_number') == cancelled_conf)
-                if name_match or conf_match:
-                    if opt['booking_status'] != 'cancelled':
-                        changes.append({
-                            'change_type': 'cancel',
-                            'entity_type': 'accommodation',
-                            'entity_id': opt['id'],
-                            'description': f"Cancel {opt['name']} (was {opt['booking_status']})",
-                            'fields': {'booking_status': 'cancelled'},
-                            'current': {'booking_status': opt['booking_status']},
-                        })
-        return changes
+# ---------------------------------------------------------------------------
+# DB state gathering
+# ---------------------------------------------------------------------------
 
-    if etype == 'accommodation':
-        prop_name = extracted.get('property_name', '')
-        conf_num = extracted.get('confirmation_number', '')
-        city = extracted.get('city', '')
+def get_db_state():
+    """Get current DB state for diffing. Must be called in app context."""
+    from models import AccommodationOption, AccommodationLocation, Flight, Activity, Day
 
-        # Try to match existing option
-        matched = None
-        for opt in db_state.get('accommodations', []):
-            if conf_num and opt.get('confirmation_number') == conf_num:
-                matched = opt
-                break
-            if prop_name and prop_name.lower() in opt['name'].lower():
-                matched = opt
-                break
-
-        if matched:
-            # Build update fields
-            update_fields = {}
-            current = {}
-            field_map = {
-                'confirmation_number': 'confirmation_number',
-                'address': 'address',
-                'check_in_time': 'check_in_info',
-                'check_out_time': 'check_out_info',
-                'host_phone': 'phone',
-            }
-            for src, dst in field_map.items():
-                val = extracted.get(src)
-                if val and val != matched.get(dst):
-                    update_fields[dst] = val
-                    current[dst] = matched.get(dst)
-
-            # Special instructions go to user_notes
-            instructions = extracted.get('special_instructions', '')
-            house_rules = extracted.get('house_rules', '')
-            notes_parts = [p for p in [instructions, house_rules] if p]
-            if notes_parts:
-                new_notes = ' | '.join(notes_parts)
-                if new_notes != matched.get('user_notes'):
-                    update_fields['user_notes'] = new_notes
-                    current['user_notes'] = matched.get('user_notes')
-
-            if update_fields:
-                changes.append({
-                    'change_type': 'update',
-                    'entity_type': 'accommodation',
-                    'entity_id': matched['id'],
-                    'description': f"Update {matched['name']}: {', '.join(update_fields.keys())}",
-                    'fields': update_fields,
-                    'current': current,
-                })
-
-            # If not yet selected/booked, propose selection
-            if not matched.get('is_selected') and action in ('new_booking', 'confirmation'):
-                changes.append({
-                    'change_type': 'update',
-                    'entity_type': 'accommodation',
-                    'entity_id': matched['id'],
-                    'description': f"Select {matched['name']} as chosen stay & set to booked",
-                    'fields': {'is_selected': True, 'booking_status': 'booked'},
-                    'current': {
-                        'is_selected': matched.get('is_selected'),
-                        'booking_status': matched.get('booking_status'),
-                    },
-                })
-        else:
-            # New accommodation not in DB
-            if prop_name and city:
-                changes.append({
-                    'change_type': 'create',
-                    'entity_type': 'accommodation',
-                    'entity_id': None,
-                    'description': f"New accommodation: {prop_name} in {city}",
-                    'fields': {
-                        'name': prop_name,
-                        'city': city,
-                        'confirmation_number': conf_num,
-                        'check_in_date': extracted.get('check_in_date'),
-                        'check_out_date': extracted.get('check_out_date'),
-                        'check_in_info': extracted.get('check_in_time'),
-                        'check_out_info': extracted.get('check_out_time'),
-                        'address': extracted.get('address'),
-                        'phone': extracted.get('host_phone'),
-                    },
-                    'current': {},
-                })
-
-    elif etype == 'flight':
-        flight_num = extracted.get('flight_number', '')
-        conf_num = extracted.get('confirmation_number', '')
-
-        for fl in db_state.get('flights', []):
-            if flight_num and flight_num.upper() in fl['flight_number'].upper():
-                update_fields = {}
-                current = {}
-                if conf_num and conf_num != fl.get('confirmation_number'):
-                    update_fields['confirmation_number'] = conf_num
-                    current['confirmation_number'] = fl.get('confirmation_number')
-                dep_time = extracted.get('departure_time')
-                if dep_time and dep_time != fl.get('depart_time'):
-                    update_fields['depart_time'] = dep_time
-                    current['depart_time'] = fl.get('depart_time')
-                arr_time = extracted.get('arrival_time')
-                if arr_time and arr_time != fl.get('arrive_time'):
-                    update_fields['arrive_time'] = arr_time
-                    current['arrive_time'] = fl.get('arrive_time')
-
-                if update_fields:
-                    changes.append({
-                        'change_type': 'update',
-                        'entity_type': 'flight',
-                        'entity_id': fl['id'],
-                        'description': f"Update flight {fl['flight_number']}: {', '.join(update_fields.keys())}",
-                        'fields': update_fields,
-                        'current': current,
-                    })
-
-    elif etype == 'boarding_pass':
-        flight_num = extracted.get('flight_number', '')
-        for fl in db_state.get('flights', []):
-            if flight_num and flight_num.upper() in fl['flight_number'].upper():
-                # Build notes with boarding pass details
-                bp_parts = []
-                if extracted.get('gate'):
-                    bp_parts.append(f"Gate: {extracted['gate']}")
-                if extracted.get('seat'):
-                    bp_parts.append(f"Seat: {extracted['seat']}")
-                if extracted.get('boarding_group'):
-                    bp_parts.append(f"Group: {extracted['boarding_group']}")
-                if extracted.get('departure_time'):
-                    bp_parts.append(f"Departs: {extracted['departure_time']}")
-                bp_info = ' | '.join(bp_parts) if bp_parts else 'Boarding pass received'
-
-                changes.append({
-                    'change_type': 'update',
-                    'entity_type': 'flight',
-                    'entity_id': fl['id'],
-                    'description': f"Boarding pass for {fl['flight_number']}: {bp_info}",
-                    'fields': {
-                        'notes': bp_info,
-                        **(({'depart_time': extracted['departure_time']}
-                            if extracted.get('departure_time') and
-                            extracted['departure_time'] != fl.get('depart_time') else {})),
-                    },
-                    'current': {'notes': fl.get('notes', '')},
-                })
-                # Flag that attachments should be saved
-                if extracted.get('has_attachment'):
-                    changes.append({
-                        'change_type': 'upload',
-                        'entity_type': 'document',
-                        'entity_id': fl['id'],
-                        'description': f"Save boarding pass PDF for {fl['flight_number']}",
-                        'fields': {'doc_type': 'boarding_pass', 'linked_flight_id': fl['id']},
-                        'current': {},
-                    })
-                break
-
-    elif etype == 'restaurant':
-        restaurant_name = extracted.get('restaurant_name') or extracted.get('venue', '')
-        activity_date = extracted.get('activity_date', '')
-        activity_time = extracted.get('activity_time', '')
-        party_size = extracted.get('party_size', '')
-        if restaurant_name:
-            notes_parts = []
-            if extracted.get('confirmation_number'):
-                notes_parts.append(f"Conf: {extracted['confirmation_number']}")
-            if party_size:
-                notes_parts.append(f"Party of {party_size}")
-            if extracted.get('notes'):
-                notes_parts.append(extracted['notes'])
-            changes.append({
-                'change_type': 'create',
-                'entity_type': 'activity',
-                'entity_id': None,
-                'description': f"Restaurant reservation: {restaurant_name} on {activity_date or '?'} at {activity_time or '?'}",
-                'fields': {
-                    'title': f"Dinner: {restaurant_name}" if not restaurant_name.startswith('Dinner') else restaurant_name,
-                    'date': activity_date,
-                    'time': activity_time,
-                    'category': 'food',
-                    'address': extracted.get('address'),
-                    'venue': restaurant_name,
-                    'confirmation_number': extracted.get('confirmation_number'),
-                    'notes': ' | '.join(notes_parts) if notes_parts else None,
-                    'book_ahead': True,
-                    'book_ahead_note': f"Reserved via {extracted.get('platform', 'restaurant')}"
-                                       + (f", conf {extracted['confirmation_number']}" if extracted.get('confirmation_number') else ''),
-                },
-                'current': {},
-            })
-
-    elif etype == 'activity_ticket':
-        activity_name = extracted.get('activity_name', '')
-        activity_date = extracted.get('activity_date', '')
-        if activity_name:
-            notes_parts = []
-            if extracted.get('confirmation_number'):
-                notes_parts.append(f"Conf: {extracted['confirmation_number']}")
-            if extracted.get('activity_duration'):
-                notes_parts.append(f"Duration: {extracted['activity_duration']}")
-            if extracted.get('notes'):
-                notes_parts.append(extracted['notes'])
-            changes.append({
-                'change_type': 'create',
-                'entity_type': 'activity',
-                'entity_id': None,
-                'description': f"New activity: {activity_name} on {activity_date or '?'}",
-                'fields': {
-                    'title': activity_name,
-                    'date': activity_date,
-                    'time': extracted.get('activity_time'),
-                    'address': extracted.get('address'),
-                    'venue': extracted.get('venue'),
-                    'confirmation_number': extracted.get('confirmation_number'),
-                    'notes': ' | '.join(notes_parts) if notes_parts else None,
-                    'book_ahead': True,
-                    'book_ahead_note': f"Booked via {extracted.get('platform', 'online')}"
-                                       + (f", conf {extracted['confirmation_number']}" if extracted.get('confirmation_number') else ''),
-                },
-                'current': {},
-            })
-
-    elif etype == 'transport_ticket':
-        notes_parts = []
-        if extracted.get('confirmation_number'):
-            notes_parts.append(f"Conf: {extracted['confirmation_number']}")
-        if extracted.get('notes'):
-            notes_parts.append(extracted['notes'])
-        train_name = extracted.get('activity_name') or extracted.get('notes', '')
-        changes.append({
-            'change_type': 'create',
-            'entity_type': 'transport',
-            'entity_id': None,
-            'description': f"Transport ticket: {train_name or 'train'} on {extracted.get('activity_date', '?')}",
-            'fields': {
-                'name': train_name,
-                'date': extracted.get('activity_date'),
-                'time': extracted.get('activity_time'),
-                'confirmation_number': extracted.get('confirmation_number'),
-                'notes': ' | '.join(notes_parts) if notes_parts else None,
-            },
-            'current': {},
+    accommodations = []
+    for opt in AccommodationOption.query.all():
+        loc = AccommodationLocation.query.get(opt.location_id)
+        accommodations.append({
+            'id': opt.id,
+            'name': opt.name,
+            'location_name': loc.location_name if loc else '',
+            'is_selected': opt.is_selected,
+            'is_eliminated': opt.is_eliminated,
+            'booking_status': opt.booking_status,
+            'confirmation_number': opt.confirmation_number,
+            'address': opt.address,
+            'check_in_info': opt.check_in_info,
+            'check_out_info': opt.check_out_info,
+            'phone': opt.phone,
+            'user_notes': opt.user_notes,
+            'document_id': opt.document_id,
         })
 
-    return changes
+    flights = []
+    for fl in Flight.query.all():
+        flights.append({
+            'id': fl.id,
+            'flight_number': fl.flight_number,
+            'airline': fl.airline,
+            'booking_status': fl.booking_status,
+            'confirmation_number': fl.confirmation_number,
+            'depart_time': fl.depart_time,
+            'arrive_time': fl.arrive_time,
+            'notes': fl.notes,
+            'document_id': fl.document_id,
+        })
 
+    # Include activities that are book-ahead or confirmed, for dedup checking
+    activities = []
+    for act in Activity.query.filter(
+        (Activity.book_ahead == True) |
+        (Activity.is_confirmed == True) |
+        (Activity.category == 'food')
+    ).all():
+        activities.append({
+            'id': act.id,
+            'title': act.title,
+            'day_id': act.day_id,
+            'time_slot': act.time_slot,
+            'category': act.category,
+            'book_ahead': act.book_ahead,
+            'book_ahead_note': act.book_ahead_note,
+            'is_confirmed': act.is_confirmed,
+            'is_eliminated': act.is_eliminated,
+            'notes': act.notes,
+        })
+
+    return {'accommodations': accommodations, 'flights': flights, 'activities': activities}
+
+
+# ---------------------------------------------------------------------------
+# Attachment handling
+# ---------------------------------------------------------------------------
 
 def download_and_upload_attachments(service, content, extracted, app):
-    """Download email attachments and upload them to the app's document system.
-
-    Returns list of uploaded document IDs.
-    """
+    """Download email attachments and upload them to the app's document system."""
     if not extracted.get('has_attachment') or not content.get('attachments'):
         return []
 
@@ -619,7 +613,6 @@ def download_and_upload_attachments(service, content, extracted, app):
     docs_folder = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), 'documents')
     os.makedirs(docs_folder, exist_ok=True)
 
-    # Determine doc_type from extracted type
     type_map = {
         'boarding_pass': 'flight_receipt',
         'flight': 'flight_receipt',
@@ -632,7 +625,6 @@ def download_and_upload_attachments(service, content, extracted, app):
 
     for att in content['attachments']:
         fname = att.get('filename', '')
-        # Only download PDFs and images
         ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
         if ext not in ('pdf', 'png', 'jpg', 'jpeg', 'webp'):
             continue
@@ -669,50 +661,16 @@ def download_and_upload_attachments(service, content, extracted, app):
     return uploaded_ids
 
 
-def get_db_state():
-    """Get current DB state for diffing. Must be called in app context."""
-    from models import AccommodationOption, AccommodationLocation, Flight
-
-    accommodations = []
-    for opt in AccommodationOption.query.all():
-        loc = AccommodationLocation.query.get(opt.location_id)
-        accommodations.append({
-            'id': opt.id,
-            'name': opt.name,
-            'location_name': loc.location_name if loc else '',
-            'is_selected': opt.is_selected,
-            'is_eliminated': opt.is_eliminated,
-            'booking_status': opt.booking_status,
-            'confirmation_number': opt.confirmation_number,
-            'address': opt.address,
-            'check_in_info': opt.check_in_info,
-            'check_out_info': opt.check_out_info,
-            'phone': opt.phone,
-            'user_notes': opt.user_notes,
-            'document_id': opt.document_id,
-        })
-
-    flights = []
-    for fl in Flight.query.all():
-        flights.append({
-            'id': fl.id,
-            'flight_number': fl.flight_number,
-            'airline': fl.airline,
-            'booking_status': fl.booking_status,
-            'confirmation_number': fl.confirmation_number,
-            'depart_time': fl.depart_time,
-            'arrive_time': fl.arrive_time,
-            'notes': fl.notes,
-            'document_id': fl.document_id,
-        })
-
-    return {'accommodations': accommodations, 'flights': flights}
-
+# ---------------------------------------------------------------------------
+# Main sync pipeline
+# ---------------------------------------------------------------------------
 
 def run_sync(app):
-    """Run a full Gmail sync cycle. Returns sync result dict.
+    """Run a full two-stage Gmail sync cycle.
 
-    Must be called with app context available.
+    Stage 1: Haiku scans each email for structured data (fast, cheap).
+    Stage 2: Opus analyzes the batch — deduplicates, filters, and produces
+             curated changes with clear consequences.
     """
     from models import db, GmailSyncLog, PendingGmailChange
 
@@ -727,23 +685,34 @@ def run_sync(app):
         db.session.commit()
 
         try:
-            # Get already-processed email IDs
             existing_email_ids = {
                 c.gmail_message_id
                 for c in PendingGmailChange.query.with_entities(
                     PendingGmailChange.gmail_message_id).all()
             }
 
-            # Search for emails
             email_stubs = search_travel_emails(service)
             log.emails_found = len(email_stubs)
 
-            # Filter to unprocessed
             new_stubs = [s for s in email_stubs
                          if s['id'] not in existing_email_ids]
 
-            db_state = get_db_state()
-            changes_created = 0
+            if not new_stubs:
+                log.changes_detected = 0
+                log.completed_at = datetime.utcnow()
+                log.status = 'completed'
+                db.session.commit()
+                return {
+                    'ok': True,
+                    'emails_found': log.emails_found,
+                    'new_emails': 0,
+                    'changes_proposed': 0,
+                    'sync_id': log.id,
+                }
+
+            # ----- Stage 1: Haiku extraction -----
+            haiku_extractions = []  # list of (content_dict, extracted_dict)
+            skipped_emails = []     # emails that Haiku said aren't travel-related
 
             for stub in new_stubs:
                 try:
@@ -751,7 +720,14 @@ def run_sync(app):
                     extracted = extract_booking_data(content, api_key)
 
                     if not extracted or extracted.get('type') == 'other':
-                        # Still record that we processed this email
+                        skipped_emails.append((stub['id'], content))
+                        continue
+
+                    # Hard geographic filter before passing to Opus
+                    if not _passes_geographic_filter(extracted):
+                        # Record as skipped with reason
+                        city = extracted.get('city', 'unknown')
+                        country = extracted.get('country', 'unknown')
                         skip = PendingGmailChange(
                             gmail_message_id=stub['id'],
                             email_subject=content.get('subject', '')[:500],
@@ -759,30 +735,109 @@ def run_sync(app):
                             email_date=content.get('date', '')[:100],
                             change_type='none',
                             entity_type='other',
-                            description='Not a travel booking email',
-                            proposed_data=json.dumps(extracted or {}),
+                            description=f'Filtered: not Japan trip ({city}, {country})',
+                            proposed_data=json.dumps(extracted),
                             status='skipped',
+                            opus_reasoning=f'Geographic filter: {city}, {country} is not in Japan trip cities',
                         )
                         db.session.add(skip)
                         continue
 
-                    # Download and upload attachments if the email has them
-                    uploaded_doc_ids = []
-                    if extracted.get('has_attachment') and content.get('attachments'):
-                        uploaded_doc_ids = download_and_upload_attachments(
-                            service, content, extracted, app)
+                    haiku_extractions.append((content, extracted))
 
-                    proposed = diff_against_db(extracted, db_state)
+                except Exception as e:
+                    log.errors = (log.errors or '') + f"\nHaiku stage {stub['id']}: {str(e)}"
 
-                    # For upload-type changes, attach the uploaded doc IDs
-                    for change in proposed:
-                        if change.get('change_type') == 'upload' and uploaded_doc_ids:
-                            change['fields']['uploaded_doc_ids'] = uploaded_doc_ids
+            # Record skipped emails
+            for email_id, content in skipped_emails:
+                skip = PendingGmailChange(
+                    gmail_message_id=email_id,
+                    email_subject=content.get('subject', '')[:500],
+                    email_from=content.get('from', '')[:200],
+                    email_date=content.get('date', '')[:100],
+                    change_type='none',
+                    entity_type='other',
+                    description='Not a travel booking email',
+                    proposed_data='{}',
+                    status='skipped',
+                )
+                db.session.add(skip)
 
-                    if not proposed:
-                        # Email is travel-related but no changes needed
+            # ----- Stage 2: Opus analysis -----
+            changes_created = 0
+
+            if haiku_extractions:
+                db_state = get_db_state()
+                opus_results = analyze_with_opus(haiku_extractions, db_state, api_key)
+
+                # Track which email indices Opus referenced, so we can record the rest
+                referenced_indices = set()
+
+                for result in opus_results:
+                    action = result.get('action', 'skip')
+                    email_idx = result.get('email_index', 0)
+
+                    # Get the corresponding email content
+                    if email_idx < 0 or email_idx >= len(haiku_extractions):
+                        continue
+
+                    referenced_indices.add(email_idx)
+                    content, extracted = haiku_extractions[email_idx]
+                    gmail_msg_id = content['id']
+
+                    if action == 'skip':
                         skip = PendingGmailChange(
-                            gmail_message_id=stub['id'],
+                            gmail_message_id=gmail_msg_id,
+                            email_subject=content.get('subject', '')[:500],
+                            email_from=content.get('from', '')[:200],
+                            email_date=content.get('date', '')[:100],
+                            change_type='none',
+                            entity_type=result.get('entity_type', 'other'),
+                            description=result.get('reason', 'Skipped by analysis'),
+                            proposed_data=json.dumps(extracted),
+                            status='skipped',
+                            opus_reasoning=result.get('reason', ''),
+                        )
+                        db.session.add(skip)
+                        continue
+
+                    # Map Opus action to change_type
+                    change_type = {'update': 'update', 'create': 'create',
+                                   'cancel': 'cancel'}.get(action, 'update')
+
+                    # Download attachments if the original extraction flagged them
+                    if extracted.get('has_attachment') and content.get('attachments'):
+                        uploaded_ids = download_and_upload_attachments(
+                            service, content, extracted, app)
+                        if uploaded_ids:
+                            fields = result.get('fields', {})
+                            fields['_uploaded_doc_ids'] = uploaded_ids
+                            result['fields'] = fields
+
+                    pending = PendingGmailChange(
+                        gmail_message_id=gmail_msg_id,
+                        email_subject=content.get('subject', '')[:500],
+                        email_from=content.get('from', '')[:200],
+                        email_date=content.get('date', '')[:100],
+                        change_type=change_type,
+                        entity_type=result.get('entity_type', 'other'),
+                        entity_id=result.get('entity_id'),
+                        description=result.get('description', 'Change proposed')[:500],
+                        proposed_data=json.dumps(result.get('fields', {})),
+                        current_data=json.dumps(result.get('current', {})),
+                        consequence=result.get('consequence', '')[:1000],
+                        confidence=result.get('confidence', 'medium'),
+                        opus_reasoning=result.get('reasoning', '')[:1000],
+                        status='pending',
+                    )
+                    db.session.add(pending)
+                    changes_created += 1
+
+                # Record any emails Opus didn't reference (prevents reprocessing)
+                for idx, (content, extracted) in enumerate(haiku_extractions):
+                    if idx not in referenced_indices:
+                        skip = PendingGmailChange(
+                            gmail_message_id=content['id'],
                             email_subject=content.get('subject', '')[:500],
                             email_from=content.get('from', '')[:200],
                             email_date=content.get('date', '')[:100],
@@ -791,29 +846,9 @@ def run_sync(app):
                             description='No changes needed — data already up to date',
                             proposed_data=json.dumps(extracted),
                             status='skipped',
+                            opus_reasoning='Email passed to analyst but no action required',
                         )
                         db.session.add(skip)
-                        continue
-
-                    for change in proposed:
-                        pending = PendingGmailChange(
-                            gmail_message_id=stub['id'],
-                            email_subject=content.get('subject', '')[:500],
-                            email_from=content.get('from', '')[:200],
-                            email_date=content.get('date', '')[:100],
-                            change_type=change['change_type'],
-                            entity_type=change['entity_type'],
-                            entity_id=change.get('entity_id'),
-                            description=change['description'],
-                            proposed_data=json.dumps(change['fields']),
-                            current_data=json.dumps(change.get('current', {})),
-                            status='pending',
-                        )
-                        db.session.add(pending)
-                        changes_created += 1
-
-                except Exception as e:
-                    log.errors = (log.errors or '') + f"\n{stub['id']}: {str(e)}"
 
             log.changes_detected = changes_created
             log.completed_at = datetime.utcnow()
@@ -836,45 +871,92 @@ def run_sync(app):
             return {'ok': False, 'error': str(e)}
 
 
+# ---------------------------------------------------------------------------
+# Apply approved changes
+# ---------------------------------------------------------------------------
+
 def apply_change(change_id):
     """Apply an approved pending change to the DB.
 
-    Must be called in app context.
+    Handles all entity types: accommodations, flights, activities, transport.
+    For supplementary info (check-in details, house rules), appends to existing data.
     """
-    from models import db, PendingGmailChange, AccommodationOption, Flight
+    from models import (db, PendingGmailChange, AccommodationOption, Flight,
+                        Activity, Day)
     import services.accommodations as accom_svc
     import services.flights as flight_svc
+    import services.activities as activity_svc
 
     change = PendingGmailChange.query.get(change_id)
     if not change or change.status != 'pending':
         return {'ok': False, 'error': 'Change not found or not pending'}
 
     fields = json.loads(change.proposed_data)
+    # Remove internal-only fields
+    uploaded_doc_ids = fields.pop('_uploaded_doc_ids', [])
+
+    # Fields that must never be overwritten via setattr
+    PROTECTED_FIELDS = frozenset({
+        'id', 'location_id', 'document_id', 'day_id', 'rank',
+    })
 
     try:
         if change.entity_type == 'accommodation' and change.entity_id:
             opt = AccommodationOption.query.get(change.entity_id)
             if not opt:
                 change.status = 'failed'
+                change.errors = 'Accommodation option not found in DB'
                 db.session.commit()
                 return {'ok': False, 'error': 'Accommodation not found'}
 
             if change.change_type == 'cancel':
-                opt.booking_status = 'cancelled'
+                # Use service layer for proper checklist cascade
+                accom_svc.update_status(opt.id, {'booking_status': 'cancelled'})
                 if opt.is_selected:
                     opt.is_selected = False
-                db.session.commit()
+                    db.session.commit()
+
             elif change.change_type == 'update':
-                # Handle selection separately
+                # Handle selection separately via service layer
                 if 'is_selected' in fields:
                     if fields.pop('is_selected'):
                         accom_svc.select(opt.id)
+
+                # Route booking_status and related fields through service layer
+                status_fields = {}
                 if 'booking_status' in fields:
                     bs = fields.pop('booking_status')
-                    accom_svc.update_status(opt.id, {'booking_status': bs})
-                # Apply remaining fields directly
+                    # Never auto-set confirmed (requires document)
+                    if bs != 'confirmed':
+                        status_fields['booking_status'] = bs
+
+                # Fields the service layer handles (with validation + cascades)
+                for svc_field in ('confirmation_number', 'check_in_info',
+                                  'check_out_info', 'address', 'maps_url',
+                                  'booking_url'):
+                    if svc_field in fields:
+                        status_fields[svc_field] = fields.pop(svc_field)
+
+                # For user_notes, APPEND to existing rather than replacing
+                if 'user_notes' in fields:
+                    if opt.user_notes:
+                        existing = opt.user_notes.strip()
+                        new_notes = fields['user_notes'].strip()
+                        if new_notes not in existing:
+                            status_fields['user_notes'] = existing + '\n' + new_notes
+                        # else: already present, skip
+                    else:
+                        status_fields['user_notes'] = fields['user_notes']
+                    fields.pop('user_notes')
+
+                if status_fields:
+                    accom_svc.update_status(opt.id, status_fields)
+
+                # Apply remaining safe fields directly (phone, etc.)
                 for k, v in fields.items():
-                    if hasattr(opt, k):
+                    if k in PROTECTED_FIELDS:
+                        continue
+                    if hasattr(opt, k) and v is not None:
                         setattr(opt, k, v)
                 db.session.commit()
 
@@ -882,19 +964,90 @@ def apply_change(change_id):
             flight = Flight.query.get(change.entity_id)
             if not flight:
                 change.status = 'failed'
+                change.errors = 'Flight not found in DB'
                 db.session.commit()
                 return {'ok': False, 'error': 'Flight not found'}
+
+            # For flight notes, append rather than replace
+            if 'notes' in fields and flight.notes:
+                existing = flight.notes.strip()
+                new_notes = fields['notes'].strip()
+                if new_notes not in existing:
+                    fields['notes'] = existing + ' | ' + new_notes
+
+            # flight_svc.update handles its own Socket.IO emit
             flight_svc.update(flight.id, fields)
 
+        elif change.entity_type == 'activity':
+            if change.change_type == 'create':
+                # Create a new activity
+                day_id = fields.pop('day_id', None)
+                if not day_id:
+                    # Try to find day by date
+                    activity_date = fields.pop('date', None)
+                    if activity_date:
+                        day = Day.query.filter_by(date=activity_date).first()
+                        if day:
+                            day_id = day.id
+
+                if not day_id:
+                    change.status = 'failed'
+                    change.errors = 'Could not determine which day to add activity to'
+                    db.session.commit()
+                    return {'ok': False, 'error': 'No day_id for new activity'}
+
+                # Build activity data for the service layer
+                activity_data = {
+                    'title': fields.get('title', 'Untitled'),
+                    'time_slot': fields.get('time_slot', 'evening'),
+                    'category': fields.get('category', 'food'),
+                    'description': fields.get('description') or fields.get('notes'),
+                    'address': fields.get('address'),
+                    'book_ahead': fields.get('book_ahead', False),
+                    'book_ahead_note': fields.get('book_ahead_note'),
+                    'url': fields.get('url'),
+                    'maps_url': fields.get('maps_url'),
+                    'is_confirmed': True,
+                }
+                # Remove None values
+                activity_data = {k: v for k, v in activity_data.items() if v is not None}
+
+                # activity_svc.add handles its own Socket.IO emit
+                activity_svc.add(day_id, activity_data)
+
+            elif change.change_type == 'update' and change.entity_id:
+                act = Activity.query.get(change.entity_id)
+                if not act:
+                    change.status = 'failed'
+                    change.errors = 'Activity not found in DB'
+                    db.session.commit()
+                    return {'ok': False, 'error': 'Activity not found'}
+
+                # Append to notes/description if existing
+                for note_field in ('notes', 'description'):
+                    if note_field in fields and getattr(act, note_field):
+                        existing = getattr(act, note_field).strip()
+                        new_notes = fields[note_field].strip()
+                        if new_notes not in existing:
+                            fields[note_field] = existing + '\n' + new_notes
+
+                update_data = {k: v for k, v in fields.items()
+                               if k not in PROTECTED_FIELDS
+                               and hasattr(act, k) and v is not None}
+                if update_data:
+                    # activity_svc.update handles its own Socket.IO emit
+                    activity_svc.update(act.id, update_data)
+
+        elif change.entity_type == 'transport':
+            if change.change_type == 'create':
+                import services.transport as transport_svc
+                # transport_svc.add handles its own Socket.IO emit
+                transport_svc.add(fields)
+
+        # Mark as approved
         change.status = 'approved'
         change.reviewed_at = datetime.utcnow()
         db.session.commit()
-
-        from extensions import socketio
-        if change.entity_type == 'accommodation':
-            socketio.emit('accommodation_updated', {})
-        elif change.entity_type == 'flight':
-            socketio.emit('flight_updated', {})
 
         return {'ok': True, 'message': change.description}
 

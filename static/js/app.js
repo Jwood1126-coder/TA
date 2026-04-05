@@ -18,7 +18,7 @@ function hardRefresh() {
 
 // Register service worker for offline support
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js?v=106')
+    navigator.serviceWorker.register('/static/sw.js?v=109')
         .then(reg => {
             console.log('SW registered, scope:', reg.scope);
             reg.addEventListener('updatefound', () => {
@@ -255,6 +255,65 @@ socket.on('accommodation_updated', function(data) {
         location.reload();
     }
 });
+
+// Gmail sync notifications
+(function() {
+    // Request notification permission on first visit
+    if ('Notification' in window && Notification.permission === 'default') {
+        // Defer until user interacts with the page
+        document.addEventListener('click', function requestNotifPerm() {
+            Notification.requestPermission();
+            document.removeEventListener('click', requestNotifPerm);
+        }, { once: true });
+    }
+
+    // Listen for gmail sync results via Socket.IO
+    socket.on('gmail_sync_complete', function(data) {
+        const count = data.changes_proposed || 0;
+        if (count > 0) {
+            // Update badge in nav if present
+            const badge = document.getElementById('gmail-badge');
+            if (badge) {
+                badge.textContent = count;
+                badge.style.display = 'inline-block';
+            }
+
+            // Show browser notification (via service worker for persistence)
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'GMAIL_CHANGES',
+                    count: count,
+                });
+            } else if ('Notification' in window && Notification.permission === 'granted') {
+                // Fallback: direct notification
+                new Notification('Japan Trip — Gmail Sync', {
+                    body: count + ' new change' + (count > 1 ? 's' : '') + ' from email — tap to review',
+                    icon: '/static/icons/icon-192.png',
+                    tag: 'gmail-sync',
+                });
+            }
+
+            // Show in-app toast
+            showToast(count + ' new email change' + (count > 1 ? 's' : '') + ' pending review');
+        }
+    });
+
+    // Poll for pending changes every 5 minutes to show badge
+    function checkPendingGmail() {
+        fetch('/api/gmail/status').then(r => r.json()).then(data => {
+            const badge = document.getElementById('gmail-badge');
+            if (badge && data.pending_count > 0) {
+                badge.textContent = data.pending_count;
+                badge.style.display = 'inline-block';
+            } else if (badge) {
+                badge.style.display = 'none';
+            }
+        }).catch(() => {});
+    }
+    // Check on load and then every 5 minutes
+    checkPendingGmail();
+    setInterval(checkPendingGmail, 5 * 60 * 1000);
+})();
 
 // Backup / Restore
 function showBackupPanel(e) {

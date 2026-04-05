@@ -125,6 +125,17 @@ def run_schema_migrations(app):
         )
     """)
 
+    # Add Opus analysis columns to pending_gmail_change
+    for col, col_type in [
+        ('consequence', 'TEXT'),
+        ('confidence', 'TEXT'),
+        ('opus_reasoning', 'TEXT'),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE pending_gmail_change ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass  # already exists
+
     conn.commit()
     conn.close()
 
@@ -732,9 +743,15 @@ def _migrate_remove_daytrip_transport(cursor, conn):
     dedicated transport cards. Transport cards are reserved for reservation-to-
     reservation moves only.
 
-    Idempotent: checks existence before each operation.
-    Uses content-based lookups (NOT hardcoded IDs).
+    One-shot: uses sentinel to run only once. Previously ran unconditionally
+    on every boot, which would delete user-added routes matching these patterns.
     """
+    # Sentinel check
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__daytrip_transport_removed_v1' in row[0]:
+        return
+
     # --- 1. Delete Hakone day-trip route (Tokyo → Odawara) ---
     cursor.execute("""
         DELETE FROM transport_route
@@ -797,6 +814,12 @@ def _migrate_remove_daytrip_transport(cursor, conn):
                 WHERE id = ?
             """, (row[0],))
 
+    # Set sentinel so this never runs again
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __daytrip_transport_removed_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__daytrip_transport_removed_v1%')
+    """)
+
     conn.commit()
 
 
@@ -809,8 +832,14 @@ def _migrate_checklist_simplify(cursor, conn):
     - Fix priority values (were set to category names)
     - Add missing practical items (cash, offline maps, confirmations)
 
-    Idempotent: checks existence before each operation.
+    One-shot: uses sentinel to run only once.
     """
+    # Sentinel check
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__checklist_simplified_v1' in row[0]:
+        return
+
     # --- 1. Delete stale "Buy remaining miles" ---
     cursor.execute("DELETE FROM checklist_item WHERE title LIKE '%remaining miles%'")
 
@@ -892,6 +921,12 @@ def _migrate_checklist_simplify(cursor, conn):
     rows = cursor.fetchall()
     for i, (item_id,) in enumerate(rows):
         cursor.execute("UPDATE checklist_item SET sort_order = ? WHERE id = ?", (i + 1, item_id))
+
+    # Set sentinel so this never runs again
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __checklist_simplified_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__checklist_simplified_v1%')
+    """)
 
     conn.commit()
 
@@ -1351,8 +1386,14 @@ def _migrate_cancel_kyotofish(cursor, conn):
     Booking was cancelled by user. Unselect, clear document link, and
     re-open other options for consideration.
 
-    Idempotent: only acts if Kyotofish is still selected/booked.
+    One-shot: uses sentinel to ensure this only runs once.
     """
+    # Sentinel check — skip if already applied
+    cursor.execute("SELECT quick_notes FROM accommodation_location WHERE location_name LIKE '%Kyoto%Stay 2%'")
+    row = cursor.fetchone()
+    if row and row[0] and '__kyotofish_cancelled_v1' in row[0]:
+        return
+
     cursor.execute("""
         UPDATE accommodation_option
         SET booking_status = 'cancelled', is_selected = 0, document_id = NULL
@@ -1373,12 +1414,12 @@ def _migrate_cancel_kyotofish(cursor, conn):
               AND is_eliminated = 1
         """)
 
-    # Clean up quick_notes that still reference the cancelled booking
+    # Clean up quick_notes and set sentinel
     cursor.execute("""
         UPDATE accommodation_location
-        SET quick_notes = 'Second half of Kyoto. Private teahouse in Miyagawacho geisha district.'
+        SET quick_notes = 'Second half of Kyoto. Private teahouse in Miyagawacho geisha district. __kyotofish_cancelled_v1'
         WHERE location_name LIKE '%Kyoto%Stay 2%'
-          AND quick_notes LIKE '%BOOKED%Kyotofish%'
+          AND quick_notes NOT LIKE '%__kyotofish_cancelled_v1%'
     """)
     if cursor.rowcount:
         print(f'  Cleaned Kyoto Stay 2 quick_notes (removed cancelled booking reference)')

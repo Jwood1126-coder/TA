@@ -59,7 +59,7 @@
             <a href="{{ url_for('bookahead.bookahead_view') }}" class="more-link">{{ icon_ticket(18) }} Book Ahead</a>
             <a href="{{ url_for('documents.documents_view') }}" class="more-link">{{ icon_clipboard(18) }} Travel Documents</a>
             <a href="{{ url_for('reference.reference_view') }}" class="more-link">{{ icon_book(18) }} Reference Guide</a>
-            <a href="{{ url_for('gmail_sync.gmail_sync_view') }}" class="more-link">&#x2709; Gmail Sync</a>
+            <a href="{{ url_for('gmail_sync.gmail_sync_view') }}" class="more-link">&#x2709; Gmail Sync <span id="gmail-badge" style="display:none; background:#d32f2f; color:#fff; font-size:0.65rem; padding:1px 6px; border-radius:10px; margin-left:4px; font-weight:700;"></span></a>
             <hr class="more-divider">
             <a href="#" class="more-link more-settings" onclick="toggleTheme()">{{ icon_moon(18) }} Toggle Dark Mode</a>
             <a href="{{ url_for('export.export_view') }}" class="more-link more-settings">&#x1f4c4; Export PDF</a>

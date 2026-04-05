@@ -358,6 +358,9 @@ class PendingGmailChange(db.Model):
     description = db.Column(db.String(500), nullable=False)
     proposed_data = db.Column(db.Text)  # JSON of proposed field values
     current_data = db.Column(db.Text)   # JSON of current field values (for comparison)
+    consequence = db.Column(db.Text)     # what exactly happens when approved (shown to user)
+    confidence = db.Column(db.String(20))  # high, medium, low — from Opus analysis
+    opus_reasoning = db.Column(db.Text)  # why Opus recommended this change
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected, skipped, failed
     detected_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at = db.Column(db.DateTime)

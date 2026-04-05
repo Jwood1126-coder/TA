@@ -24,10 +24,18 @@
 .change-card.approved { opacity:0.6; border-left-color:#888; }
 
 .change-meta { font-size:0.78rem; color:var(--pico-muted-color); margin-bottom:6px; }
-.change-desc { font-size:0.95rem; font-weight:600; margin-bottom:8px; }
+.change-desc { font-size:0.95rem; font-weight:600; margin-bottom:6px; }
+.change-consequence { font-size:0.85rem; margin-bottom:8px; padding:8px 10px; border-radius:6px;
+    background:var(--pico-code-background-color); line-height:1.4; }
+.change-consequence strong { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.3px; }
+.change-reasoning { font-size:0.8rem; color:var(--pico-muted-color); margin-bottom:8px; font-style:italic; }
 .change-detail { font-size:0.82rem; color:var(--pico-muted-color); margin-bottom:8px; }
 .change-detail code { background:var(--pico-code-background-color); padding:1px 4px; border-radius:3px; font-size:0.78rem; }
 .change-actions { display:flex; gap:8px; }
+
+.confidence-high { color:#2a9d2a; }
+.confidence-medium { color:#e68a00; }
+.confidence-low { color:#d32f2f; }
 
 .section-label { font-size:0.85rem; font-weight:600; color:var(--pico-muted-color); text-transform:uppercase; letter-spacing:0.5px;
     margin:20px 0 8px; padding-bottom:4px; border-bottom:1px solid var(--pico-muted-border-color); }
@@ -43,6 +51,9 @@
 .badge-approved { background:#d4edda; color:#155724; }
 .badge-rejected { background:#f8d7da; color:#721c24; }
 .badge-skipped { background:#e2e3e5; color:#383d41; }
+
+.pipeline-info { font-size:0.8rem; color:var(--pico-muted-color); padding:8px 12px; border-radius:6px;
+    background:var(--pico-code-background-color); margin-bottom:16px; }
 </style>
 {% endblock %}
 
@@ -72,6 +83,11 @@
     </div>
 </div>
 
+<div class="pipeline-info">
+    Two-stage pipeline: Haiku scans emails for data, then Opus analyzes the batch for relevance,
+    deduplication, and clear consequences before proposing changes.
+</div>
+
 {% if pending %}
 <div class="section-label">Pending Review ({{ pending|length }})</div>
 {% for change in pending %}
@@ -81,24 +97,46 @@
         &middot; {{ change.email_date[:20] if change.email_date else '' }}
         <span class="badge badge-pending">{{ change.change_type }}</span>
         <span class="badge" style="background:#e3f2fd; color:#0d47a1;">{{ change.entity_type }}</span>
+        {% if change.confidence %}
+        <span class="badge confidence-{{ change.confidence }}"
+              style="{% if change.confidence == 'high' %}background:#d4edda{% elif change.confidence == 'medium' %}background:#fff3cd{% else %}background:#f8d7da{% endif %}">
+            {{ change.confidence }} confidence
+        </span>
+        {% endif %}
     </div>
     <div class="change-desc">{{ change.description }}</div>
-    {% if change.proposed_data %}
-    <div class="change-detail">
-        <strong>Proposed:</strong>
-        {% for key, val in (change.proposed_data | from_json).items() %}
-            {% if val %}<code>{{ key }}={{ val }}</code> {% endif %}
-        {% endfor %}
+
+    {% if change.consequence %}
+    <div class="change-consequence">
+        <strong>What happens if you approve:</strong><br>
+        {{ change.consequence }}
     </div>
     {% endif %}
-    {% if change.current_data and change.current_data != '{}' %}
-    <div class="change-detail">
-        <strong>Current:</strong>
-        {% for key, val in (change.current_data | from_json).items() %}
-            <code>{{ key }}={{ val if val else 'empty' }}</code>
-        {% endfor %}
-    </div>
+
+    {% if change.opus_reasoning %}
+    <div class="change-reasoning">{{ change.opus_reasoning }}</div>
     {% endif %}
+
+    {% if change.proposed_data and change.proposed_data != '{}' %}
+    <details style="margin-bottom:8px;">
+        <summary style="font-size:0.82rem; color:var(--pico-muted-color); cursor:pointer;">Field details</summary>
+        <div class="change-detail" style="margin-top:6px;">
+            <strong>Proposed:</strong>
+            {% for key, val in (change.proposed_data | from_json).items() %}
+                {% if val and not key.startswith('_') %}<code>{{ key }}={{ val }}</code> {% endif %}
+            {% endfor %}
+        </div>
+        {% if change.current_data and change.current_data != '{}' %}
+        <div class="change-detail">
+            <strong>Current:</strong>
+            {% for key, val in (change.current_data | from_json).items() %}
+                <code>{{ key }}={{ val if val else 'empty' }}</code>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </details>
+    {% endif %}
+
     <div class="change-actions">
         <button class="sync-btn sync-btn-sm sync-btn-approve" onclick="approveChange({{ change.id }})">Approve</button>
         <button class="sync-btn sync-btn-sm sync-btn-reject" onclick="rejectChange({{ change.id }})">Reject</button>
@@ -123,18 +161,30 @@
     <div class="change-meta">
         {{ change.email_subject[:60] }}{% if change.email_subject|length > 60 %}...{% endif %}
         <span class="badge badge-approved">approved</span>
+        {% if change.confidence %}
+        <span class="badge confidence-{{ change.confidence }}"
+              style="{% if change.confidence == 'high' %}background:#d4edda{% elif change.confidence == 'medium' %}background:#fff3cd{% else %}background:#f8d7da{% endif %}">
+            {{ change.confidence }}
+        </span>
+        {% endif %}
     </div>
     <div class="change-desc">{{ change.description }}</div>
+    {% if change.consequence %}
+    <div class="change-consequence" style="opacity:0.7;">{{ change.consequence }}</div>
+    {% endif %}
 </div>
 {% endfor %}
 {% endif %}
 
 {% if recent_skipped %}
-<div class="section-label">Skipped (no changes needed)</div>
+<div class="section-label">Skipped / Filtered</div>
 {% for change in recent_skipped %}
 <div class="change-card" style="border-left-color:#ccc; opacity:0.5;">
     <div class="change-meta">{{ change.email_subject[:60] }}{% if change.email_subject|length > 60 %}...{% endif %}</div>
     <div class="change-desc" style="font-weight:400; font-size:0.85rem;">{{ change.description }}</div>
+    {% if change.opus_reasoning %}
+    <div class="change-reasoning">{{ change.opus_reasoning }}</div>
+    {% endif %}
 </div>
 {% endfor %}
 {% endif %}
@@ -148,9 +198,7 @@ async function triggerSync() {
         const resp = await fetch('/api/gmail/sync', { method: 'POST' });
         const data = await resp.json();
         if (data.ok) {
-            btn.innerHTML = 'Syncing...';
-            // Wait a moment then reload to show results
-            setTimeout(() => location.reload(), 3000);
+            btn.innerHTML = '<span class="sync-spinner"></span> Analyzing...';
         } else {
             btn.textContent = 'Error: ' + (data.error || 'unknown');
             setTimeout(() => { btn.textContent = 'Sync Now'; btn.disabled = false; }, 3000);
@@ -163,16 +211,23 @@ async function triggerSync() {
 
 async function approveChange(id) {
     const card = document.getElementById('change-' + id);
+    const btn = card.querySelector('.sync-btn-approve');
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
     try {
         const resp = await fetch('/api/gmail/approve/' + id, { method: 'POST' });
         const data = await resp.json();
         if (data.ok) {
             card.classList.add('approved');
-            card.querySelector('.change-actions').innerHTML = '<span class="badge badge-approved">Applied</span>';
+            card.querySelector('.change-actions').innerHTML =
+                '<span class="badge badge-approved">Applied successfully</span>';
         } else {
-            alert('Error: ' + (data.error || 'unknown'));
+            card.querySelector('.change-actions').innerHTML =
+                '<span class="badge badge-rejected">Failed: ' + (data.error || 'unknown') + '</span>';
         }
-    } catch (e) { alert('Connection error'); }
+    } catch (e) {
+        btn.textContent = 'Error';
+    }
 }
 
 async function rejectChange(id) {
@@ -189,7 +244,7 @@ async function rejectChange(id) {
 }
 
 async function approveAll() {
-    if (!confirm('Apply all pending changes?')) return;
+    if (!confirm('Apply all pending changes? Review the consequences above before confirming.')) return;
     try {
         const resp = await fetch('/api/gmail/approve-all', { method: 'POST' });
         const data = await resp.json();
