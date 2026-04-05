@@ -97,6 +97,7 @@ def run_schema_migrations(app):
     _migrate_checklist_cleanup_v1(cursor, conn)
     _migrate_fix_route_days_v1(cursor, conn)
     _migrate_transport_audit_v1(cursor, conn)
+    _migrate_address_fix_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -1939,3 +1940,38 @@ def _migrate_transport_audit_v1(cursor, conn):
 
     conn.commit()
     print('  Transport audit v1 complete — routes verified, URLs fixed, taxi tips added')
+
+
+def _migrate_address_fix_v1(cursor, conn):
+    """Fix accommodation addresses verified against official sources.
+
+    Tsukiya-Mikazuki: official site confirms 139-1 Ebisuchō (not 139).
+    One-shot: uses sentinel to run only once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__address_fix_v1' in row[0]:
+        return
+
+    # Tsukiya-Mikazuki: fix house number 139 → 139-1 per official site
+    cursor.execute("""
+        UPDATE accommodation_option
+        SET address = REPLACE(address, '139 Ebisuch', '139-1 Ebisuch')
+        WHERE name LIKE '%Tsukiya%' AND address LIKE '%139 Ebisuch%'
+    """)
+
+    # Also ensure address is set if somehow NULL (from verified sources)
+    cursor.execute("""
+        UPDATE accommodation_option
+        SET address = '139-1 Ebisuchō, Shimogyō-ku, Kyōto-shi, 600-8302, Japan'
+        WHERE name LIKE '%Tsukiya%' AND address IS NULL
+    """)
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __address_fix_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__address_fix_v1%')
+    """)
+
+    conn.commit()
+    print('  Address fix v1 complete — Tsukiya address corrected to 139-1')
