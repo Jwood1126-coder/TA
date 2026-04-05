@@ -1947,6 +1947,14 @@ def _migrate_address_fix_v1(cursor, conn):
         WHERE name LIKE '%Tsukiya%' AND address IS NULL
     """)
 
+    # Fix Arashio Stable transport route: add URL and maps link
+    cursor.execute("""
+        UPDATE transport_route
+        SET url = 'https://arashio.net/tour_e.html',
+            maps_url = 'https://www.google.com/maps/search/?api=1&query=Arashio+Stable+2-47-2+Nihonbashi+Hamacho+Chuo-ku+Tokyo'
+        WHERE route_to LIKE '%Arashio%' OR route_to LIKE '%Hamacho%'
+    """)
+
     # Set sentinel
     cursor.execute("""
         UPDATE trip SET notes = COALESCE(notes, '') || ' __address_fix_v1'
@@ -1954,4 +1962,4 @@ def _migrate_address_fix_v1(cursor, conn):
     """)
 
     conn.commit()
-    print('  Address fix v1 complete — Tsukiya address corrected to 139-1')
+    print('  Address fix v1 complete — Tsukiya address corrected, Arashio Stable links added')
