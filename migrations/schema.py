@@ -106,6 +106,7 @@ def run_schema_migrations(app):
     _migrate_day2_night_recs_v1(cursor, conn)
     _migrate_teamlab_planets_booking_v1(cursor, conn)
     _migrate_teamlab_fix_v2(cursor, conn)
+    _migrate_teamlab_move_day3_v3(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2327,8 +2328,10 @@ def _migrate_teamlab_fix_v2(cursor, conn):
             url = 'https://teamlabplanets.dmm.com/en/mytickets/d8f3e69ace1c298c38',
             address = '6-1-16 Toyosu, Koto-ku, Tokyo 135-0061',
             start_time = '1:30 PM',
+            time_slot = 'afternoon',
             book_ahead = 1,
-            is_confirmed = 1
+            is_confirmed = 1,
+            day_id = 4
         WHERE id = 335
     """)
 
@@ -2337,4 +2340,28 @@ def _migrate_teamlab_fix_v2(cursor, conn):
         WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__teamlab_fix_v2%')
     """)
     conn.commit()
-    print('  teamLab Planets fix v2 — corrected title, description, and URLs')
+    print('  teamLab Planets fix v2 — corrected title, description, URLs, moved to Day 3')
+
+
+def _migrate_teamlab_move_day3_v3(cursor, conn):
+    """Move teamLab Planets to Day 3 (Apr 7) — was on Day 10 in live DB."""
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__teamlab_day3_v3' in row[0]:
+        return
+
+    # day_id=4 is Day 3 (Apr 7, Full Tokyo Day)
+    cursor.execute("""
+        UPDATE activity
+        SET day_id = 4,
+            time_slot = 'afternoon',
+            sort_order = 10
+        WHERE id = 335
+    """)
+
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __teamlab_day3_v3'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__teamlab_day3_v3%')
+    """)
+    conn.commit()
+    print('  teamLab Planets moved to Day 3 (day_id=4, Apr 7)')
