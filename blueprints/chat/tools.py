@@ -306,7 +306,62 @@ TOOLS = [
             },
             "required": ["route_from", "route_to"]
         }
-    }
+    },
+    {
+        "name": "get_day_schedule",
+        "description": "Get the FULL detailed schedule for a specific day, including all activities with times, addresses, maps links, descriptions, transport routes, check-in/out info. Use when the user asks 'what's on Day X?' or 'what are we doing tomorrow?'",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "day_number": {"type": "integer", "description": "Day number (1-14)"},
+            },
+            "required": ["day_number"]
+        }
+    },
+    {
+        "name": "get_accommodation_info",
+        "description": "Get full details for an accommodation: address, check-in/out instructions, door codes, host phone, maps link, house rules, notes. Use when they ask 'how do I check in?' or 'what's the address?'",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Accommodation name (partial match ok). Leave blank to get current/next stay based on date."},
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_next_activity",
+        "description": "Get the next upcoming activity based on current date/time, including directions, address, and what comes after. Perfect for on-the-go 'what's next?' questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "search_itinerary",
+        "description": "Search across all days for activities, transport routes, or accommodations matching a keyword. Returns matches with day number, time, and details. Use for 'when is teamLab?', 'which day is Fushimi Inari?', 'do we have ramen planned?'",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword to search (e.g. 'ramen', 'teamLab', 'Fushimi', 'Hakone')"},
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_directions",
+        "description": "Get transit directions between two points or to a specific activity. Returns Google Maps directions link and any getting_there notes.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Destination name — activity title, accommodation name, or place name"},
+                "from": {"type": "string", "description": "Origin name (optional — defaults to current accommodation)"},
+                "day_number": {"type": "integer", "description": "Day number for context (optional)"},
+            },
+            "required": ["to"]
+        }
+    },
 ]
 
 # Server-side tools — Anthropic executes these automatically, no client-side handler needed

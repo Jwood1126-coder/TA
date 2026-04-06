@@ -3,6 +3,7 @@
 Chat-specific logic (fuzzy matching by name) lives here.
 All mutations delegate to services/ for validation, cascade, and emit.
 """
+from datetime import date, datetime, timedelta
 from models import (ChecklistItem, Day, Activity, AccommodationOption,
                     AccommodationLocation, Flight, BudgetItem, TransportRoute)
 import services.accommodations as accom_svc
@@ -11,6 +12,371 @@ import services.checklists as checklist_svc
 import services.transport as transport_svc
 import services.flights as flight_svc
 import services.budget as budget_svc
+
+
+# --- Query tool helpers ---
+
+TIME_SLOT_ORDER = {'morning': 0, 'afternoon': 1, 'evening': 2, 'night': 3}
+
+
+def _get_current_accommodation():
+    """Find the accommodation for today's date."""
+    today = date.today()
+    loc = AccommodationLocation.query.filter(
+        AccommodationLocation.check_in_date <= today,
+        AccommodationLocation.check_out_date > today,
+    ).first()
+    if loc:
+        opt = AccommodationOption.query.filter_by(
+            location_id=loc.id, is_selected=True
+        ).first()
+        return opt, loc
+    return None, None
+
+
+def _format_activity_detail(a):
+    """Format an activity with all useful details for on-the-go use."""
+    parts = [f"{'[DONE] ' if a.is_completed else ''}{a.title}"]
+    if a.start_time:
+        parts[0] += f" @ {a.start_time}"
+    elif a.time_slot:
+        parts[0] += f" ({a.time_slot})"
+    if a.description:
+        parts.append(f"  Info: {a.description}")
+    if a.address:
+        parts.append(f"  Address: {a.address}")
+    if a.maps_url:
+        parts.append(f"  Directions: {a.maps_url}")
+    if a.getting_there:
+        parts.append(f"  Getting there: {a.getting_there}")
+    if a.url:
+        parts.append(f"  Link: {a.url}")
+    if a.cost_note:
+        parts.append(f"  Cost: {a.cost_note}")
+    if getattr(a, 'book_ahead', False) and getattr(a, 'book_ahead_note', None):
+        parts.append(f"  Booking: {a.book_ahead_note}")
+    if a.notes:
+        parts.append(f"  Notes: {a.notes}")
+    return '\n'.join(parts)
+
+
+def _execute_get_day_schedule(tool_input):
+    """Get full detailed schedule for a specific day."""
+    day = Day.query.filter_by(day_number=tool_input['day_number']).first()
+    if not day:
+        return {"success": False, "error": f"Day {tool_input['day_number']} not found"}
+
+    parts = [f"Day {day.day_number} ({day.date.strftime('%A, %B %d')}): {day.title}"]
+
+    # Check-out info
+    checkout_loc = AccommodationLocation.query.filter(
+        AccommodationLocation.check_out_date == day.date
+    ).first()
+    if checkout_loc:
+        opt = AccommodationOption.query.filter_by(
+            location_id=checkout_loc.id, is_selected=True
+        ).first()
+        if opt:
+            parts.append(f"\nCHECK-OUT: {opt.name}")
+            if opt.check_out_info:
+                parts.append(f"  {opt.check_out_info}")
+            if opt.address:
+                parts.append(f"  Address: {opt.address}")
+
+    # Activities grouped by time slot
+    activities = [a for a in day.activities if not a.is_substitute and not a.is_eliminated]
+    activities.sort(key=lambda a: (TIME_SLOT_ORDER.get(a.time_slot or 'afternoon', 1), a.sort_order or 999))
+
+    current_slot = None
+    for a in activities:
+        slot = a.time_slot or 'afternoon'
+        if slot != current_slot:
+            current_slot = slot
+            parts.append(f"\n{slot.upper()}:")
+        parts.append(_format_activity_detail(a))
+
+    # Transport routes for this day
+    routes = TransportRoute.query.filter_by(day_id=day.id).order_by(TransportRoute.sort_order).all()
+    if routes:
+        parts.append("\nTRANSPORT:")
+        for r in routes:
+            jr = " [JR Pass]" if r.jr_pass_covered else ""
+            line = f"  {r.route_from} -> {r.route_to}: {r.transport_type} {r.train_name or ''}{jr}"
+            if r.duration:
+                line += f" ({r.duration})"
+            if r.maps_url:
+                line += f"\n    Directions: {r.maps_url}"
+            if r.notes:
+                line += f"\n    Notes: {r.notes}"
+            parts.append(line)
+
+    # Check-in info
+    checkin_loc = AccommodationLocation.query.filter(
+        AccommodationLocation.check_in_date == day.date
+    ).first()
+    if checkin_loc:
+        opt = AccommodationOption.query.filter_by(
+            location_id=checkin_loc.id, is_selected=True
+        ).first()
+        if opt:
+            parts.append(f"\nCHECK-IN: {opt.name}")
+            if opt.check_in_info:
+                parts.append(f"  {opt.check_in_info}")
+            if opt.address:
+                parts.append(f"  Address: {opt.address}")
+            if opt.maps_url:
+                parts.append(f"  Directions: {opt.maps_url}")
+            if getattr(opt, 'phone', None):
+                parts.append(f"  Host phone: {opt.phone}")
+
+    if day.notes:
+        parts.append(f"\nDAY NOTES: {day.notes}")
+
+    return {"success": True, "schedule": '\n'.join(parts)}
+
+
+def _execute_get_accommodation_info(tool_input):
+    """Get full accommodation details."""
+    name = tool_input.get('name', '').strip()
+
+    if not name:
+        # Get current stay based on date
+        opt, loc = _get_current_accommodation()
+        if not opt:
+            # Try next upcoming stay
+            today = date.today()
+            loc = AccommodationLocation.query.filter(
+                AccommodationLocation.check_in_date >= today
+            ).order_by(AccommodationLocation.check_in_date).first()
+            if loc:
+                opt = AccommodationOption.query.filter_by(
+                    location_id=loc.id, is_selected=True
+                ).first()
+        if not opt:
+            return {"success": False, "error": "No current or upcoming accommodation found"}
+    else:
+        opt, err = _fuzzy_find(AccommodationOption, 'name', name)
+        if err:
+            return {"success": False, "error": err}
+        if not opt:
+            return {"success": False, "error": f"Accommodation '{name}' not found"}
+        loc = AccommodationLocation.query.get(opt.location_id)
+
+    parts = [f"{opt.name}"]
+    parts.append(f"Location: {loc.location_name}")
+    parts.append(f"Dates: {loc.check_in_date.strftime('%b %d')} - {loc.check_out_date.strftime('%b %d')} ({loc.nights} nights)")
+    parts.append(f"Status: {opt.booking_status}")
+    if opt.confirmation_number:
+        parts.append(f"Confirmation: {opt.confirmation_number}")
+    if opt.address:
+        parts.append(f"Address: {opt.address}")
+    if opt.maps_url:
+        parts.append(f"Maps: {opt.maps_url}")
+    if opt.check_in_info:
+        parts.append(f"Check-in: {opt.check_in_info}")
+    if opt.check_out_info:
+        parts.append(f"Check-out: {opt.check_out_info}")
+    if getattr(opt, 'phone', None):
+        parts.append(f"Host phone: {opt.phone}")
+    if opt.user_notes:
+        parts.append(f"Notes: {opt.user_notes}")
+    if opt.price_low:
+        parts.append(f"Price: ${opt.price_low:.0f}-${opt.price_high:.0f}/night")
+
+    return {"success": True, "info": '\n'.join(parts)}
+
+
+def _execute_get_next_activity(tool_input):
+    """Get the next upcoming activity based on current date/time."""
+    today = date.today()
+    now = datetime.now()
+    current_hour = now.hour
+
+    # Determine current time slot
+    if current_hour < 12:
+        current_slot_idx = 0  # morning
+    elif current_hour < 17:
+        current_slot_idx = 1  # afternoon
+    elif current_hour < 20:
+        current_slot_idx = 2  # evening
+    else:
+        current_slot_idx = 3  # night
+
+    day = Day.query.filter(Day.date == today).first()
+    if not day:
+        # Trip hasn't started or already ended — find nearest upcoming day
+        day = Day.query.filter(Day.date >= today).order_by(Day.date).first()
+        if not day:
+            return {"success": True, "info": "No upcoming activities — the trip has ended or hasn't started yet."}
+        current_slot_idx = -1  # show all activities for future days
+
+    activities = [a for a in day.activities
+                  if not a.is_substitute and not a.is_eliminated and not a.is_completed]
+    activities.sort(key=lambda a: (TIME_SLOT_ORDER.get(a.time_slot or 'afternoon', 1), a.sort_order or 999))
+
+    # Filter to upcoming activities (same or later time slot)
+    upcoming = [a for a in activities
+                if TIME_SLOT_ORDER.get(a.time_slot or 'afternoon', 1) >= current_slot_idx]
+
+    if not upcoming:
+        # Nothing left today — check tomorrow
+        tomorrow = today + timedelta(days=1)
+        next_day = Day.query.filter(Day.date == tomorrow).first()
+        if next_day:
+            activities = [a for a in next_day.activities
+                          if not a.is_substitute and not a.is_eliminated and not a.is_completed]
+            activities.sort(key=lambda a: (TIME_SLOT_ORDER.get(a.time_slot or 'afternoon', 1), a.sort_order or 999))
+            if activities:
+                parts = [f"Nothing left today! Tomorrow (Day {next_day.day_number}, {next_day.date.strftime('%b %d')}):",
+                         f"First up: {_format_activity_detail(activities[0])}"]
+                if len(activities) > 1:
+                    parts.append(f"\nThen: {activities[1].title}" + (f" @ {activities[1].start_time}" if activities[1].start_time else ""))
+                return {"success": True, "info": '\n'.join(parts)}
+        return {"success": True, "info": "No more activities scheduled for today or tomorrow!"}
+
+    next_act = upcoming[0]
+    parts = [f"NEXT UP (Day {day.day_number}):", _format_activity_detail(next_act)]
+
+    if len(upcoming) > 1:
+        parts.append(f"\nAFTER THAT: {upcoming[1].title}" + (f" @ {upcoming[1].start_time}" if upcoming[1].start_time else ""))
+    if len(upcoming) > 2:
+        parts.append(f"THEN: {upcoming[2].title}" + (f" @ {upcoming[2].start_time}" if upcoming[2].start_time else ""))
+
+    remaining = len(upcoming) - 1
+    if remaining > 2:
+        parts.append(f"\n({remaining} more activities remaining today)")
+
+    return {"success": True, "info": '\n'.join(parts)}
+
+
+def _execute_search_itinerary(tool_input):
+    """Search activities, transport, and accommodations by keyword."""
+    query = tool_input['query'].strip()
+    if not query:
+        return {"success": False, "error": "Search query is empty"}
+
+    results = []
+
+    # Search activities
+    matches = Activity.query.filter(
+        Activity.is_eliminated == False,
+        (Activity.title.ilike(f"%{query}%") |
+         Activity.description.ilike(f"%{query}%") |
+         Activity.address.ilike(f"%{query}%") |
+         Activity.notes.ilike(f"%{query}%"))
+    ).all()
+
+    for a in matches:
+        day = Day.query.get(a.day_id)
+        if day:
+            time_str = f" @ {a.start_time}" if a.start_time else f" ({a.time_slot})" if a.time_slot else ""
+            entry = f"Day {day.day_number} ({day.date.strftime('%b %d')}): {a.title}{time_str}"
+            if a.address:
+                entry += f"\n  Address: {a.address}"
+            if a.maps_url:
+                entry += f"\n  Directions: {a.maps_url}"
+            results.append(entry)
+
+    # Search transport routes
+    route_matches = TransportRoute.query.filter(
+        TransportRoute.route_from.ilike(f"%{query}%") |
+        TransportRoute.route_to.ilike(f"%{query}%") |
+        TransportRoute.notes.ilike(f"%{query}%")
+    ).all()
+
+    for r in route_matches:
+        day = Day.query.get(r.day_id) if r.day_id else None
+        day_str = f"Day {day.day_number} ({day.date.strftime('%b %d')})" if day else "Unassigned"
+        entry = f"{day_str}: Transport {r.route_from} -> {r.route_to} ({r.transport_type})"
+        if r.maps_url:
+            entry += f"\n  Directions: {r.maps_url}"
+        results.append(entry)
+
+    # Search accommodations
+    accom_matches = AccommodationOption.query.filter(
+        AccommodationOption.is_eliminated == False,
+        (AccommodationOption.name.ilike(f"%{query}%") |
+         AccommodationOption.address.ilike(f"%{query}%") |
+         AccommodationOption.user_notes.ilike(f"%{query}%"))
+    ).all()
+
+    for o in accom_matches:
+        loc = AccommodationLocation.query.get(o.location_id)
+        entry = f"Stay: {o.name} ({loc.location_name}, {loc.check_in_date.strftime('%b %d')}-{loc.check_out_date.strftime('%b %d')})"
+        if o.address:
+            entry += f"\n  Address: {o.address}"
+        results.append(entry)
+
+    if not results:
+        return {"success": True, "results": f"No matches found for '{query}'."}
+    return {"success": True, "results": f"Found {len(results)} match(es) for '{query}':\n\n" + '\n\n'.join(results)}
+
+
+def _execute_get_directions(tool_input):
+    """Get directions to a destination."""
+    dest = tool_input['to'].strip()
+    origin = tool_input.get('from', '').strip()
+    day_num = tool_input.get('day_number')
+
+    # Try to find the destination as an activity
+    activity = Activity.query.filter(
+        Activity.is_eliminated == False,
+        Activity.title.ilike(f"%{dest}%")
+    ).first()
+
+    if activity:
+        parts = [f"Directions to: {activity.title}"]
+        if activity.address:
+            parts.append(f"Address: {activity.address}")
+        if activity.maps_url:
+            parts.append(f"Google Maps Directions: {activity.maps_url}")
+        if activity.getting_there:
+            parts.append(f"Getting there: {activity.getting_there}")
+        return {"success": True, "directions": '\n'.join(parts)}
+
+    # Try accommodation
+    opt, err = _fuzzy_find(AccommodationOption, 'name', dest)
+    if opt:
+        parts = [f"Directions to: {opt.name}"]
+        if opt.address:
+            parts.append(f"Address: {opt.address}")
+        if opt.maps_url:
+            parts.append(f"Google Maps Directions: {opt.maps_url}")
+        return {"success": True, "directions": '\n'.join(parts)}
+
+    # Try transport route
+    if origin:
+        route = TransportRoute.query.filter(
+            TransportRoute.route_to.ilike(f"%{dest}%")
+        ).first()
+    else:
+        route = TransportRoute.query.filter(
+            TransportRoute.route_to.ilike(f"%{dest}%")
+        ).first()
+
+    if route:
+        parts = [f"Route: {route.route_from} -> {route.route_to}"]
+        parts.append(f"Type: {route.transport_type} {route.train_name or ''}")
+        if route.duration:
+            parts.append(f"Duration: {route.duration}")
+        if route.maps_url:
+            parts.append(f"Google Maps Directions: {route.maps_url}")
+        if route.notes:
+            parts.append(f"Notes: {route.notes}")
+        jr = "Yes" if route.jr_pass_covered else "No"
+        parts.append(f"JR Pass covered: {jr}")
+        return {"success": True, "directions": '\n'.join(parts)}
+
+    # Build a generic Google Maps directions URL
+    if not origin:
+        opt, loc = _get_current_accommodation()
+        origin = opt.name if opt else "current location"
+
+    maps_url = (f"https://www.google.com/maps/dir/?api=1"
+                f"&origin={origin.replace(' ', '+')}"
+                f"&destination={dest.replace(' ', '+')}"
+                f"&travelmode=transit")
+    return {"success": True, "directions": f"No saved directions found.\n\nGenerated link:\n{maps_url}"}
 
 
 def _fuzzy_find(model_class, name_field, search_term, filters=None):
@@ -44,7 +410,20 @@ def _fuzzy_find(model_class, name_field, search_term, filters=None):
 def execute_tool(tool_name, tool_input):
     """Execute a tool call from Claude and return the result."""
     try:
-        if tool_name == "update_flight":
+        # --- Query tools (read-only, on-the-go helpers) ---
+        if tool_name == "get_day_schedule":
+            return _execute_get_day_schedule(tool_input)
+        elif tool_name == "get_accommodation_info":
+            return _execute_get_accommodation_info(tool_input)
+        elif tool_name == "get_next_activity":
+            return _execute_get_next_activity(tool_input)
+        elif tool_name == "search_itinerary":
+            return _execute_search_itinerary(tool_input)
+        elif tool_name == "get_directions":
+            return _execute_get_directions(tool_input)
+
+        # --- Mutation tools ---
+        elif tool_name == "update_flight":
             flight_num = tool_input['flight_number'].strip().upper()
             flight = Flight.query.filter(
                 Flight.flight_number.ilike(f"%{flight_num}%")

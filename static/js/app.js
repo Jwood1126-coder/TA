@@ -18,7 +18,7 @@ function hardRefresh() {
 
 // Register service worker for offline support
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js?v=127')
+    navigator.serviceWorker.register('/static/sw.js?v=128')
         .then(reg => {
             console.log('SW registered, scope:', reg.scope);
             reg.addEventListener('updatefound', () => {
