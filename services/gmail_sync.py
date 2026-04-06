@@ -20,7 +20,7 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 # Hard geographic filter — only these cities are valid for this trip
 JAPAN_TRIP_CITIES = {
-    'tokyo', 'shinjuku', 'shibuya', 'asakusa', 'akihabara', 'ginza', 'roppongi',
+    'tokyo', 'shinjuku', 'shibuya', 'asakusa', 'akihabara', 'ginza', 'roppongi', 'toyosu', 'odaiba', 'azabudai',
     'takayama', 'shirakawa-go', 'shirakawa',
     'kanazawa',
     'kyoto', 'gion', 'arashiyama', 'fushimi',
@@ -63,6 +63,18 @@ TRAVEL_QUERIES = [
     'subject:(order confirmation OR booking confirmation OR e-ticket) (tea ceremony OR kimono OR cooking class OR sumo OR shrine OR temple OR onsen) after:2025/06/01',
     # General Japan travel
     'subject:(confirmation OR reservation OR receipt OR ticket) Japan (Tokyo OR Kyoto OR Osaka OR Takayama OR Hiroshima OR Hakone OR Miyajima) after:2025/06/01',
+    # --- Forwarded emails from family (Jessica forwards bookings she makes) ---
+    'from:jsa.259@gmail.com subject:(fwd OR forwarded OR ticket OR booking OR confirmation OR order) after:2025/06/01',
+    'from:jsa.259@gmail.com (teamlab OR teamLab OR DMM OR ticket OR booking OR reservation OR confirmed) after:2025/06/01',
+    # --- DMM / teamLab platform emails (tickets bought via dmm.com) ---
+    'from:dmm.com (teamlab OR teamLab OR ticket OR order OR admission OR entry) after:2025/06/01',
+    'from:mail.dmm.com after:2025/06/01',
+    'subject:(teamlab OR teamLab OR "team lab") after:2025/06/01',
+    # --- Broader activity/ticket platforms not yet covered ---
+    'subject:(admission OR "QR ticket" OR "entry time" OR "e-ticket" OR "mobile ticket") (Tokyo OR Kyoto OR Osaka OR Japan) after:2025/06/01',
+    'subject:(order confirmation OR purchase confirmation) (museum OR exhibit OR art OR aquarium OR zoo OR park OR garden OR tower OR observation) Japan after:2025/06/01',
+    # --- Catch forwarded booking emails with common Fwd: patterns ---
+    'subject:(fwd OR forwarded) (booking OR confirmation OR reservation OR ticket OR receipt) (Japan OR Tokyo OR Kyoto OR Osaka) after:2025/06/01',
 ]
 
 # Stage 1: Haiku extraction prompt (per-email, fast/cheap)
@@ -138,6 +150,18 @@ IMPORTANT RULES:
 - Match accommodations by confirmation number or property name.
 - ALWAYS include "city" and "country" fields when they can be determined from the email.
 - Return valid JSON only. If not travel-related: {"type": "other", "action": "info"}
+
+FORWARDED EMAILS:
+- Emails may be FORWARDED by a family member (e.g. Jessica / jsa.259@gmail.com). The actual booking info is in the forwarded content below the "Forwarded message" header.
+- Look past the forwarding header and extract from the ORIGINAL email body.
+- For forwarded booking confirmations, treat them exactly like direct booking emails — extract all fields normally.
+- The "from" field may show the forwarder, but the REAL sender is in the forwarded headers.
+
+ACTIVITY TICKETS & MUSEUM ENTRIES:
+- Platforms like DMM (dmm.com), teamLab, Klook, Viator send booking confirmations with QR codes and entry times.
+- Extract: activity_name, activity_date, activity_time (entry window), venue, address, confirmation_number/inquiry number.
+- For teamLab specifically: note which venue (Planets TOKYO in Toyosu vs Borderless in Azabudai) and the entry time window.
+- Set type="activity_ticket", action="new_booking".
 
 EMAIL SUBJECT: <<SUBJECT>>
 EMAIL FROM: <<SENDER>>
