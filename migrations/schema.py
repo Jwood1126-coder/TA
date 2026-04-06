@@ -103,6 +103,7 @@ def run_schema_migrations(app):
     _migrate_kumomachiya_host_info_v1(cursor, conn)
     _migrate_fix_transport_maps_urls_v1(cursor, conn)
     _migrate_complete_transport_nav_v1(cursor, conn)
+    _migrate_day2_night_recs_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2217,3 +2218,56 @@ def _migrate_complete_transport_nav_v1(cursor, conn):
 
     conn.commit()
     print('  Complete transport nav v1 — all routes now have Directions links')
+
+
+def _migrate_day2_night_recs_v1(cursor, conn):
+    """Update Day 2 night activities with specific restaurant recommendations.
+
+    Rishiri (spicy Orochon ramen), Golden Gai (tiny bars), Ramen Nagi (24h backup).
+    All within 5-10 min walk of Sotetsu Fresa Inn Higashi-Shinjuku.
+    One-shot: uses sentinel to run only once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__day2_night_recs_v1' in row[0]:
+        return
+
+    # Update "Late-night ramen near hotel" → Rishiri Orochon Ramen
+    cursor.execute("""
+        UPDATE activity
+        SET title = 'Rishiri — spicy Orochon Ramen (pick your heat 1-9)',
+            description = 'Legendary 50+ year old ramen shop in Kabukicho. Thick Hokkaido-style broth (pork, chicken, soft-shell turtle, kelp). Order the Orochon Ramen and pick spice level 1-9. Open 6:30 PM-5 AM (closed Sun). ~7 min walk from hotel. Budget ~¥1,000-1,200.',
+            address = '2-27-7 Kabukicho, Shinjuku-ku, Tokyo (1F Kanajima Bldg)',
+            maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Sotetsu+Fresa+Inn+Higashi-Shinjuku,+Tokyo&destination=Rishiri+Ramen+Kabukicho+2-27-7+Shinjuku&travelmode=walking',
+            url = 'https://tabelog.com/en/tokyo/A1304/A130401/13000022/'
+        WHERE id = 181
+    """)
+
+    # Update "Explore Kabukicho at night" → Golden Gai specific
+    cursor.execute("""
+        UPDATE activity
+        SET title = 'Golden Gai — tiny 6-seat bars in narrow alleys',
+            description = 'Over 200 tiny bars crammed into 6 narrow alleys. Each bar has its own personality — peek in and ask before sitting. Some charge a cover (¥500-1,000) for tourists, some don''t. One drink per bar, then move on. ~8 min walk from hotel. Right on the way back from Rishiri.',
+            address = '1-1-6 Kabukicho, Shinjuku-ku, Tokyo',
+            maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Sotetsu+Fresa+Inn+Higashi-Shinjuku,+Tokyo&destination=Shinjuku+Golden+Gai,+Kabukicho,+Shinjuku&travelmode=walking',
+            url = 'https://www.japan-experience.com/all-about-japan/tokyo/nightlife/golden-gai'
+        WHERE id = 180
+    """)
+
+    # Update "Light dinner nearby" → more specific first-night guidance
+    cursor.execute("""
+        UPDATE activity
+        SET title = 'Light dinner nearby — ramen, conveyor sushi, or konbini',
+            description = 'If too tired for Rishiri, grab food close to hotel: walk-up ramen shops on Meiji-dori, conveyor belt sushi, or 7-Eleven/Lawson onigiri + bento. BACKUP: Ramen Nagi in Golden Gai (2F, 1-1-10 Kabukicho) — open 24 hours, famous niboshi dried-fish broth, ~8 min walk.',
+            maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Sotetsu+Fresa+Inn+Higashi-Shinjuku,+Tokyo&destination=Ramen+Nagi+Golden+Gai+Kabukicho+Shinjuku&travelmode=walking'
+        WHERE id = 178
+    """)
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __day2_night_recs_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__day2_night_recs_v1%')
+    """)
+
+    conn.commit()
+    print('  Day 2 night recs added — Rishiri, Golden Gai, Ramen Nagi with nav links')
