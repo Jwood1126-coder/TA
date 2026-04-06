@@ -592,7 +592,8 @@ FULL DEVELOPER REFERENCE (from DISPATCH_GUIDE.md):
 
 {guide}
 """
-    return setup_instructions, 200, {{'Content-Type': 'text/plain; charset=utf-8'}}
+    headers = {'Content-Type': 'text/plain; charset=utf-8'}
+    return setup_instructions, 200, headers
 
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/toggle', methods=['POST'])
