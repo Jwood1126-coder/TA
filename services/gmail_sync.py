@@ -346,28 +346,41 @@ def get_gmail_service(app=None):
 def search_travel_emails(service, since_date=None, custom_query=None):
     """Search Gmail for travel-related emails.
 
+    Uses concurrent threads to search all queries in parallel for speed.
+
     Args:
         since_date: Optional date string (YYYY/MM/DD) to narrow queries.
                     Replaces the hardcoded after: dates for incremental syncs.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+
     seen_ids = set()
+    seen_lock = threading.Lock()
     results = []
 
     queries = [custom_query] if custom_query else TRAVEL_QUERIES
-    for query in queries:
+
+    def _search_one(query):
         q = query
-        # For incremental syncs, replace the hardcoded after: date with a recent one
         if since_date and not custom_query:
             q = re.sub(r'after:\d{4}/\d{2}/\d{2}', f'after:{since_date}', q)
         try:
             resp = service.users().messages().list(
                 userId='me', q=q, maxResults=50).execute()
-            for m in resp.get('messages', []):
-                if m['id'] not in seen_ids:
-                    seen_ids.add(m['id'])
-                    results.append(m)
+            return resp.get('messages', [])
         except Exception:
-            continue
+            return []
+
+    # Run all Gmail searches in parallel (IO-bound, threads are fine)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_search_one, q): q for q in queries}
+        for future in as_completed(futures):
+            for m in future.result():
+                with seen_lock:
+                    if m['id'] not in seen_ids:
+                        seen_ids.add(m['id'])
+                        results.append(m)
 
     return results
 
@@ -567,8 +580,10 @@ def analyze_with_opus(extractions, db_state, api_key):
 
     try:
         client = anthropic.Anthropic(api_key=api_key)
+        # Use Sonnet for speed — Opus was 30-60s, Sonnet is 5-10s with same quality
+        # for dedup/analysis tasks
         response = client.messages.create(
-            model='claude-opus-4-6',
+            model='claude-sonnet-4-6',
             max_tokens=8192,
             messages=[{'role': 'user', 'content': prompt}],
         )
@@ -581,7 +596,7 @@ def analyze_with_opus(extractions, db_state, api_key):
         # Try parsing whole response as JSON
         return json.loads(text)
     except Exception as e:
-        # If Opus fails, return empty — don't crash the sync
+        # If analysis fails, return empty — don't crash the sync
         return []
 
 
@@ -775,43 +790,53 @@ def run_sync(app):
                     'sync_id': log.id,
                 }
 
-            # ----- Stage 1: Haiku extraction -----
+            # ----- Stage 1: Haiku extraction (parallel) -----
             haiku_extractions = []  # list of (content_dict, extracted_dict)
             skipped_emails = []     # emails that Haiku said aren't travel-related
 
-            for stub in new_stubs:
-                try:
-                    content = fetch_email_content(service, stub['id'])
-                    extracted = extract_booking_data(content, api_key)
+            # Fetch all email contents in parallel
+            from concurrent.futures import ThreadPoolExecutor, as_completed
 
-                    if not extracted or extracted.get('type') == 'other':
-                        skipped_emails.append((stub['id'], content))
-                        continue
+            def _fetch_and_extract(stub):
+                """Fetch email content + run Haiku extraction in one shot."""
+                content = fetch_email_content(service, stub['id'])
+                extracted = extract_booking_data(content, api_key)
+                return stub['id'], content, extracted
 
-                    # Hard geographic filter before passing to Opus
-                    if not _passes_geographic_filter(extracted):
-                        # Record as skipped with reason
-                        city = extracted.get('city', 'unknown')
-                        country = extracted.get('country', 'unknown')
-                        skip = PendingGmailChange(
-                            gmail_message_id=stub['id'],
-                            email_subject=content.get('subject', '')[:500],
-                            email_from=content.get('from', '')[:200],
-                            email_date=content.get('date', '')[:100],
-                            change_type='none',
-                            entity_type='other',
-                            description=f'Filtered: not Japan trip ({city}, {country})',
-                            proposed_data=json.dumps(extracted),
-                            status='skipped',
-                            opus_reasoning=f'Geographic filter: {city}, {country} is not in Japan trip cities',
-                        )
-                        db.session.add(skip)
-                        continue
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures = {pool.submit(_fetch_and_extract, s): s for s in new_stubs}
+                for future in as_completed(futures):
+                    try:
+                        stub_id, content, extracted = future.result()
 
-                    haiku_extractions.append((content, extracted))
+                        if not extracted or extracted.get('type') == 'other':
+                            skipped_emails.append((stub_id, content))
+                            continue
 
-                except Exception as e:
-                    log.errors = (log.errors or '') + f"\nHaiku stage {stub['id']}: {str(e)}"
+                        # Hard geographic filter before passing to analyst
+                        if not _passes_geographic_filter(extracted):
+                            city = extracted.get('city', 'unknown')
+                            country = extracted.get('country', 'unknown')
+                            skip = PendingGmailChange(
+                                gmail_message_id=stub_id,
+                                email_subject=content.get('subject', '')[:500],
+                                email_from=content.get('from', '')[:200],
+                                email_date=content.get('date', '')[:100],
+                                change_type='none',
+                                entity_type='other',
+                                description=f'Filtered: not Japan trip ({city}, {country})',
+                                proposed_data=json.dumps(extracted),
+                                status='skipped',
+                                opus_reasoning=f'Geographic filter: {city}, {country} is not in Japan trip cities',
+                            )
+                            db.session.add(skip)
+                            continue
+
+                        haiku_extractions.append((content, extracted))
+
+                    except Exception as e:
+                        stub = futures[future]
+                        log.errors = (log.errors or '') + f"\nHaiku stage {stub['id']}: {str(e)}"
 
             # Record skipped emails
             for email_id, content in skipped_emails:
@@ -828,7 +853,7 @@ def run_sync(app):
                 )
                 db.session.add(skip)
 
-            # ----- Stage 2: Opus analysis -----
+            # ----- Stage 2: Analyst (Sonnet) — dedup, filter, propose changes -----
             changes_created = 0
 
             if haiku_extractions:
