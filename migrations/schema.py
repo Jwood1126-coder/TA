@@ -107,6 +107,7 @@ def run_schema_migrations(app):
     _migrate_teamlab_planets_booking_v1(cursor, conn)
     _migrate_teamlab_fix_v2(cursor, conn)
     _migrate_teamlab_move_day3_v3(cursor, conn)
+    _migrate_teamlab_final_v4(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2365,3 +2366,30 @@ def _migrate_teamlab_move_day3_v3(cursor, conn):
     """)
     conn.commit()
     print('  teamLab Planets moved to Day 3 (day_id=4, Apr 7)')
+
+
+def _migrate_teamlab_final_v4(cursor, conn):
+    """Final teamLab fix — correct title/desc (v2 sentinel ran before code update)."""
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__teamlab_final_v4' in row[0]:
+        return
+
+    cursor.execute("""
+        UPDATE activity
+        SET title = 'teamLab Planets TOKYO — BOOKED 1:30 PM',
+            description = 'Immersive digital art museum in Toyosu. Walk barefoot through water, mirrors, and light installations. Entry window 1:30-2:00 PM. Allow ~2 hours inside. QR tickets on Jessica phone (DMM app). Download teamLab app beforehand.',
+            maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Sotetsu+Fresa+Inn+Higashi-Shinjuku,+Tokyo&destination=teamLab+Planets+TOKYO+Toyosu&travelmode=transit',
+            url = 'https://teamlabplanets.dmm.com/en/mytickets/d8f3e69ace1c298c38',
+            address = '6-1-16 Toyosu, Koto-ku, Tokyo 135-0061',
+            is_confirmed = 1,
+            book_ahead = 1
+        WHERE id = 335
+    """)
+
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __teamlab_final_v4'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__teamlab_final_v4%')
+    """)
+    conn.commit()
+    print('  teamLab Planets final fix — title, description, URLs all corrected')
