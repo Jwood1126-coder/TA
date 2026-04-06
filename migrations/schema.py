@@ -101,6 +101,7 @@ def run_schema_migrations(app):
     _migrate_takanoyu_host_info_v1(cursor, conn)
     _migrate_tsukiya_host_info_v1(cursor, conn)
     _migrate_kumomachiya_host_info_v1(cursor, conn)
+    _migrate_fix_transport_maps_urls_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2071,3 +2072,54 @@ def _migrate_kumomachiya_host_info_v1(cursor, conn):
 
     conn.commit()
     print('  KumoMachiya host info added — self check-in, passport req, luggage rules')
+
+
+def _migrate_fix_transport_maps_urls_v1(cursor, conn):
+    """Fix transport route maps_url to use Google Maps Directions API format.
+
+    The /maps/dir/FROM/TO format is unreliable on iOS — often drops to
+    destination pin instead of showing directions. Switch to the official
+    ?api=1&origin=...&destination=...&travelmode=transit query format.
+    One-shot: uses sentinel to run only once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__fix_transport_maps_v1' in row[0]:
+        return
+
+    # Fix all transport routes to use proper Google Maps Directions API format
+    cursor.execute("SELECT id, route_from, route_to, maps_url FROM transport_route WHERE maps_url IS NOT NULL")
+    rows = cursor.fetchall()
+    for rid, rfrom, rto, old_url in rows:
+        if old_url and '/maps/dir/' in old_url:
+            # Convert /maps/dir/FROM/TO to ?api=1&origin=FROM&destination=TO&travelmode=transit
+            parts = old_url.split('/maps/dir/')
+            if len(parts) == 2:
+                locations = parts[1].rstrip('/').split('/')
+                if len(locations) >= 2:
+                    origin = locations[0]
+                    dest = locations[1]
+                    new_url = f'https://www.google.com/maps/dir/?api=1&origin={origin}&destination={dest}&travelmode=transit'
+                    cursor.execute("UPDATE transport_route SET maps_url = ? WHERE id = ?", (new_url, rid))
+
+    # Also fix Haneda routes specifically to use precise terminal coordinates
+    cursor.execute("""
+        UPDATE transport_route
+        SET maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Haneda+Airport+Terminal+3+International,+Tokyo&destination=Sotetsu+Fresa+Inn+Higashi-Shinjuku,+Tokyo&travelmode=transit'
+        WHERE route_from LIKE '%Haneda%' AND route_to LIKE '%Higashi-Shinjuku%'
+    """)
+
+    cursor.execute("""
+        UPDATE transport_route
+        SET maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Haneda+Airport+Terminal+3+International,+Tokyo&destination=Shinjuku+Expressway+Bus+Terminal+Busta+Shinjuku&travelmode=transit'
+        WHERE route_from LIKE '%Haneda%' AND route_to LIKE '%Shinjuku%' AND transport_type LIKE '%Bus%'
+    """)
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __fix_transport_maps_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__fix_transport_maps_v1%')
+    """)
+
+    conn.commit()
+    print('  Fixed transport maps URLs to use Google Maps Directions API format (mobile-friendly)')
