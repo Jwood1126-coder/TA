@@ -102,6 +102,7 @@ def run_schema_migrations(app):
     _migrate_tsukiya_host_info_v1(cursor, conn)
     _migrate_kumomachiya_host_info_v1(cursor, conn)
     _migrate_fix_transport_maps_urls_v1(cursor, conn)
+    _migrate_complete_transport_nav_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2123,3 +2124,96 @@ def _migrate_fix_transport_maps_urls_v1(cursor, conn):
 
     conn.commit()
     print('  Fixed transport maps URLs to use Google Maps Directions API format (mobile-friendly)')
+
+
+def _migrate_complete_transport_nav_v1(cursor, conn):
+    """Add maps_url to every transport route that is missing one.
+
+    Every route must have a working Directions link so the traveler can
+    navigate from where they ARE to where they NEED TO GO.
+    Also removes duplicate/confusing Shin-Osaka→Tokyo route (keep Shinagawa version).
+    One-shot: uses sentinel to run only once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__complete_transport_nav_v1' in row[0]:
+        return
+
+    # Helper: set maps_url using Google Maps Directions API format
+    def set_maps(route_id, origin, destination):
+        origin_enc = origin.replace(' ', '+')
+        dest_enc = destination.replace(' ', '+')
+        url = f'https://www.google.com/maps/dir/?api=1&origin={origin_enc}&destination={dest_enc}&travelmode=transit'
+        cursor.execute("UPDATE transport_route SET maps_url = ? WHERE id = ? AND (maps_url IS NULL OR maps_url = '')", (url, route_id))
+
+    # Get all routes missing maps_url
+    cursor.execute("SELECT id, route_from, route_to FROM transport_route WHERE maps_url IS NULL OR maps_url = ''")
+    missing = cursor.fetchall()
+
+    # Map of route patterns to precise Google Maps-friendly origin/destination names
+    nav_fixes = {
+        # Day 3: Hotel to Arashio Stable
+        ('Higashi-Shinjuku', 'Hamacho'): ('Higashi-Shinjuku Station, Tokyo', 'Arashio Stable Sumo, Nihonbashi Hamacho, Chuo-ku, Tokyo'),
+        # Day 4: Hakone loop
+        ('Odawara', 'Hakone'): ('Odawara Station', 'Hakone-Yumoto Station'),
+        ('Hakone-Yumoto', 'Tokyo'): ('Hakone-Yumoto Station', 'Shinjuku Station, Tokyo'),
+        # Day 5: Hotel to Tokyo Station for Shinkansen
+        ('Higashi-Shinjuku', 'Tokyo Station'): ('Higashi-Shinjuku Station, Tokyo', 'Tokyo Station'),
+        # Day 6: Takayama to Hida Folk Village
+        ('Takayama', 'Hida'): ('Takayama Station', 'Hida Folk Village Hida no Sato'),
+        # Day 8: Kanazawa to Kyoto (via Tsuruga)
+        ('Kanazawa', 'Kyoto'): ('Kanazawa Station', 'Kyoto Station'),
+        # Day 9: Kyoto to Fushimi Inari
+        ('Kyoto Station', 'Fushimi'): ('Kyoto Station', 'Fushimi Inari Taisha, Kyoto'),
+        # Day 11: Hiroshima streetcar
+        ('Hiroshima Station', 'Peace Park'): ('Hiroshima Station', 'Hiroshima Peace Memorial Museum'),
+        # Day 11: Hiroshima return to Kyoto
+        ('Hiroshima', 'Kyoto'): ('Hiroshima Station', 'Kyoto Station'),
+        # Day 14: Hotel to Shin-Osaka
+        ('Hotel Leben', 'Shin-Osaka'): ('Hotel The Leben Osaka, Minamisenba, Chuo-ku, Osaka', 'Shin-Osaka Station'),
+        # Day 14: Shin-Osaka to Shinagawa
+        ('Shin-Osaka', 'Shinagawa'): ('Shin-Osaka Station', 'Shinagawa Station'),
+    }
+
+    for rid, rfrom, rto in missing:
+        matched = False
+        for (pattern_from, pattern_to), (origin, dest) in nav_fixes.items():
+            if pattern_from.lower() in rfrom.lower() and pattern_to.lower() in rto.lower():
+                set_maps(rid, origin, dest)
+                matched = True
+                break
+        if not matched:
+            # Fallback: use route_from and route_to directly
+            set_maps(rid, rfrom, rto)
+
+    # Remove the duplicate Shin-Osaka→Tokyo route (ID varies; match by name)
+    # Keep only the Shin-Osaka→Shinagawa one since that's where they actually get off
+    cursor.execute("""
+        DELETE FROM transport_route
+        WHERE route_from LIKE '%Shin-Osaka%' AND route_to = 'Tokyo'
+        AND EXISTS (
+            SELECT 1 FROM transport_route t2
+            WHERE t2.route_from LIKE '%Shin-Osaka%' AND t2.route_to LIKE '%Shinagawa%'
+            AND t2.id != transport_route.id
+        )
+    """)
+    if cursor.rowcount:
+        print('  Removed duplicate Shin-Osaka→Tokyo route (keeping Shinagawa version)')
+
+    # Update the Shin-Osaka→Shinagawa route with better info
+    cursor.execute("""
+        UPDATE transport_route
+        SET url = 'https://smart-ex.jp/en/',
+            duration = '~2h 15min',
+            notes = 'Hikari Shinkansen (JR Pass covered, NOT Nozomi). Reserve seat at JR ticket office the day before. Get off at Shinagawa (not Tokyo) — shorter ride, direct transfer to Keikyu for Haneda.'
+        WHERE route_from LIKE '%Shin-Osaka%' AND route_to LIKE '%Shinagawa%'
+    """)
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __complete_transport_nav_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__complete_transport_nav_v1%')
+    """)
+
+    conn.commit()
+    print('  Complete transport nav v1 — all routes now have Directions links')
