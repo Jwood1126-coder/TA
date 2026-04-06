@@ -18,7 +18,7 @@ function hardRefresh() {
 
 // Register service worker for offline support
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js?v=128')
+    navigator.serviceWorker.register('/static/sw.js?v=129')
         .then(reg => {
             console.log('SW registered, scope:', reg.scope);
             reg.addEventListener('updatefound', () => {
@@ -105,22 +105,29 @@ function toggleTheme() {
     }
 })();
 
-// Swipe navigation for day view
+// Swipe navigation for day view — stricter thresholds to prevent accidental triggers
 let touchStartX = 0;
 let touchStartY = 0;
+let swipeStartTime = 0;
 
 document.addEventListener('touchstart', function(e) {
     touchStartX = e.changedTouches[0].screenX;
     touchStartY = e.changedTouches[0].screenY;
+    swipeStartTime = Date.now();
 }, { passive: true });
 
 document.addEventListener('touchend', function(e) {
     const dx = e.changedTouches[0].screenX - touchStartX;
     const dy = e.changedTouches[0].screenY - touchStartY;
+    const elapsed = Date.now() - swipeStartTime;
 
-    // Only horizontal swipe, not vertical scroll
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        // Check if we're on a day page
+    // Must be a deliberate horizontal swipe:
+    // - At least 100px horizontal (was 60 — too sensitive)
+    // - Horizontal must dominate vertical by 3x (was 1.5x)
+    // - Must complete within 500ms (prevents slow drags from triggering)
+    // - Vertical movement must be under 50px (prevents diagonal scrolls)
+    if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 3
+        && Math.abs(dy) < 50 && elapsed < 500) {
         const prevBtn = document.querySelector('.day-nav-btn:first-child');
         const nextBtn = document.querySelector('.day-nav-btn:last-child');
 
@@ -132,8 +139,10 @@ document.addEventListener('touchend', function(e) {
     }
 }, { passive: true });
 
-// Pull-to-refresh
+// Pull-to-refresh — disabled on chat page (interferes with message scrolling)
 (function() {
+    if (document.body.classList.contains('chat-page')) return;
+
     let startY = 0;
     let currentY = 0;
     let pulling = false;

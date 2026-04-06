@@ -67,6 +67,12 @@ body.chat-page .bottom-nav {
     flex-direction: column;
     gap: 8px;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* Prevent body scroll/bounce on chat page */
+body.chat-page {
+    overscroll-behavior: none;
 }
 
 .chat-welcome {

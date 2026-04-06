@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for
 from models import db, Day, Activity, Trip, Location, BudgetItem, Flight, \
     TransportRoute, AccommodationLocation, AccommodationOption, ChecklistItem
 from datetime import datetime, date
@@ -171,15 +171,34 @@ def _compute_next_up(today, trip):
             'urgency': 'low',
         }
     elif trip and trip.start_date <= today <= trip.end_date:
+        # During active trip — find the next incomplete activity for TODAY only
         current = Day.query.filter(Day.date == today).first()
         if current:
-            for a in current.activities:
-                if not a.is_substitute and not a.is_completed:
+            # Time-aware slot filtering
+            from datetime import datetime
+            hour = datetime.now().hour
+            if hour < 12:
+                min_slot_idx = 0
+            elif hour < 17:
+                min_slot_idx = 1
+            elif hour < 20:
+                min_slot_idx = 2
+            else:
+                min_slot_idx = 3
+            slot_order = {'morning': 0, 'afternoon': 1, 'evening': 2, 'night': 3}
+
+            for a in sorted(current.activities,
+                            key=lambda x: (slot_order.get(x.time_slot or 'afternoon', 1),
+                                           x.sort_order or 999)):
+                if a.is_substitute or a.is_completed or a.is_eliminated:
+                    continue
+                a_slot_idx = slot_order.get(a.time_slot or 'afternoon', 1)
+                if a_slot_idx >= min_slot_idx:
                     return {
                         'type': 'activity',
                         'title': a.title,
                         'subtitle': f'Day {current.day_number} \u2022 {a.time_slot or ""}',
-                        'tip': None,
+                        'tip': a.start_time or None,
                         'url': f'/day/{current.day_number}',
                         'urgency': 'low',
                     }
@@ -214,6 +233,11 @@ def index():
         else:
             trip_started = True
             current_day = Day.query.filter(Day.date == today).first()
+
+    # During active trip: redirect to today's day view (unless ?all=1)
+    if trip_started and current_day and not request.args.get('all'):
+        return redirect(url_for('itinerary.day_view',
+                                day_number=current_day.day_number))
 
     # Stats
     total_activities = Activity.query.filter_by(is_substitute=False).count()
@@ -487,6 +511,10 @@ def day_view(day_number):
         elif _is_logistics_duplicate(a):
             hidden_ids.add(a.id)
 
+    # Today's day number for "Go to Today" button
+    today_day = Day.query.filter(Day.date == date.today()).first()
+    today_day_number = today_day.day_number if today_day else None
+
     return render_template('day.html', day=day, prev_day=prev_day,
                            next_day=next_day, total_days=total_days,
                            transport_routes=transport_routes,
@@ -497,7 +525,8 @@ def day_view(day_number):
                            checkin_options_pending=checkin_options_pending,
                            checkout_options_pending=checkout_options_pending,
                            hidden_activity_ids=hidden_ids,
-                           tonight_option=tonight_option)
+                           tonight_option=tonight_option,
+                           today_day_number=today_day_number)
 
 
 @itinerary_bp.route('/api/activities/<int:activity_id>/toggle', methods=['POST'])

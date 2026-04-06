@@ -440,16 +440,33 @@
 
 /* Back to overview link */
 
+.day-top-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
 .back-to-overview {
     display: inline-block;
     font-size: 0.8rem;
     color: var(--pico-muted-color);
     text-decoration: none;
-    margin-bottom: 0.5rem;
 }
 
 .back-to-overview:hover {
     color: var(--accent);
+}
+
+.today-btn {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent, #e75480);
+    text-decoration: none;
+    padding: 4px 12px;
+    border-radius: 14px;
 }
 
 .day-date-line {
