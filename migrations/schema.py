@@ -104,6 +104,7 @@ def run_schema_migrations(app):
     _migrate_fix_transport_maps_urls_v1(cursor, conn)
     _migrate_complete_transport_nav_v1(cursor, conn)
     _migrate_day2_night_recs_v1(cursor, conn)
+    _migrate_teamlab_planets_booking_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2271,3 +2272,40 @@ def _migrate_day2_night_recs_v1(cursor, conn):
 
     conn.commit()
     print('  Day 2 night recs added — Rishiri, Golden Gai, Ramen Nagi with nav links')
+
+
+def _migrate_teamlab_planets_booking_v1(cursor, conn):
+    """Update Day 3 TeamLab entry with actual Planets TOKYO booking.
+
+    Jessica booked teamLab Planets TOKYO (Toyosu) for Tue Apr 7 at 1:30 PM.
+    The existing entry was for TeamLab Borderless at Azabudai Hills — wrong venue.
+    One-shot: uses sentinel to run only once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__teamlab_planets_v1' in row[0]:
+        return
+
+    # Update the existing TeamLab Borderless entry to Planets TOKYO
+    cursor.execute("""
+        UPDATE activity
+        SET title = 'teamLab Planets TOKYO — BOOKED 1:30 PM entry',
+            description = 'Immersive digital art museum in Toyosu. Walk barefoot through water, mirrors, and light installations. Entry window 1:30-2:00 PM. Allow ~2 hours inside. QR tickets on Jessica phone. Download teamLab app beforehand. Inquiry#: d8f3e69ace1c298c38',
+            start_time = '1:30 PM',
+            address = '6-1-16 Toyosu, Koto-ku, Tokyo 135-0061',
+            maps_url = 'https://www.google.com/maps/dir/?api=1&origin=Sotetsu+Fresa+Inn+Higashi-Shinjuku,+Tokyo&destination=teamLab+Planets+TOKYO+Toyosu&travelmode=transit',
+            url = 'https://teamlabplanets.dmm.com/en/mytickets/d8f3e69ace1c298c38',
+            book_ahead = 1,
+            is_confirmed = 1,
+            sort_order = 10
+        WHERE id = 335
+    """)
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __teamlab_planets_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__teamlab_planets_v1%')
+    """)
+
+    conn.commit()
+    print('  teamLab Planets TOKYO booking added to Day 3 — 1:30 PM entry, Toyosu')
