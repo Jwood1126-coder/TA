@@ -529,6 +529,72 @@ def day_view(day_number):
                            today_day_number=today_day_number)
 
 
+@itinerary_bp.route('/api/dispatch-context')
+def dispatch_context():
+    """Return full developer context for Claude Dispatch sessions.
+
+    Dispatch can fetch this URL to get repo access, codebase architecture,
+    migration patterns, and DB reference — everything needed to make changes.
+    """
+    import os
+    guide_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'DISPATCH_GUIDE.md')
+    try:
+        with open(guide_path) as f:
+            guide = f.read()
+    except FileNotFoundError:
+        guide = '(DISPATCH_GUIDE.md not found in repo root)'
+
+    setup_instructions = f"""# SETUP FOR CLAUDE DISPATCH
+# Jake's Japan Travel App — Full Developer Context
+# =================================================
+
+## IMPORTANT: You need Jake's GitHub PAT to clone and push.
+## Jake will provide it in the chat. Use it in place of <PAT> below.
+
+## Step 1: Clone the repo
+```bash
+git clone https://<PAT>@github.com/Jwood1126-coder/japan-travel-app.git
+cd japan-travel-app
+```
+
+## Step 2: Read the full developer guide in the repo
+```bash
+cat DISPATCH_GUIDE.md
+```
+This has the migration pattern (sentinel-based), database mapping (day_id != day_number!),
+file structure, and common tasks. READ IT BEFORE MAKING ANY CHANGES.
+
+## Step 3: After making changes, push
+```bash
+git add <changed files>
+git commit -m "Description of change"
+git push https://<PAT>@github.com/Jwood1126-coder/japan-travel-app.git main
+```
+
+## Step 4: Bump service worker cache version (REQUIRED after every change)
+In static/sw.js: change japan-trip-vNNN to japan-trip-v(NNN+1)
+In static/js/app.js: change sw.js?v=NNN to sw.js?v=(NNN+1)
+
+Railway auto-deploys on push. Live app: https://web-production-f84b27.up.railway.app/
+You can download the live DB to inspect: curl -s https://web-production-f84b27.up.railway.app/api/backup/download -o live.db
+
+## KEY RULES:
+- ALL schedule/data changes go through migrations/schema.py using the sentinel pattern
+- Never edit SQLite directly — it's on Railway's persistent volume
+- Always bump the SW cache version after any change
+- Python string concatenation does NOT work inside triple-quoted SQL — use single strings
+- Test your migration by running: python -c "import py_compile; py_compile.compile('migrations/schema.py', doraise=True)"
+- Confirmed/booked activities (is_confirmed=1) take priority over unconfirmed suggestions
+
+---
+FULL DEVELOPER REFERENCE (from DISPATCH_GUIDE.md):
+---
+
+{guide}
+"""
+    return setup_instructions, 200, {{'Content-Type': 'text/plain; charset=utf-8'}}
+
+
 @itinerary_bp.route('/api/activities/<int:activity_id>/toggle', methods=['POST'])
 def toggle_activity(activity_id):
     import services.activities as activity_svc
