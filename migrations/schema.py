@@ -109,6 +109,7 @@ def run_schema_migrations(app):
     _migrate_teamlab_move_day3_v3(cursor, conn)
     _migrate_teamlab_final_v4(cursor, conn)
     _migrate_day6_takayama_v1(cursor, conn)
+    _migrate_day6_sake_breweries_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2564,5 +2565,69 @@ def _migrate_day6_takayama_v1(cursor, conn):
     cursor.execute("""
         UPDATE trip SET notes = COALESCE(notes, '') || ' __day6_takayama_v1'
         WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__day6_takayama_v1%')
+    """)
+    conn.commit()
+
+
+def _migrate_day6_sake_breweries_v1(cursor, conn):
+    """Add 3 confirmed sake brewery recommendations to Day 6 (April 10).
+
+    Harada, Funasaka, and Hirase breweries in Sanmachi Suji / Kamisannomachi area.
+
+    One-shot: uses sentinel to ensure this only runs once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__day6_sake_breweries_v1' in row[0]:
+        return
+
+    breweries = [
+        {
+            'title': 'Harada Sake Brewery (\u539f\u7530\u9152\u9020\u5834)',
+            'sort_order': 11,
+            'description': '200-year-old Edo-era brewery. Self-serve tasting of 12+ varieties (\u00a5450) + seasonal sake (\u00a5200). Try the Daiginjo sake soft serve. Located on Kamisannomachi in Sanmachi Suji.',
+            'address': None,
+            'maps_url': 'https://maps.google.com/?q=Harada+Sake+Brewery+Takayama',
+        },
+        {
+            'title': 'Funasaka Sake Brewery (\u821f\u5742\u9152\u9020\u5e97)',
+            'sort_order': 12,
+            'description': 'Beginner-friendly brewery with on-site sake bar and Hida beef restaurant. Also sells plum & yuzu liqueurs, sake cosmetics. Tastings 10:00-12:00 & 13:00-16:00.',
+            'address': '105 Kamisannomachi, Takayama',
+            'maps_url': 'https://maps.google.com/?q=Funasaka+Sake+Brewery+Takayama',
+        },
+        {
+            'title': 'Hirase Sake Brewery (\u5e73\u702c\u9152\u9020\u5e97)',
+            'sort_order': 13,
+            'description': 'Oldest brewery in Takayama (~400 years). Best value: \u00a51,000 for 20+ sake varieties from the fridge. On Ebizaka slope near Kami-Ichinomachi. Tastings 10:00-12:00 & 13:00-16:00.',
+            'address': None,
+            'maps_url': 'https://maps.google.com/?q=Hirase+Sake+Brewery+Takayama',
+        },
+    ]
+
+    for act in breweries:
+        cursor.execute(
+            "SELECT id FROM activity WHERE day_id = 6 AND title = ?",
+            (act['title'],)
+        )
+        if cursor.fetchone():
+            continue
+        cursor.execute("""
+            INSERT INTO activity
+                (day_id, title, time_slot, category, sort_order,
+                 description, address, maps_url, is_confirmed)
+            VALUES (6, ?, 'morning', 'activity', ?, ?, ?, ?, 1)
+        """, (
+            act['title'],
+            act['sort_order'],
+            act['description'],
+            act['address'],
+            act['maps_url'],
+        ))
+        print(f'  Added Day 6 sake brewery: {act["title"]}')
+
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __day6_sake_breweries_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__day6_sake_breweries_v1%')
     """)
     conn.commit()
