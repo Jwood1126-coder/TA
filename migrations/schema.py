@@ -108,6 +108,7 @@ def run_schema_migrations(app):
     _migrate_teamlab_fix_v2(cursor, conn)
     _migrate_teamlab_move_day3_v3(cursor, conn)
     _migrate_teamlab_final_v4(cursor, conn)
+    _migrate_day6_takayama_v1(cursor, conn)
 
     # --- Gmail sync tables ---
     cursor.execute("""
@@ -2393,3 +2394,175 @@ def _migrate_teamlab_final_v4(cursor, conn):
     """)
     conn.commit()
     print('  teamLab Planets final fix — title, description, URLs all corrected')
+
+
+def _migrate_day6_takayama_v1(cursor, conn):
+    """Add confirmed Day 6 (April 10) Takayama activities.
+
+    Includes pharmacy stop, morning market confirmation, sake tastings,
+    festival floats museum, Jinya, massage salon, dinner options, and onsen soak.
+
+    One-shot: uses sentinel to ensure this only runs once.
+    """
+    cursor.execute("SELECT notes FROM trip WHERE id = 1")
+    row = cursor.fetchone()
+    if row and row[0] and '__day6_takayama_v1' in row[0]:
+        return
+
+    # Update existing Miyagawa Morning Market to confirmed with latest details
+    cursor.execute("""
+        UPDATE activity
+        SET is_confirmed = 1,
+            start_time = '9:30 AM',
+            description = 'Riverside market with local produce, pickles, crafts, and miso. Covered stalls — good for rainy day.',
+            maps_url = 'https://maps.google.com/?q=Miyagawa+Morning+Market+Takayama'
+        WHERE day_id = 6 AND title LIKE '%Miyagawa%Morning%Market%'
+    """)
+    if cursor.rowcount:
+        print('  Confirmed Miyagawa Morning Market (day_id=6)')
+
+    # New activities to insert
+    activities = [
+        {
+            'title': 'Sugi Pharmacy \u2014 Eye Drops',
+            'time_slot': 'morning',
+            'category': 'logistics',
+            'sort_order': 1,
+            'start_time': '9:00 AM',
+            'description': "Pick up Rohto antibacterial (\u6297\u83cc) eye drops for Jessica\u2019s pink eye. No prescription needed.",
+            'address': 'Near Takayama Station',
+            'maps_url': 'https://maps.google.com/?q=Sugi+Pharmacy+Takayama+Station',
+        },
+        {
+            'title': 'Sake Brewery Tastings \u2014 Sanmachi Suji',
+            'time_slot': 'morning',
+            'category': 'activity',
+            'sort_order': 10,
+            'start_time': '11:00 AM',
+            'description': 'Indoor sake tastings in the old town. Harada Brewery: self-serve 12 varieties, \u00a5500 with ceramic cup to keep.',
+            'address': None,
+            'maps_url': 'https://maps.google.com/?q=Sanmachi+Suji+Takayama',
+        },
+        {
+            'title': 'Takayama Festival Floats Museum',
+            'time_slot': 'afternoon',
+            'category': 'activity',
+            'sort_order': 15,
+            'start_time': '1:00 PM',
+            'description': 'All-indoor museum with elaborate festival floats and mechanical puppets. \u00a51,000. Great for rainy day.',
+            'address': None,
+            'maps_url': 'https://maps.google.com/?q=Takayama+Matsuri+no+Mori',
+        },
+        {
+            'title': 'Takayama Jinya',
+            'time_slot': 'afternoon',
+            'category': 'activity',
+            'sort_order': 18,
+            'start_time': '2:30 PM',
+            'description': 'Beautifully preserved Edo-period government building with rice storehouse. \u00a5440.',
+            'address': None,
+            'maps_url': 'https://maps.google.com/?q=Takayama+Jinya',
+        },
+        {
+            'title': 'Relaxation Salon Yusen \u2014 Massage',
+            'time_slot': 'afternoon',
+            'category': 'activity',
+            'sort_order': 20,
+            'start_time': '4:00 PM',
+            'description': 'English-speaking staff, massage salon. Free shuttle back to hotel for 60+ min sessions. Free drink after treatment.',
+            'address': '3-2-12 Showamachi, Takayama',
+            'maps_url': 'https://maps.google.com/?q=Relaxation+Salon+Yusen+Takayama',
+        },
+        {
+            'title': 'Maruaki Takayama Yasugawa',
+            'time_slot': 'evening',
+            'category': 'food',
+            'sort_order': 25,
+            'start_time': None,
+            'description': 'Hida beef yakiniku/grill. Hours: 11:00-20:00 (L.O. 19:30), closed Tuesdays. Tel: 0577-37-2911',
+            'address': '\u4e0b\u4e09\u4e4b\u753a3, Takayama',
+            'maps_url': 'https://maps.google.com/?q=\u4e38\u660e+\u9ad8\u5c71+\u3084\u3059\u304c\u308f\u5e97',
+        },
+        {
+            'title': 'TAKUMIYA-Yasugawa',
+            'time_slot': 'evening',
+            'category': 'food',
+            'sort_order': 26,
+            'start_time': None,
+            'description': 'Hida beef restaurant. Tel: 0577-36-2989',
+            'address': '\u4e0b\u4e09\u4e4b\u753a2, Takayama',
+            'maps_url': 'https://maps.google.com/?q=TAKUMIYA+Yasugawa+Takayama',
+        },
+        {
+            'title': 'MIKADO',
+            'time_slot': 'evening',
+            'category': 'food',
+            'sort_order': 27,
+            'start_time': None,
+            'description': 'Hida beef grilled on ceramic plate. Tel: 0577-34-6789',
+            'address': '\u672b\u5e83\u753a94, Takayama',
+            'maps_url': 'https://maps.google.com/?q=MIKADO+Takayama+\u672b\u5e83\u753a',
+        },
+        {
+            'title': 'DAIKOKUYA (\u5927\u9ed2\u5c4b)',
+            'time_slot': 'evening',
+            'category': 'food',
+            'sort_order': 28,
+            'start_time': None,
+            'description': 'Soba & udon noodles. Lunch & dinner. Tel: 0577-35-1227',
+            'address': 'Tensyoji-machi 2, Takayama',
+            'maps_url': 'https://maps.google.com/?q=\u5927\u9ed2\u5c4b+\u9ad8\u5c71+\u5929\u6027\u5bfa\u753a',
+        },
+        {
+            'title': 'Soba HIGASHIYAMA',
+            'time_slot': 'evening',
+            'category': 'food',
+            'sort_order': 29,
+            'start_time': None,
+            'description': '"Real tasty buckwheat" soba. Lunch only. Tel: 0577-33-0055',
+            'address': 'Wakayama-machi 6-3, Takayama',
+            'maps_url': 'https://maps.google.com/?q=\u305d\u3070\u51e6\u6771\u5c71+\u9ad8\u5c71',
+        },
+        {
+            'title': 'TAKANOYU Onsen Soak',
+            'time_slot': 'evening',
+            'category': 'activity',
+            'sort_order': 35,
+            'start_time': '8:00 PM',
+            'description': 'Soak at the ryokan onsen/sento with sauna. Perfect after a rainy day of exploring.',
+            'address': None,
+            'maps_url': 'https://maps.google.com/?q=36.141252,137.265767',
+        },
+    ]
+
+    for act in activities:
+        cursor.execute(
+            "SELECT id FROM activity WHERE day_id = 6 AND title = ?",
+            (act['title'],)
+        )
+        if cursor.fetchone():
+            continue
+        cursor.execute("""
+            INSERT INTO activity
+                (day_id, title, time_slot, category, sort_order,
+                 start_time, description, address, maps_url, is_confirmed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, (
+            6,
+            act['title'],
+            act['time_slot'],
+            act['category'],
+            act['sort_order'],
+            act.get('start_time'),
+            act.get('description'),
+            act.get('address'),
+            act.get('maps_url'),
+        ))
+        print(f'  Added Day 6 activity: {act["title"]}')
+
+    # Set sentinel
+    cursor.execute("""
+        UPDATE trip SET notes = COALESCE(notes, '') || ' __day6_takayama_v1'
+        WHERE id = 1 AND (notes IS NULL OR notes NOT LIKE '%__day6_takayama_v1%')
+    """)
+    conn.commit()
